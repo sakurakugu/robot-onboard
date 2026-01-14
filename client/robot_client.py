@@ -4,11 +4,21 @@
 """
 
 import asyncio
-import websockets
 import json
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any
+
+def ensure_package(pkg, import_name=None):
+    if import_name is None:
+        import_name = pkg
+    try:
+        __import__(import_name)
+    except ImportError:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
+        
+ensure_package("websockets")
+import websockets
 
 class RobotDogClient:
     """机器狗对话客户端"""
@@ -109,7 +119,7 @@ class RobotDogClient:
             parameters = data["data"]["parameters"]
             safety_checked = data["data"]["safetyChecked"]
             
-            print(f"🤖 执行动作: {action}")
+            print(f"执行动作: {action}")
             if parameters:
                 print(f"   参数: {parameters}")
             if safety_checked:

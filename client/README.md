@@ -2,12 +2,6 @@
 
 Python客户端用于连接机器狗对话管理系统。
 
-## 依赖安装
-
-```bash
-pip install websockets
-```
-
 ## 使用方法
 
 ### 基本使用
