@@ -2,7 +2,7 @@
 """
 机器狗客户端
 功能：
-- 配置管理（~/robot-chat/config.toml）
+- 配置管理（~/sparkrobot/config/robot-chat.toml）
 - WebSocket 通信
 - 心跳保持
 - 接收音频回复（opus）
@@ -13,49 +13,50 @@
 import asyncio
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any, Callable
 import base64
+from lib.util import generate_uuid
+from lib.api import CrazyRobotDog
+from lib.api.logger import CNLevelFormatter
 
 import websockets
-from websockets.client import WebSocketClientProtocol
+from websockets import ClientConnection
 
 try:
     import tomli
     import tomli_w
 except ImportError:
-    print("请安装依赖: pip install tomli tomli_w websockets")
+    print("请安装依赖: pip install -r $HOME/sparkrobot/robot-chat/requirements.txt")
     sys.exit(1)
 
 
 class RobotClient:
     """机器狗客户端"""
 
-    def __init__(self, config_dir: Optional[Path] = None):
+    def __init__(self, workspace: Optional[Path] = None):
         """初始化客户端
         
         Args:
-            config_dir: 配置目录，默认为 ~/sparkrobot
+            workspace: 工作目录，默认为 ~/sparkrobot
         """
         # 配置目录
-        if config_dir is None:
-            config_dir = Path.home() / "sparkrobot"
-        self.base_dir = config_dir
+        if workspace is None:
+            workspace = Path.home() / "sparkrobot"
+        self.base_dir = workspace
         self.config_dir = self.base_dir / "config"
-        self.code_dir = self.base_dir / "robot-chat"
-        self.log_dir = self.code_dir / "logs"
+        self.project_name = "robot-chat"
+        self.log_dir = self.base_dir / "logs" / self.project_name
         
         # 配置文件
-        self.global_config_file = self.config_dir / "config.toml"  # 全局配置（uuid等）
-        self.robot_chat_config_file = self.config_dir / "robot-chat.toml"  # 机器人对话专用配置
+        self.global_config_file = self.config_dir / "config.toml"         # 全局配置（uuid等）
+        self.config_file = self.config_dir / f"{self.project_name}.toml"  # 机器人对话专用配置
         
         # 确保目录存在
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        self.code_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
         # 加载配置
@@ -65,7 +66,7 @@ class RobotClient:
         self._setup_logger()
         
         # WebSocket 连接
-        self.ws: Optional[WebSocketClientProtocol] = None
+        self.ws: Optional[ClientConnection] = None
         self.connected = False
         self.reconnect_interval = 5  # 秒
         self.heartbeat_interval = 30  # 秒
@@ -83,33 +84,35 @@ class RobotClient:
         
     def _load_or_create_config(self) -> Dict[str, Any]:
         """加载或创建配置文件"""
-        # 1. 加载全局配置 (uuid等)
+        # 1. 加载全局配置 (uuid/name/model 等，扁平结构)
         if self.global_config_file.exists():
             with open(self.global_config_file, 'rb') as f:
                 global_config = tomli.load(f)
         else:
             # 创建默认全局配置
             global_config = {
-                'uuid': self._generate_uuid(),
+                'uuid': generate_uuid(),
+                'name': 'robot-dog-1',
+                'model': 'agibot-d1',
             }
             with open(self.global_config_file, 'wb') as f:
                 tomli_w.dump(global_config, f)
-        
+
         # 2. 加载robot-chat专用配置
-        if self.robot_chat_config_file.exists():
-            with open(self.robot_chat_config_file, 'rb') as f:
+        if self.config_file.exists():
+            with open(self.config_file, 'rb') as f:
                 robot_chat_config = tomli.load(f)
         else:
             # 创建默认robot-chat配置
             robot_chat_config = {
-                'robot': {
-                    'name': 'robot-dog-1',
-                    'model': 'unitree-go2',
-                },
                 'server': {
-                    'url': 'ws://localhost:3002/ws',
+                    'url': 'ws://192.168.0.88:3002/api/conversation/connect',
                     'reconnect_interval': 5,
                     'heartbeat_interval': 30,
+                },
+                'sdk': {
+                    'robot_ip': '127.0.0.1',
+                    'local_port': 43988,
                 },
                 'audio': {
                     'format': 'opus',
@@ -121,77 +124,52 @@ class RobotClient:
                     'max_file_size_mb': 10,
                 }
             }
-            with open(self.robot_chat_config_file, 'wb') as f:
+            with open(self.config_file, 'wb') as f:
                 tomli_w.dump(robot_chat_config, f)
         
-        # 3. 合并配置，将uuid添加到robot节中
+        # 3. 合并配置，将全局扁平字段组装为运行时 robot 节
         config = robot_chat_config
-        if 'robot' not in config:
-            config['robot'] = {}
-        config['robot']['uuid'] = global_config.get('uuid', self._generate_uuid())
+        config['robot'] = {
+            'uuid': global_config.get('uuid', generate_uuid()),
+            'name': global_config.get('name'),
+            'model': global_config.get('model'),
+        }
         
         return config
     
     def _save_config(self, config: Dict[str, Any]) -> None:
         """保存配置到文件"""
-        # 分离全局配置和专用配置
+        # 分离全局配置和专用配置（写入扁平结构）
+        robot_cfg = config.get('robot', {})
         global_config = {
-            'uuid': config.get('robot', {}).get('uuid', self._generate_uuid())
+            'uuid': robot_cfg.get('uuid', generate_uuid()),
+            'name': robot_cfg.get('name'),
+            'model': robot_cfg.get('model'),
         }
         with open(self.global_config_file, 'wb') as f:
             tomli_w.dump(global_config, f)
         
         # 保存robot-chat专用配置
-        robot_chat_config = {k: v for k, v in config.items() if k != 'uuid'}
-        if 'robot' in robot_chat_config and 'uuid' in robot_chat_config['robot']:
-            del robot_chat_config['robot']['uuid']
-        with open(self.robot_chat_config_file, 'wb') as f:
+        robot_chat_config = {k: v for k, v in config.items() if k != 'robot'}
+        with open(self.config_file, 'wb') as f:
             tomli_w.dump(robot_chat_config, f)
     
-    def _generate_uuid(self) -> str:
-        """生成 UUID v7 (时间戳有序)"""
-        import uuid
-        import struct
-        import time
-        
-        # 简化版 UUID v7 实现
-        timestamp_ms = int(time.time() * 1000)
-        rand_a = os.urandom(2)
-        rand_b = os.urandom(8)
-        
-        # 构造 UUID
-        time_high = (timestamp_ms >> 16) & 0xFFFFFFFF
-        time_low = timestamp_ms & 0xFFFF
-        
-        uuid_bytes = struct.pack('>IHH', time_high, time_low, 0x7000 | (rand_a[0] << 8 | rand_a[1]) & 0x0FFF)
-        uuid_bytes += struct.pack('>H', 0x8000 | (rand_b[0] >> 2))
-        uuid_bytes += rand_b[1:]
-        
-        return str(uuid.UUID(bytes=uuid_bytes))
-    
     def _setup_logger(self) -> None:
-        """设置日志"""
-        log_level = getattr(logging, self.config['logging'].get('level', 'INFO'))
-        log_file = self.log_dir / f"robot_client_{time.strftime('%Y%m%d')}.log"
-        
-        # 配置日志格式
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        
-        # 文件处理器
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        level = self.config['logging'].get('level', 'INFO')
+        if isinstance(level, str):
+            level = getattr(logging, level.upper(), logging.INFO)
+        formatter = CNLevelFormatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+        file_handler = logging.FileHandler(self.log_dir / f"robot_client_{time.strftime('%Y%m%d')}.log", encoding="utf-8")
         file_handler.setFormatter(formatter)
-        
-        # 控制台处理器
         console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        
-        # 配置 logger
-        self.logger = logging.getLogger('RobotClient')
-        self.logger.setLevel(log_level)
-        self.logger.addHandler(file_handler)
-        self.logger.addHandler(console_handler)
+        console_formatter = CNLevelFormatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s", datefmt="%H:%M:%S.%f")
+        console_handler.setFormatter(console_formatter)
+        logger = logging.getLogger("RobotClient")
+        logger.setLevel(level)
+        logger.handlers = []
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+        self.logger = logger
         
     async def connect(self) -> bool:
         """连接到服务器"""
@@ -249,6 +227,20 @@ class RobotClient:
         }
         await self.send_message(message)
     
+    async def send_audio_chunk(self, audio_bytes: bytes) -> None:
+        message = {
+            'type': 'audio_chunk',
+            'robotId': self.config['robot']['uuid'],
+            'timestamp': int(time.time() * 1000),
+            'data': {
+                'format': 'opus',
+                'sampleRate': self.config['audio'].get('sample_rate', 48000),
+                'channels': self.config['audio'].get('channels', 1),
+                'buffer': base64.b64encode(audio_bytes).decode('ascii')
+            }
+        }
+        await self.send_message(message)
+    
     async def send_register(self) -> None:
         """发送注册消息"""
         message = {
@@ -288,7 +280,6 @@ class RobotClient:
         """处理文本响应"""
         text = data.get('text', '')
         self.logger.info(f"收到文本响应: {text}")
-        print(f"\n[AI 回复] {text}\n")
     
     async def _handle_audio_response(self, data: Dict[str, Any]) -> None:
         """处理音频响应"""
@@ -299,17 +290,17 @@ class RobotClient:
         self.logger.info(f"收到音频响应: format={audio_format}, duration={duration}s")
         
         try:
-            # 解码 base64 音频数据
+            if audio_format != 'opus':
+                self.logger.error(f"不支持的音频格式: {audio_format}")
+                return
             audio_data = base64.b64decode(audio_buffer)
             
-            # 保存音频文件（用于调试）
-            audio_file = self.log_dir / f"audio_{int(time.time())}.{audio_format}"
+            audio_file = self.log_dir / f"audio_{int(time.time())}.opus"
             with open(audio_file, 'wb') as f:
                 f.write(audio_data)
             self.logger.info(f"音频已保存: {audio_file}")
             
             # TODO: 播放音频
-            print(f"\n[音频回复] 已接收 {len(audio_data)} 字节的音频数据\n")
             
         except Exception as e:
             self.logger.error(f"处理音频失败: {e}")
@@ -321,7 +312,6 @@ class RobotClient:
         safety_checked = data.get('safetyChecked', False)
         
         self.logger.info(f"收到动作指令: action={action}, parameters={parameters}")
-        print(f"\n[动作指令] {action} - {parameters}\n")
         
         # 执行动作
         if self.action_executor:
@@ -338,7 +328,6 @@ class RobotClient:
         code = data.get('code', '')
         message = data.get('message', '')
         self.logger.error(f"服务器错误: {code} - {message}")
-        print(f"\n[错误] {message}\n")
     
     async def _receive_loop(self) -> None:
         """接收消息循环"""
@@ -421,14 +410,70 @@ class RobotClient:
 async def main():
     """主函数"""
     client = RobotClient()
-    
-    # 示例：设置动作执行器
+
+    # 构建 SDK 控制器（默认在机器狗内部运行，端口43988）
+    sdk_cfg = client.config.get('sdk', {})
+    robot_name = client.config['robot'].get('name', 'robot-dog')
+    robot_ip = sdk_cfg.get('robot_ip', '192.168.234.1')
+    local_port = int(sdk_cfg.get('local_port', 43988))
+
+    class RobotSDKController:
+        def __init__(self, name: str, robot_ip: str, local_port: int):
+            self.dog = CrazyRobotDog(name=name, robot_ip=robot_ip, local_port=local_port, local_ip=robot_ip)
+
+        async def execute(self, action: str, parameters: dict) -> bool:
+            try:
+                if action == 'stand_up':
+                    await asyncio.to_thread(self.dog.stand_up)
+                elif action == 'sit_down':
+                    await asyncio.to_thread(self.dog.lie_down)
+                elif action == 'shake_hand':
+                    await asyncio.to_thread(self.dog.shake_hand)
+                elif action == 'walk_forward':
+                    steps = float(parameters.get('steps', 1))
+                    speed = float(parameters.get('speed', 0.5))
+                    distance = steps * 0.5
+                    await asyncio.to_thread(self.dog.move_by_distance, "x", distance, speed)
+                elif action == 'walk_backward':
+                    steps = float(parameters.get('steps', 1))
+                    speed = float(parameters.get('speed', 0.5))
+                    distance = steps * 0.5
+                    await asyncio.to_thread(self.dog.move_by_distance, "-x", distance, speed)
+                elif action == 'turn_left':
+                    angle = float(parameters.get('angle', 90))
+                    speed = float(parameters.get('speed', 30))
+                    await asyncio.to_thread(self.dog.turn_around, angle, speed, "ccw")
+                elif action == 'turn_right':
+                    angle = float(parameters.get('angle', 90))
+                    speed = float(parameters.get('speed', 30))
+                    await asyncio.to_thread(self.dog.turn_around, angle, speed, "cw")
+                elif action == 'nod':
+                    duration = float(parameters.get('duration', 0.5))
+                    await asyncio.to_thread(self.dog.nod_down, duration, 0.3)
+                    await asyncio.to_thread(self.dog.nod_up, duration, 0.3)
+                    await asyncio.to_thread(self.dog.attitude_rest, 0.3)
+                elif action == 'wave':
+                    await asyncio.to_thread(self.dog.stand_up)
+                    await asyncio.to_thread(self.dog.lean_left, 0.4, 0.2)
+                    await asyncio.to_thread(self.dog.lean_right, 0.4, 0.2)
+                    await asyncio.to_thread(self.dog.attitude_rest, 0.3)
+                elif action == 'dance':
+                    await asyncio.to_thread(self.dog.stand_up)
+                    await asyncio.to_thread(self.dog.rotate_counterclockwise, 0.4, 0.2)
+                    await asyncio.to_thread(self.dog.rotate_clockwise, 0.4, 0.2)
+                    await asyncio.to_thread(self.dog.max_height, 0.4, 0.3)
+                    await asyncio.to_thread(self.dog.min_height, 0.4, -0.3)
+                    await asyncio.to_thread(self.dog.attitude_rest, 0.3)
+                else:
+                    return False
+                return True
+            except Exception:
+                return False
+
+    controller = RobotSDKController(robot_name, robot_ip, local_port)
+
     async def action_executor(action: str, parameters: dict) -> bool:
-        """动作执行器示例"""
-        print(f"执行动作: {action}")
-        print(f"参数: {parameters}")
-        # TODO: 调用机器狗 SDK 执行动作
-        return True
+        return await controller.execute(action, parameters)
     
     client.set_action_executor(action_executor)
     
