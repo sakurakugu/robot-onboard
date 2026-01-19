@@ -111,7 +111,7 @@ class RobotClient:
                     'heartbeat_interval': 30,
                 },
                 'sdk': {
-                    'robot_ip': '127.0.0.1',
+                    'robot_ip': '192.168.234.1',
                     'local_port': 43988,
                 },
                 'audio': {
@@ -424,7 +424,7 @@ async def main():
         async def execute(self, action: str, parameters: dict) -> bool:
             try:
                 if action == 'stand_up':
-                    await asyncio.to_thread(self.dog.stand_up)
+                    await asyncio.to_thread(self.dog.stand_up, 4.5)
                 elif action == 'sit_down':
                     await asyncio.to_thread(self.dog.lie_down)
                 elif action == 'shake_hand':
