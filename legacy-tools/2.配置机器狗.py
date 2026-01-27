@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 机器狗自动配置脚本
-支持 AP 直连模式和 WIFI 局域网模式的自动配置
+支持 AP/有线直连模式和 WIFI 局域网模式的自动配置
 """
 
 import subprocess
@@ -11,6 +11,18 @@ import re
 import socket
 import argparse
 from typing import Optional, Tuple
+
+# 禁止输入的 IP 列表/前缀
+BANNED_IPS = {"127.0.0.1", "192.168.234.1", "192.168.168.168"}
+# BANNED_PREFIXES = ("192.168.168",)
+
+def 是否禁止IP(ip: str) -> bool:
+    if ip in BANNED_IPS:
+        return True
+    # for pref in BANNED_PREFIXES:
+    #     if ip.startswith(pref + ".") or ip == pref:
+    #         return True
+    return False
 
 def 确保存在包(package_name, import_name=None):
     """
@@ -55,7 +67,7 @@ def get_local_udp_ip():
 class RobotConfigurator:
     """机器狗配置器"""
     
-    def __init__(self, target_port: int, host: str = "192.168.234.1", username: str = "firefly", password: str = "firefly", ):
+    def __init__(self, target_port: int, host: str, username: str = "firefly", password: str = "firefly", ):
         self.host = host
         self.username = username
         self.password = password
@@ -104,6 +116,9 @@ class RobotConfigurator:
             elif ip:
                 # 验证IP格式
                 if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
+                    if 是否禁止IP(ip):
+                        print("✗ 此 IP 不允许作为输入，请更换")
+                        continue
                     return ip
                 else:
                     print("✗ IP 地址格式无效，请重新输入")
@@ -336,7 +351,7 @@ class RobotConfigurator:
             )
             print(f"✓ 已设置 SDK_CLIENT_IP={sdk_client_ip}")
         else:
-            print("✓ AP 直连模式，未设置 SDK_CLIENT_IP")
+            print("✓ AP/有线直连模式，未设置 SDK_CLIENT_IP")
         
         if not self.写入配置文件(content, script_path, "运控启动脚本"):
             return False
@@ -369,10 +384,10 @@ class RobotConfigurator:
             print(f"✗ 运控重启失败: {error}")
             return False
     
-    def 配置AP直连模式(self) -> bool:
-        """配置 AP 直连模式"""
+    def 配置AP_有线直连模式(self) -> bool:
+        """配置 AP/有线直连模式"""
         print("\n" + "="*50)
-        print("AP 直连模式配置")
+        print("AP/有线直连模式配置")
         print("="*50)
         
         # 获取本机 IP（在机器狗的热点网络中）
@@ -384,7 +399,7 @@ class RobotConfigurator:
         if not self.修改SDK配置(local_ip):
             return False
         
-        # 修改运控脚本（AP 模式不需要 SDK_CLIENT_IP）
+        # 修改运控脚本（AP/有线 模式不需要 SDK_CLIENT_IP）
         if not self.修改运控启动脚本(None):
             return False
         
@@ -409,10 +424,10 @@ class RobotConfigurator:
         # 重启运控
         return self.重启运动控制()
     
-    def 配置AP直连模式_自动(self, local_ip: str) -> bool:
-        """配置 AP 直连模式（命令行自动模式）"""
+    def 配置AP_有线直连模式_自动(self, local_ip: str) -> bool:
+        """配置 AP/有线直连模式（命令行自动模式）"""
         print("\n" + "="*50)
-        print("AP 直连模式配置（自动）")
+        print("AP/有线直连模式配置（自动）")
         print("="*50)
         print(f"本机 IP: {local_ip}")
         
@@ -420,7 +435,7 @@ class RobotConfigurator:
         if not self.修改SDK配置(local_ip):
             return False
         
-        # 修改运控脚本（AP 模式不需要 SDK_CLIENT_IP）
+        # 修改运控脚本（AP/有线 模式不需要 SDK_CLIENT_IP）
         if not self.修改运控启动脚本(None):
             return False
         
@@ -557,8 +572,9 @@ def parse_arguments():
   # 交互式配置（默认模式）
   python 配置机器狗.py
   
-  # AP 直连模式 - 自动配置
-  python 配置机器狗.py --mode ap --local_ip 192.168.234.100 --port 10001
+  # AP/有线直连模式 - 自动配置
+  python 配置机器狗.py --mode ap --ap_link ap --local_ip 192.168.234.100 --port 10001
+  python 配置机器狗.py --mode ap --ap_link wired --local_ip 192.168.168.100 --port 10001
   
   # WIFI 局域网模式 - 自动配置
   python 配置机器狗.py --mode wifi --wifi_name MyWiFi --wifi_password 12345678 \\
@@ -571,18 +587,31 @@ def parse_arguments():
   # 指定机器狗 IP（用于 WIFI 模式）
   python 配置机器狗.py --mode wifi --robot_ip 192.168.1.50 \\
       --wifi_name MyWiFi --wifi_password 12345678
+ 
+  # 管理 AP 密码（示例：查看/修改/删除/恢复）
+  python 配置机器狗.py --mode ap --ap_link ap --nm_ap_action show --nm_ssid BETEC_5G
+  python 配置机器狗.py --mode ap --ap_link ap --nm_ap_action change --nm_ssid BETEC_5G --nm_psk 新密码
+  python 配置机器狗.py --mode ap --ap_link ap --nm_ap_action delete --nm_ssid BETEC_5G
+  python 配置机器狗.py --mode ap --ap_link ap --nm_ap_action restore --nm_ssid BETEC_5G --nm_psk betec12345@
+ 
+  # 自连模式（IP 127.0.0.1，端口 43988）
+  python 配置机器狗.py --mode self
 
 配置模式说明:
-  ap   - AP 直连模式（机器狗作为热点）
+  ap   - AP/有线直连模式（机器狗作为热点）
   wifi - WIFI 局域网模式（机器狗连接到 WIFI）
   sdk  - 仅修改 SDK 配置并重启运控
+  self - 自连模式（IP 127.0.0.1，端口 43988）
         '''
     )
     
     # 基本参数
     parser.add_argument('--mode', 
-                       choices=['ap', 'wifi', 'sdk'],
-                       help='配置模式: ap=AP直连, wifi=WIFI局域网, sdk=仅修改SDK配置')
+                       choices=['ap', 'wifi', 'sdk', 'self'],
+                       help='配置模式: ap=AP/有线直连, wifi=WIFI局域网, sdk=仅修改SDK配置')
+    parser.add_argument('--ap_link',
+                       choices=['ap', 'wired'],
+                       help='AP 模式连接类型: ap=热点, wired=有线直连（仅在 --mode ap 时使用）')
     
     parser.add_argument('--robot_ip',
                        help='机器狗 IP 地址 (默认: 192.168.234.1)')
@@ -615,6 +644,15 @@ def parse_arguments():
                        action='store_true',
                        help='跳过重启运控的确认提示（自动确认）')
     
+    # AP 密码管理
+    parser.add_argument('--nm_ap_action',
+                       choices=['show', 'change', 'delete', 'restore'],
+                       help='AP 密码管理动作: show/change/delete/restore')
+    parser.add_argument('--nm_ssid',
+                       help='AP 连接名称（如 BETEC_5G）')
+    parser.add_argument('--nm_psk',
+                       help='AP 新密码（用于 change/restore）')
+    
     return parser.parse_args()
 
 
@@ -629,6 +667,8 @@ def validate_arguments(args):
                 errors.append("--local_ip 是必需参数")
             if not args.port:
                 errors.append("--port 是必需参数")
+            if args.mode == 'ap' and not args.robot_ip and not args.ap_link:
+                errors.append("--mode ap 时未指定 --robot_ip 或 --ap_link")
         
         if args.mode == 'wifi':
             if not args.wifi_name:
@@ -639,6 +679,16 @@ def validate_arguments(args):
                 errors.append("WIFI 模式需要 --local_ip 参数")
             if not args.port:
                 errors.append("--port 是必需参数")
+        
+        if args.mode == 'self':
+            pass
+    
+    # AP 密码管理参数组合校验
+    if args.nm_ap_action:
+        if not args.nm_ssid:
+            errors.append("AP 密码管理需要提供 --nm_ssid")
+        if args.nm_ap_action in ('change', 'restore') and not args.nm_psk:
+            errors.append(f"{args.nm_ap_action} 需要提供 --nm_psk")
     
     # 验证 IP 地址格式
     ip_pattern = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
@@ -646,6 +696,10 @@ def validate_arguments(args):
         errors.append(f"--local_ip 格式无效: {args.local_ip}")
     if args.robot_ip and not ip_pattern.match(args.robot_ip):
         errors.append(f"--robot_ip 格式无效: {args.robot_ip}")
+    if args.local_ip and 是否禁止IP(args.local_ip):
+        errors.append(f"--local_ip 不允许使用此 IP: {args.local_ip}")
+    if args.robot_ip and 是否禁止IP(args.robot_ip):
+        errors.append(f"--robot_ip 不允许使用此 IP: {args.robot_ip}")
     
     # 验证端口号
     if args.port:
@@ -676,8 +730,17 @@ def main():
     try:
         # 确定配置模式
         if args.mode:
-            choice = {'ap': '1', 'wifi': '2', 'sdk': '3'}[args.mode]
-            host = args.robot_ip or "192.168.234.1"
+            choice = {'ap': '1', 'wifi': '2', 'sdk': '3', 'self': '4'}[args.mode]
+            if args.robot_ip:
+                host = args.robot_ip
+            else:
+                if args.mode == 'ap':
+                    if args.ap_link == 'wired':
+                        host = "192.168.168.168"
+                    else:
+                        host = "192.168.234.1"
+                else:
+                    host = "192.168.234.1"
             print(f"\n命令行模式: {args.mode.upper()}")
             print(f"机器狗 IP: {host}")
         else:
@@ -685,21 +748,56 @@ def main():
             while True:
                 print("\n" + "-"*25)
                 print("请选择配置模式:")
-                print("1. AP 直连模式")
+                print("1. AP/有线直连模式")
                 print("2. WIFI 局域网模式")
                 print("3. 仅修改 SDK 配置并重启运控")
+                print("4. 自连模式（IP 127.0.0.1，端口 43988）")
                 
-                choice = input("\n请输入选项 (1/2/3): ").strip()
+                choice = input("\n请输入选项 (1/2/3/4): ").strip()
                 
                 if choice == "1":
-                    host = "192.168.234.1"
+                    while True:
+                        print("请输入数字选择网络")
+                        print("1. AP网络: 192.168.234.1")
+                        print("2. 有线网络: 192.168.168.168")
+                        flag = input("\n请输入选项 (1/2): ").strip()
+                        if flag == "1":
+                            host = "192.168.234.1"
+                            break
+                        elif flag == "2":
+                            host = "192.168.168.168"
+                            break
+                        else:
+                            print("✗ 无效的选项，请重新输入")
+                            continue
                     break
                 elif choice == "2":
-                    print("\n注意: 需要先通过 AP 直连模式连接机器狗来配置 WIFI")
-                    host = input("请输入机器狗 IP (默认: 192.168.234.1): ").strip() or "192.168.234.1"
+                    print("\n注意: 需要先通过 AP/有线直连模式连接机器狗来配置 WIFI")
+                    while True:
+                        host_in = input("请输入机器狗 IP (默认: 192.168.234.1): ").strip() or "192.168.234.1"
+                        if 是否禁止IP(host_in):
+                            print("✗ 此 IP 不允许作为输入，请更换")
+                            continue
+                        host = host_in
+                        break
                     break
                 elif choice == "3":
-                    host = input("请输入机器狗 IP (默认: 192.168.234.1): ").strip() or "192.168.234.1"
+                    while True:
+                        host_in = input("请输入机器狗 IP (默认: 192.168.234.1): ").strip() or "192.168.234.1"
+                        if 是否禁止IP(host_in):
+                            print("✗ 此 IP 不允许作为输入，请更换")
+                            continue
+                        host = host_in
+                        break
+                    break
+                elif choice == "4":
+                    while True:
+                        host_in = input("请输入机器狗 IP (默认: 192.168.234.1): ").strip() or "192.168.234.1"
+                        if 是否禁止IP(host_in):
+                            print("✗ 此 IP 不允许作为输入，请更换")
+                            continue
+                        host = host_in
+                        break
                     break
                 else:
                     print("✗ 无效的选项，请重新输入")
@@ -709,25 +807,22 @@ def main():
         password = args.password
         
         # 获取端口号
-        if args.port:
+        if args.mode == 'self' or choice == "4":
+            target_port = 43988
+            print(f"端口号: {target_port}")
+        elif args.port:
             target_port = args.port
-            # 自动转换端口号（1-55535 加 10000）
-            if 1 <= target_port <= 55535:
-                target_port += 10000
             print(f"端口号: {target_port}")
         else:
             # 交互式输入端口号
             while True:
-                target_port_str = input("请输入机器狗编号（填入端口号）: ").strip()
+                target_port_str = input("请输入端口号: ").strip()
                 if not target_port_str:
                     print("✗ 端口号不能为空")
                     continue
                 try:
                     target_port = int(target_port_str)
-                    if 1 <= target_port <= 55535:
-                        target_port += 10000
-                        break
-                    elif target_port > 55535 and target_port <= 65535:
+                    if 1 <= target_port <= 65535:
                         break
                     else:
                         print("✗ 端口号必须在 1-65535 之间")
@@ -748,14 +843,80 @@ def main():
             print("  2. IP 地址是否正确")
             return
         
+        # 如果指定了 AP 密码管理动作，优先执行并退出
+        if args.nm_ap_action:
+            action = args.nm_ap_action
+            ssid = args.nm_ssid
+            psk = args.nm_psk
+            if action == 'show':
+                ok, out, err = configurator.执行命令(f"nmcli -s -g 802-11-wireless-security.psk connection show '{ssid}'", use_sudo=True)
+                if ok and out.strip() and out.strip() != "<hidden>":
+                    print(f"AP 密码: {out.strip()}")
+                else:
+                    ok2, out2, err2 = configurator.执行命令(f"grep -r \"psk=\" /etc/NetworkManager/system-connections/'{ssid}'.nmconnection", use_sudo=True)
+                    if ok2 and out2.strip():
+                        print(out2.strip())
+                    else:
+                        print("未能读取到密码")
+                        if err or err2:
+                            print(err or err2)
+                configurator.断开连接()
+                return
+            elif action == 'change':
+                cmds = [
+                    f"nmcli connection modify '{ssid}' 802-11-wireless-security.key-mgmt wpa-psk",
+                    f"nmcli connection modify '{ssid}' 802-11-wireless-security.psk '{psk}'",
+                    f"nmcli connection up '{ssid}'"
+                ]
+                all_ok = True
+                for c in cmds:
+                    ok, _, err = configurator.执行命令(c, use_sudo=True)
+                    if not ok:
+                        all_ok = False
+                        print(err)
+                print("✓ AP 密码已更改" if all_ok else "✗ 更改 AP 密码时出现错误")
+                configurator.断开连接()
+                return
+            elif action == 'delete':
+                cmds = [
+                    f"nmcli connection modify '{ssid}' 802-11-wireless-security.psk ''",
+                    f"nmcli connection modify '{ssid}' 802-11-wireless-security.key-mgmt none",
+                    f"nmcli connection up '{ssid}'"
+                ]
+                all_ok = True
+                for c in cmds:
+                    ok, _, err = configurator.执行命令(c, use_sudo=True)
+                    if not ok:
+                        all_ok = False
+                        print(err)
+                print("✓ AP 密码已删除/设置为开放网络" if all_ok else "✗ 删除 AP 密码时出现错误")
+                configurator.断开连接()
+                return
+            elif action == 'restore':
+                default_psk = psk or "betec12345@"
+                cmds = [
+                    f"nmcli connection modify '{ssid}' 802-11-wireless-security.key-mgmt wpa-psk",
+                    f"nmcli connection modify '{ssid}' 802-11-wireless-security.psk '{default_psk}'",
+                    f"nmcli connection up '{ssid}'"
+                ]
+                all_ok = True
+                for c in cmds:
+                    ok, _, err = configurator.执行命令(c, use_sudo=True)
+                    if not ok:
+                        all_ok = False
+                        print(err)
+                print("✓ AP 密码已恢复" if all_ok else "✗ 恢复 AP 密码时出现错误")
+                configurator.断开连接()
+                return
+        
         # 执行配置
         if choice == "1":
             if args.mode and args.local_ip:
-                # 命令行模式 - AP 直连
-                success = configurator.配置AP直连模式_自动(args.local_ip)
+                # 命令行模式 - AP/有线直连
+                success = configurator.配置AP_有线直连模式_自动(args.local_ip)
             else:
                 # 交互式模式
-                success = configurator.配置AP直连模式()
+                success = configurator.配置AP_有线直连模式()
         elif choice == "2":
             if args.mode and args.wifi_name and args.wifi_password and args.local_ip:
                 # 命令行模式 - WIFI 局域网
@@ -767,13 +928,18 @@ def main():
             else:
                 # 交互式模式
                 success = configurator.配置WIFI局域网模式()
-        else:  # choice == "3"
+        elif choice == "3":
             if args.mode and args.local_ip:
                 # 命令行模式 - 仅修改 SDK
                 success = configurator.仅修改SDK配置并重启_自动(args.local_ip)
             else:
                 # 交互式模式
                 success = configurator.仅修改SDK配置并重启()
+        else:
+            target_ip = "127.0.0.1"
+            ok1 = configurator.修改SDK配置(target_ip, 43988)
+            ok2 = configurator.修改运控启动脚本(target_ip)
+            success = ok1 and ok2 and configurator.重启运动控制()
         
         if success:
             print("\n" + "="*50)

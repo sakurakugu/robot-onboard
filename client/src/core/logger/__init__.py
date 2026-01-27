@@ -1,5 +1,5 @@
-from datetime import datetime, timezone, timedelta
 import logging
+from datetime import datetime, timedelta, timezone
 
 LEVEL_NAME_CN = {
     "DEBUG": "调试",
@@ -10,6 +10,7 @@ LEVEL_NAME_CN = {
 }
 
 tz = timezone(timedelta(hours=8))
+
 
 class CNLevelFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
@@ -25,10 +26,11 @@ class CNLevelFormatter(logging.Formatter):
         finally:
             record.levelname = original
 
+
 logger = logging.getLogger("robot_control")
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = CNLevelFormatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+    formatter = CNLevelFormatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s", datefmt="%H:%M:%S.%f")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)

@@ -4,6 +4,7 @@
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
+cd ../src
 
 # 定义路径
 WORKSPACE_DIR="$HOME/sparkrobot"

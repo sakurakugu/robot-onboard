@@ -1,16 +1,16 @@
 import time
-from .logger import logger
-from .sdk import mc_sdk_zsl_1_py
-from .utils import get_local_ip
+
+from core.dog import sdk
+from core.logger import logger
+from core.utils import get_local_ip
+
 
 class RobotDog:
     """机器狗基础接口封装"""
 
-    def __init__(
-        self, name: str, robot_ip: str, local_port: int, local_ip: str | None = None
-    ) -> None:
+    def __init__(self, name: str, robot_ip: str, local_port: int, local_ip: str | None = None) -> None:
         self.name = name
-        self.app = mc_sdk_zsl_1_py.HighLevel()
+        self.app = sdk.HighLevel()
         if local_ip is None:
             local_ip = get_local_ip()
         self.app.initRobot(local_ip, local_port, robot_ip)
@@ -60,9 +60,7 @@ class RobotDog:
             3. yaw_rate 逆时针探头为正，顺时针探头为负
         """
         self._safe_action(
-            action=lambda: self.app.attitudeControl(
-                roll_rate, pitch_rate, yaw_rate, height_vel
-            ),
+            action=lambda: self.app.attitudeControl(roll_rate, pitch_rate, yaw_rate, height_vel),
             action_name="姿态控制({roll_rate}, {pitch_rate}, {yaw_rate}, {height_vel})",
         )
 
@@ -106,14 +104,14 @@ class RobotDog:
 
     def _safe_action(
         self,
-        action: callable,       # 动作函数的引用
+        action: callable,  # 动作函数的引用
         action_name: str = "",  # 动作名称
         interval: float = 0.2,  # 重试间隔（秒）
     ):
         """安全执行动作，直到成功为止"""
         while True:
             result = action()
-            message = f"[狗{self.name}] {action_name} -> {'成功' if result == 0 else '失败'}"
+            message = f"[狗{self.name}] {action_name} -> {'成功' if result == 0 else '失败'}，状态值：{result}"
             if result == 0:
                 logger.info(message)
                 break
@@ -121,5 +119,5 @@ class RobotDog:
                 logger.warning(message)
                 time.sleep(interval)
 
-__all__ = ["RobotDog"]
 
+__all__ = ["RobotDog"]

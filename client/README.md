@@ -8,7 +8,8 @@
 - ✅ WebSocket 通信：与服务端实时通信
 - ✅ 心跳保持：自动发送心跳包保持连接
 - ✅ 客户端注册：连接时自动注册到服务器
-- ✅ 接收音频：接收 Opus 格式的音频回复
+- ✅ 接收音频：接收服务端语音回复并在音箱播放
+- ✅ 语音对话：麦克风采集 → Opus压缩 → 服务端ASR → 大模型
 - ✅ 执行动作：接收并执行服务端发送的动作指令
 - ✅ 日志记录：在 `~/sparkrobot/robot-chat/logs/` 中记录运行日志
 - ✅ 自动重连：断线后自动重连
@@ -40,21 +41,31 @@ name = "robot-dog-1"
 model = "unitree-go2"
 
 [server]
-url = "ws://localhost:3002/ws"
+base_url = "ws://localhost"
+ws_path = "/api/v1/conversation/connect"
+control_url = "ws://localhost:9000/api/v1/conversation/connect"
+business_url = "ws://localhost:9001/api/v1/conversation/connect"
+audio_upload_url = "ws://localhost:9002/api/v1/conversation/connect"
+audio_download_url = "ws://localhost:9003/api/v1/conversation/connect"
 reconnect_interval = 5
 heartbeat_interval = 30
 
 [audio]
-format = "opus"
-sample_rate = 48000
+sample_rate = 16000
 channels = 1
+frame_duration_ms = 20
+vad_threshold = 0.015
+vad_silence_ms = 800
+max_segment_ms = 10000
+enable_streaming = true
+input_device = ""
 
 [logging]
 level = "INFO"
 max_file_size_mb = 10
 ```
 
-修改 `server.url` 为实际的服务器地址。
+修改 `server.business_url` / `server.control_url` / `server.audio_*_url` 为实际的服务器地址（或设置 `server.base_url`）。
 
 ### 3. 运行
 
@@ -109,7 +120,7 @@ cd ~/sparkrobot/robot-chat
 
 # 4. 修改配置
 vi ~/sparkrobot/config/robot-chat.toml
-# 修改 server.url 为服务器地址
+# 修改 server.business_url / server.control_url / server.audio_*_url 为服务器地址（或设置 server.base_url）
 
 # 5. 启动客户端
 ./start_daemon.sh
@@ -199,6 +210,53 @@ if __name__ == '__main__':
   "timestamp": 1234567890,
   "data": {
     "text": "你好"
+  }
+}
+```
+
+#### 音频输入（会话开始）
+```json
+{
+  "type": "audio_start",
+  "robotId": "uuid",
+  "timestamp": 1234567890,
+  "data": {
+    "format": "opus",
+    "sampleRate": 16000,
+    "channels": 1,
+    "frameDurationMs": 20,
+    "sessionId": "uuid"
+  }
+}
+```
+
+#### 音频输入（数据块）
+```json
+{
+  "type": "audio_chunk",
+  "robotId": "uuid",
+  "timestamp": 1234567890,
+  "data": {
+    "format": "opus",
+    "sampleRate": 16000,
+    "channels": 1,
+    "frameDurationMs": 20,
+    "sessionId": "uuid",
+    "seq": 12,
+    "buffer": "base64..."
+  }
+}
+```
+
+#### 音频输入（会话结束）
+```json
+{
+  "type": "audio_end",
+  "robotId": "uuid",
+  "timestamp": 1234567890,
+  "data": {
+    "sessionId": "uuid",
+    "reason": "silence"
   }
 }
 ```
@@ -370,7 +428,10 @@ crontab -e
 ### Robot-Chat 专用配置 (robot-chat.toml)
 - `robot.name`: 机器人名称
 - `robot.model`: 机器人型号
-- `server.url`: WebSocket 服务器地址
+- `server.business_url`: 业务通道 WebSocket 地址（9001）
+- `server.control_url`: 控制通道 WebSocket 地址（9000）
+- `server.audio_upload_url`: 音频上传通道 WebSocket 地址（9002）
+- `server.audio_download_url`: 音频下载通道 WebSocket 地址（9003）
 - `server.reconnect_interval`: 重连间隔（秒）
 - `server.heartbeat_interval`: 心跳间隔（秒）
 - `audio.*`: 音频相关配置

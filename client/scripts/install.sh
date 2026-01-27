@@ -49,7 +49,8 @@ log "✓ 找到 pip"
 # 安装依赖
 log ""
 log "正在安装依赖..."
-pip3 install --user -r ../src/requirements.txt
+sudo apt-get update && sudo apt-get install -y portaudio19-dev
+pip3 install --user -r ../requirements.txt
 
 echo ""
 echo "========================================"

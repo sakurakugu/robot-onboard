@@ -1,10 +1,11 @@
-from typing import Literal
-import time
 import math
+import time
+from typing import Literal
+
 from .core import RobotDog
 
-class CrazyRobotDog(RobotDog):
 
+class CrazyRobotDog(RobotDog):
     def lean_left(self, duration: float = 0.5, reset: float = 0):
         """左倾"""
         self.attitude_control(roll_rate=-0.59)
@@ -71,29 +72,29 @@ class CrazyRobotDog(RobotDog):
     def move_by_distance(
         self,
         axis: Literal["x", "-x", "y", "-y"],
-        distance: float,    # 移动距离（m），∈ (0, ∞)
-        speed: float = 0.5, # 移动速度（m/s)，默认 0.5 m/s
-                # 前后移动时：speed ∈ (-3.0, -0.05) ∪ (0.05, 3.0)
-                # 左右移动时：speed ∈ (-1.0, -0.1) ∪ (0.1, 1.0)
+        distance: float,  # 移动距离（m），∈ (0, ∞)
+        speed: float = 0.5,  # 移动速度（m/s)，默认 0.5 m/s
+        # 前后移动时：speed ∈ (-3.0, -0.05) ∪ (0.05, 3.0)
+        # 左右移动时：speed ∈ (-1.0, -0.1) ∪ (0.1, 1.0)
     ):
         """
         按距离移动
-        
+
         Note:
             1. 速度大 + 距离小 -> 误差大
             2. 速度小 + 距离大 -> 误差小
             3. 起步和停止影响实际移动距离
         """
-        duration = abs(distance) / speed # 计算移动持续时间
+        duration = abs(distance) / speed  # 计算移动持续时间
         params = {}
         match axis:
             case "x":  # 前进
                 params["vx"] = speed
-            case "-x": # 后退
+            case "-x":  # 后退
                 params["vx"] = -speed
             case "y":  # 右移
                 params["vy"] = speed
-            case "-y": # 左移
+            case "-y":  # 左移
                 params["vy"] = -speed
         self.move(**params)
         time.sleep(duration)
@@ -101,9 +102,9 @@ class CrazyRobotDog(RobotDog):
 
     def turn_around(
         self,
-        angle: float = 180.0, # 转身角度（度），默认 180 度
-        speed: float = 30,    # 偏航角速度绝对值（度/秒），约 ∈ (2, 170)，默认 30 度/秒
-        direction: Literal["cw", "ccw"] = "cw", # 旋转方向，默认 "cw(顺时针)"
+        angle: float = 180.0,  # 转身角度（度），默认 180 度
+        speed: float = 30,  # 偏航角速度绝对值（度/秒），约 ∈ (2, 170)，默认 30 度/秒
+        direction: Literal["cw", "ccw"] = "cw",  # 旋转方向，默认 "cw(顺时针)"
     ) -> None:
         """原地转身"""
         # 将角度转换为弧度
@@ -119,5 +120,5 @@ class CrazyRobotDog(RobotDog):
         time.sleep(duration)
         self.move()
 
-__all__ = ["CrazyRobotDog"]
 
+__all__ = ["CrazyRobotDog"]
