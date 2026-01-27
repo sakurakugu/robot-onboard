@@ -14,21 +14,21 @@ import asyncio
 import base64
 import json
 import logging
-import os
 import re
 import subprocess
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlparse, urlunparse
+
 import websockets
 from core.utils import generate_uuid
 from core.logger import CNLevelFormatter
 from core.utils import get_ipc_path
 from websockets import ClientConnection
-from core.config import WORKSPACE_DIR, Config
+
+from core.config import Config
 
 _AUDIO_IMPORT_ERROR: Optional[Exception] = None
 try:
@@ -52,7 +52,7 @@ class RobotClient:
         """
         # 配置目录
         if workspace is None:
-            workspace = WORKSPACE_DIR
+            workspace = Path.home() / "sparkrobot"
         self.base_dir = workspace
         self.config_dir = self.base_dir / "config"
         self.project_name = "robot-chat"
@@ -914,58 +914,25 @@ class RobotClient:
         """启动交互式子进程
 
         Args:
-            script_path: core.py 的路径
+            script_path: modules/control/__main__.py 的路径
 
         Returns:
             启动成功返回 True
         """
         try:
-            script_file = Path(script_path).resolve()
-            root_dir = None
-            for candidate in [script_file.parent, *script_file.parents]:
-                if (candidate / "core" / "__init__.py").exists():
-                    root_dir = candidate
-                    break
-            if root_dir is None:
-                root_dir = script_file.parent
-            env = os.environ.copy()
-            existing_pythonpath = env.get("PYTHONPATH", "")
-            if str(root_dir) not in existing_pythonpath.split(":"):
-                env["PYTHONPATH"] = f"{root_dir}:{existing_pythonpath}" if existing_pythonpath else str(root_dir)
-            module_name = ""
-            try:
-                rel_path = script_file.relative_to(root_dir)
-                module_name = ".".join(rel_path.with_suffix("").parts)
-            except Exception:
-                module_name = ""
-            if module_name and module_name != "core":
-                command = [sys.executable, "-m", module_name]
-            else:
-                command = [sys.executable, str(script_file)]
             self.logger.info(f"正在启动交互式子进程: {script_path}")
             self.interactive_process = subprocess.Popen(
-                command,
+                ["python3", script_path],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
-                cwd=str(root_dir),
-                env=env,
             )
             # 等待子进程初始化
             time.sleep(5)
 
             if self.interactive_process.poll() is not None:
-                try:
-                    stdout, stderr = self.interactive_process.communicate(timeout=1)
-                except Exception:
-                    stdout = self.interactive_process.stdout.read() if self.interactive_process.stdout else ""
-                    stderr = self.interactive_process.stderr.read() if self.interactive_process.stderr else ""
-                if stdout:
-                    self.logger.error(f"子进程输出: {stdout.strip()}")
-                if stderr:
-                    self.logger.error(f"子进程错误输出: {stderr.strip()}")
                 self.logger.error("子进程启动失败")
                 return False
 
@@ -1004,7 +971,7 @@ async def main():
 
     # 获取 core.py 的路径
     script_dir = Path(__file__).parent
-    interactive_script = script_dir / "modules" / "control" / "core.py"
+    interactive_script = script_dir / "modules" / "control" / "__main__.py"
 
     if not interactive_script.exists():
         client.logger.error(f"找不到交互式脚本: {interactive_script}")
