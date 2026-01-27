@@ -30,8 +30,8 @@ class CNLevelFormatter(logging.Formatter):
 logger = logging.getLogger("robot_control")
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = CNLevelFormatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s", datefmt="%H:%M:%S.%f")
-    handler.setFormatter(formatter)
+    console_formatter = CNLevelFormatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s", datefmt="%H:%M:%S.%f")
+    handler.setFormatter(console_formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 

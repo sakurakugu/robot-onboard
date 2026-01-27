@@ -1,4 +1,5 @@
 import time
+from typing import Any, Callable, cast
 
 from core.dog import sdk
 from core.logger import logger
@@ -10,7 +11,7 @@ class RobotDog:
 
     def __init__(self, name: str, robot_ip: str, local_port: int, local_ip: str | None = None) -> None:
         self.name = name
-        self.app = sdk.HighLevel()
+        self.app = cast(Any, sdk).HighLevel()
         if local_ip is None:
             local_ip = get_local_ip()
         self.app.initRobot(local_ip, local_port, robot_ip)
@@ -104,7 +105,7 @@ class RobotDog:
 
     def _safe_action(
         self,
-        action: callable,  # 动作函数的引用
+        action: Callable[[], int],
         action_name: str = "",  # 动作名称
         interval: float = 0.2,  # 重试间隔（秒）
     ):

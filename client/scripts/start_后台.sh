@@ -1,6 +1,10 @@
 #!/bin/bash
 # 后台运行机器狗客户端
 
+# TODO: 改成ubuntu22的systemd服务，然后让这个脚本用于创建该服务（如果没有的话），然后启动该服务
+# 服务名：robot-chat.service  # TODO: 到时候是用robot-chat还是robot-client
+# 服务文件路径：/etc/systemd/system/robot-chat.service
+
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -35,7 +39,7 @@ log "========================================"
 
 # 检查是否已运行
 PID_FILE="$PID_DIR/robot-chat.pid"
-SCRIPT_NAME="robot_client.py"
+SCRIPT_NAME="main.py"
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
     if ps -p $PID -o args= | grep -q "$SCRIPT_NAME"; then
@@ -55,7 +59,7 @@ if [ -n "$EXISTING_PID" ] && [ "$EXISTING_PID" != "$$" ]; then
 fi
 
 # 后台运行
-nohup python3 -u robot_client.py >> "$STDOUT_LOG" 2>&1 &
+nohup python3 -u main.py >> "$STDOUT_LOG" 2>&1 &
 PID=$!
 
 sleep 1
@@ -68,4 +72,3 @@ else
     log "启动失败，请检查日志: $LOGS_DIR/client_output.log"
     exit 1
 fi
-

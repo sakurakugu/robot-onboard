@@ -14,7 +14,7 @@ mkdir -p "$PID_DIR"
 
 # 检查是否已运行
 PID_FILE="$PID_DIR/robot-chat.pid"
-SCRIPT_NAME="robot_client.py"
+SCRIPT_NAME="main.py"
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
     if ps -p $PID -o args= | grep -q "$SCRIPT_NAME"; then
@@ -34,4 +34,4 @@ if [ -n "$EXISTING_PID" ] && [ "$EXISTING_PID" != "$$" ]; then
 fi
 
 echo "正在启动机器狗客户端..."
-python3 robot_client.py
+python3 main.py

@@ -1,14 +1,13 @@
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from core.utils import generate_uuid
+
 try:
     import tomli
     import tomli_w
-except Exception:
-    tomli = None
-    tomli_w = None
-
-from core.utils import generate_uuid
+except ImportError:
+    raise RuntimeError("tomli 或 tomli_w 没有安装") from None
 
 
 class Config:
@@ -71,8 +70,6 @@ class Config:
         self.reload()
 
     def _read_toml(self, path: Path) -> Dict[str, Any]:
-        if tomli is None:
-            raise RuntimeError("tomli 没有安装")
         if path.exists():
             with open(path, "rb") as f:
                 data = tomli.load(f)
@@ -80,8 +77,6 @@ class Config:
         return {}
 
     def _write_toml(self, path: Path, data: Dict[str, Any]) -> None:
-        if tomli_w is None:
-            raise RuntimeError("tomli-w 没有安装")
         with open(path, "wb") as f:
             tomli_w.dump(self._sanitize_for_toml(data), f)
 
