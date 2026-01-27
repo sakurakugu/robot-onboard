@@ -66,9 +66,9 @@ def build_audio_end(robot_uuid: str, session_id: str, reason: str) -> Dict[str, 
     }
 
 
-def build_client_register(robot_uuid: str, name: str, model: str, version: str) -> Dict[str, Any]:
+def build_robot_register(robot_uuid: str, name: str, model: str, version: str) -> Dict[str, Any]:
     return {
-        "type": "client_register",
+        "type": "robot_register",
         "robotId": robot_uuid,
         "timestamp": int(time.time() * 1000),
         "data": {

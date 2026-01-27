@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from core.config import SERVER_ADDR, WORKSPACE_DIR
 from core.utils import generate_uuid
 
 try:
@@ -15,7 +16,7 @@ class Config:
 
     def __init__(self, workspace: Optional[Path] = None, project_name: str = "robot-chat"):
         if workspace is None:
-            workspace = Path.home() / "sparkrobot"
+            workspace = WORKSPACE_DIR
         self.base_dir = workspace
         self.config_dir = self.base_dir / "config"
         self.project_name = project_name
@@ -24,6 +25,7 @@ class Config:
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self._config: Dict[str, Any] = {}
+        self.uuid = generate_uuid()
         self.reload()
 
     @classmethod
@@ -49,8 +51,8 @@ class Config:
         project_cfg = self._load_project()
         cfg = dict(project_cfg)
         cfg["robot"] = {
-            "uuid": global_cfg.get("uuid") or generate_uuid(),
-            "name": global_cfg.get("name") or "robot-dog-1",
+            "uuid": global_cfg.get("uuid") or self.uuid,
+            "name": global_cfg.get("name") or f"机器狗-{self.uuid[:4]}",
             "model": global_cfg.get("model") or "agibot-d1",
             "version": global_cfg.get("version") or "0.0.0",
         }
@@ -59,8 +61,8 @@ class Config:
     def save(self, config: Dict[str, Any]) -> None:
         robot_cfg = config.get("robot", {})
         global_cfg = {
-            "uuid": robot_cfg.get("uuid") or generate_uuid(),
-            "name": robot_cfg.get("name") or "robot-dog-1",
+            "uuid": robot_cfg.get("uuid") or self.uuid,
+            "name": robot_cfg.get("name") or f"机器狗-{self.uuid[:4]}",
             "model": robot_cfg.get("model") or "agibot-d1",
             "version": robot_cfg.get("version") or "0.0.0",
         }
@@ -94,7 +96,7 @@ class Config:
         exists = self.global_config_file.exists()
         data = self._read_toml(self.global_config_file) if exists else {}
         defaults = {
-            "uuid": generate_uuid(),
+            "uuid": self.uuid,
             "name": "robot-dog-1",
             "model": "agibot-d1",
             "version": "0.0.0",
@@ -114,13 +116,14 @@ class Config:
         if exists:
             return self._read_toml(self.project_config_file)
         defaults = {
+            # TODO: 到时候分离手机端和服务端后，将这里的地址修改
             "server": {
-                "base_url": "ws://192.168.0.108",
+                "base_url": f"ws://{SERVER_ADDR}",
                 "ws_path": "/api/v1/conversation/connect",
-                "control_url": "ws://192.168.0.108:9000/api/v1/conversation/connect",
-                "business_url": "ws://192.168.0.108:9001/api/v1/conversation/connect",
-                "audio_upload_url": "ws://192.168.0.108:9002/api/v1/conversation/connect",
-                "audio_download_url": "ws://192.168.0.108:9003/api/v1/conversation/connect",
+                "control_url": f"ws://{SERVER_ADDR}:9000/api/v1/conversation/connect",
+                "business_url": f"ws://{SERVER_ADDR}:9001/api/v1/conversation/connect",
+                "audio_upload_url": f"ws://{SERVER_ADDR}:9002/api/v1/conversation/connect",
+                "audio_download_url": f"ws://{SERVER_ADDR}:9003/api/v1/conversation/connect",
                 "reconnect_interval": 5,
                 "heartbeat_interval": 30,
             },

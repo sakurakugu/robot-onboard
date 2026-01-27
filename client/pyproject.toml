@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "robot-chat-client"
+name = "robot-agent"
 version = "0.1.0"
-description = "机器狗聊天客户端"
+description = "机器狗代理 (放置在机器狗身上) "
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -18,13 +18,14 @@ dependencies = [
     "opuslib>=3.0.1",
 ]
 
-# TODO: 待优化
 [tool.setuptools]
-package-dir = {"" = "src"}
-py-modules = ["robot_client", "core"]
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.scripts]
+sparkrobot-robot-agent = "main:main"
 
 # ============================
 # 下面是 lint/typecheck 配置

@@ -1,6 +1,10 @@
 import asyncio
 
-from robot_client import main as robot_main
+from application import main as robot_main
+
+
+def main():
+    asyncio.run(robot_main())
 
 if __name__ == "__main__":
-    asyncio.run(robot_main())
+    main()

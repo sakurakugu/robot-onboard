@@ -1,17 +1,24 @@
 # 机器狗客户端
 
+## 结构
+
+core/ 底层 ， core之间可以相互调用，但是无法直接调用 modules/ 中的功能模块
+modules / 功能模块，依赖 core/ ，modules之间可以相互调用
+main.py 主入口
+application.py 应用入口
+
 ## 功能特性
 
 - ✅ 配置管理：分离配置存储
   - 全局配置（UUID等）：`~/sparkrobot/config/config.toml`
-  - 机器人对话配置：`~/sparkrobot/config/robot-chat.toml`
+  - 机器人对话配置：`~/sparkrobot/config/robot-agent.toml`
 - ✅ WebSocket 通信：与服务端实时通信
 - ✅ 心跳保持：自动发送心跳包保持连接
 - ✅ 客户端注册：连接时自动注册到服务器
 - ✅ 接收音频：接收服务端语音回复并在音箱播放
 - ✅ 语音对话：麦克风采集 → Opus压缩 → 服务端ASR → 大模型
 - ✅ 执行动作：接收并执行服务端发送的动作指令
-- ✅ 日志记录：在 `~/sparkrobot/robot-chat/logs/` 中记录运行日志
+- ✅ 日志记录：在 `~/sparkrobot/logs/robot-agent/` 中记录运行日志
 - ✅ 自动重连：断线后自动重连
 - ✅ 后台运行：支持以守护进程方式运行
 
@@ -81,13 +88,13 @@ python3 robot_client.py
 
 ```bash
 # 启动
-./start_daemon.sh
+./start_后台.sh
 
 # 停止
 ./stop.sh
 
 # 查看日志
-tail -f ~/robot-chat/logs/client_output.log
+tail -f ~/sparkrobot/logs/robot-agent/robot-agent_$(date +%Y%m%d).log
 ```
 
 ## 部署流程
@@ -100,7 +107,7 @@ tail -f ~/robot-chat/logs/client_output.log
 2. 点击"添加"
 3. 服务端会自动：
    - 通过 SSH 连接到机器狗
-   - 创建 `~/sparkrobot/robot-chat` 目录（存放代码）
+   - 创建 `~/sparkrobot/robot-agent` 目录（存放代码）
    - 创建 `~/sparkrobot/config` 目录（存放配置）
    - 复制客户端代码
    - 检测或生成 UUID 到 `config.toml`
@@ -109,80 +116,84 @@ tail -f ~/robot-chat/logs/client_output.log
 
 ```bash
 # 1. 复制客户端代码到机器狗
-scp -r client/* firefly@<机器狗IP>:~/sparkrobot/robot-chat/
+scp -r client/* firefly@<机器狗IP>:~/sparkrobot/robot-agent/
 
 # 2. 登录机器狗
 ssh firefly@<机器狗IP>
 
 # 3. 安装依赖
-cd ~/sparkrobot/robot-chat
+cd ~/sparkrobot/robot-agent
 ./install.sh
 
 # 4. 修改配置
-vi ~/sparkrobot/config/robot-chat.toml
+vim ~/sparkrobot/config/robot-agent.toml
 # 修改 server.business_url / server.control_url / server.audio_*_url 为服务器地址（或设置 server.base_url）
 
 # 5. 启动客户端
 ./start_daemon.sh
 ```
 
-## 集成到你的项目
-
-### 基本使用
-
-```python
-import asyncio
-from robot_client import RobotClient
-
-async def main():
-    # 创建客户端
-    client = RobotClient()
-    
-    # 设置动作执行器
-    async def action_executor(action: str, parameters: dict) -> bool:
-        """执行动作的函数"""
-        print(f"执行动作: {action}, 参数: {parameters}")
-        # 调用机器狗 SDK
-        # robot.execute(action, parameters)
-        return True
-    
-    client.set_action_executor(action_executor)
-    
-    # 运行客户端
-    await client.run()
-
-if __name__ == '__main__':
-    asyncio.run(main())
-```
-
-### 集成示例
-
-参考 [robot_client_integrated.py](robot_client_integrated.py) 了解如何集成机器狗 SDK。
-
 ## 目录结构
 
 ```
 ~/sparkrobot/
 ├── config/                  # 配置目录（所有应用共享）
-│   ├── config.toml         # 全局配置（UUID等）
-│   └── robot-chat.toml     # 机器人对话专用配置
-└── robot-chat/             # 客户端代码目录
-    ├── README.md           # 说明文档
-    ├── src/                # 源代码
-    │   ├── robot_client.py
-    │   ├── robot_client_integrated.py
-    │   └── requirements.txt
-    ├── scripts/            # 脚本
-    │   ├── install.sh
-    │   ├── start.sh
-    │   ├── start_daemon.sh
-    │   └── stop.sh
-    └── logs/               # 日志目录
-        ├── robot_client_20260114.log
-        ├── client_output.log
-        └── audio_*.opus
+│   ├── config.toml          # 全局配置（UUID等）
+│   └── robot-agent.toml     # 机器人对话专用配置
+├── robot-agent/             # 客户端代码目录
+│   ├── pyproject.toml
+│   ├── README.md
+│   ├── requirements.txt
+│   ├── scripts
+│   │   ├── install.sh
+│   │   ├── start_后台.sh
+│   │   ├── start.sh
+│   │   └── stop.sh
+│   └── src
+│       ├── application.py
+│       ├── core
+│       │   ├── config
+│       │   │   ├── config.py
+│       │   │   ├── const.py
+│       │   │   └── __init__.py
+│       │   ├── dog
+│       │   │   ├── lib      # 智元官方的sdk库   
+│       │   │   └── sdk.py
+│       │   ├── __init__.py
+│       │   ├── logger
+│       │   │   └── __init__.py
+│       │   └── utils
+│       │       └── __init__.py
+│       ├── main.py
+│       └── modules
+│           ├── actions
+│           │   ├── executor.py
+│           │   ├── __init__.py
+│           │   └── mapping.py
+│           ├── audio
+│           │   ├── capture.py
+│           │   ├── __init__.py
+│           │   └── playback.py
+│           ├── control
+│           │   ├── ipc.py
+│           │   └── process.py
+│           ├── group_control
+│           │   ├── crazy.py
+│           │   └── dog_core.py
+│           ├── __init__.py
+│           └── transport
+│               ├── __init__.py
+│               ├── protocol.py
+│               └── ws_manager.py
+├── logs/                    # 日志目录
+│   ├── robot-agent_20260114.log
+│   └── client_output.log
+└── cache/                   # 缓存目录
+    └── media/               # 媒体缓存目录
+        └── tts/             # 文本转语音缓存目录
 ```
 
+// TODO: 修改以下内容
 ## 消息格式
 
 ### 客户端发送
@@ -190,12 +201,12 @@ if __name__ == '__main__':
 #### 客户端注册
 ```json
 {
-  "type": "client_register",
+  "type": "robot_register",
   "robotId": "uuid",
   "timestamp": 1234567890,
   "data": {
-    "name": "机器狗1",
-    "model": "unitree-go2",
+    "name": "机器狗-{{uuid前四位}}",
+    "model": "agibot-d1",
     "version": "1.0.0",
     "metadata": {}
   }
@@ -342,20 +353,20 @@ if __name__ == '__main__':
 
 ## 开机自启动
 
-### 使用 systemd（推荐）
+### 使用 systemd
 
-创建服务文件 `/etc/systemd/system/robot-client.service`：
+创建服务文件 `/etc/systemd/system/robot-agent.service`：
 
 ```ini
 [Unit]
-Description=Robot Dog Client
+Description=Robot Dog Agent
 After=network.target
 
 [Service]
 Type=simple
 User=firefly
-WorkingDirectory=/home/firefly/sparkrobot/robot-chat
-ExecStart=/usr/bin/python3 /home/firefly/sparkrobot/robot-chat/src/robot_client.py
+WorkingDirectory=/home/firefly/sparkrobot/robot-agent
+ExecStart=/usr/bin/python3 /home/firefly/sparkrobot/robot-agent/src/robot_agent.py
 Restart=always
 RestartSec=10
 
@@ -367,76 +378,14 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable robot-client
-sudo systemctl start robot-client
+sudo systemctl enable robot-agent
+sudo systemctl start robot-agent
 
 # 查看状态
-sudo systemctl status robot-client
+sudo systemctl status robot-agent
 
 # 查看日志
-sudo journalctl -u robot-client -f
-```
-
-### 使用 crontab
-
-```bash
-crontab -e
-```
-
-添加：
-
-```
-@reboot cd /home/firefly/sparkrobot/robot-chat && ./start_daemon.sh
+sudo journalctl -u robot-agent -f
 ```
 
 ## 故障排查
-
-### 无法连接到服务器
-
-1. 检查服务器地址是否正确（`~/sparkrobot/config/robot-chat.toml`）
-2. 检查网络连接
-3. 检查防火墙设置
-4. 查看日志：`tail -f ~/sparkrobot/robot-chat/logs/robot_client_*.log`
-
-### 动作未执行
-
-1. 检查是否设置了动作执行器
-2. 查看日志中的动作信息
-3. 确认机器狗 SDK 正常工作
-
-### 客户端频繁重连
-
-1. 检查网络稳定性
-2. 调整心跳间隔（`~/sparkrobot/config/robot-chat.toml`）
-3. 检查服务器负载
-
-## 注意事项
-
-1. 确保服务端已启动且 WebSocket 地址正确
-2. 首次运行会生成新的 UUID 在 `~/sparkrobot/config/config.toml`，之后会一直使用该 UUID
-3. UUID 在所有 Spark Robot 应用中共享
-4. 动作执行器需要根据实际的机器狗 SDK 进行实现
-5. 音频播放功能需要额外实现（目前仅保存音频文件）
-6. 建议在生产环境使用后台运行模式
-
-## 配置文件说明
-
-### 全局配置 (config.toml)
-- `uuid`: 机器人的唯一标识符，所有应用共享
-- 由系统自动生成和管理
-
-### Robot-Chat 专用配置 (robot-chat.toml)
-- `robot.name`: 机器人名称
-- `robot.model`: 机器人型号
-- `server.business_url`: 业务通道 WebSocket 地址（9001）
-- `server.control_url`: 控制通道 WebSocket 地址（9000）
-- `server.audio_upload_url`: 音频上传通道 WebSocket 地址（9002）
-- `server.audio_download_url`: 音频下载通道 WebSocket 地址（9003）
-- `server.reconnect_interval`: 重连间隔（秒）
-- `server.heartbeat_interval`: 心跳间隔（秒）
-- `audio.*`: 音频相关配置
-- `logging.*`: 日志相关配置
-
-## License
-
-MIT

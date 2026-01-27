@@ -21,17 +21,17 @@ from typing import Any, Callable, Dict, Optional
 
 from core.config import WORKSPACE_DIR, Config
 from core.logger import CNLevelFormatter
-from modules.actions import handle_action_command, handle_text_response
+from modules.actions.mapping import handle_action_command, handle_text_response
 from modules.audio.capture import AudioCapture
-from modules.audio.playback import handle_audio_response
+from modules.audio.playback import handle_audio_response, stop_audio_playback
 from modules.control.ipc import IpcServer
 from modules.control.process import ProcessController
 from modules.transport.protocol import (
     build_audio_chunk,
     build_audio_end,
     build_audio_start,
-    build_client_register,
     build_heartbeat,
+    build_robot_register,
     build_status,
     build_text_input,
 )
@@ -50,7 +50,7 @@ class RobotClient:
         # 配置目录
         if workspace is None:
             workspace = WORKSPACE_DIR
-        self.project_name = "robot-chat"
+        self.project_name = "robot-agent"
         self.log_dir = workspace / "logs" / self.project_name
 
         # 确保目录存在
@@ -85,6 +85,7 @@ class RobotClient:
             "action_command": self._handle_action_command,
             "control_command": self._handle_control_command,
             "audio_control": self._handle_audio_control,
+            "stop_audio": self._handle_stop_audio,
             "error": self._handle_error,
         }
 
@@ -188,7 +189,7 @@ class RobotClient:
         await self.send_message(message, channel="audio_upload")
 
     async def send_register(self) -> None:
-        message = build_client_register(
+        message = build_robot_register(
             self.config["robot"]["uuid"],
             self.config["robot"].get("name"),
             self.config["robot"].get("model"),
@@ -218,7 +219,10 @@ class RobotClient:
         self.logger.info(f"麦克风采集{'开启' if enabled else '关闭'}")
 
     async def _handle_audio_response(self, data: Dict[str, Any]) -> None:
-        handle_audio_response(data, self.logger, self.log_dir)
+        handle_audio_response(data, self.logger, self.log_dir / "media")
+
+    async def _handle_stop_audio(self, data: Dict[str, Any]) -> None:
+        stop_audio_playback(self.logger)
 
     async def _handle_action_command(self, data: Dict[str, Any]) -> None:
         await handle_action_command(data, self.logger, self.action_executor, self._executor)
@@ -414,43 +418,81 @@ def _build_action_map() -> Dict[str, str]:
     }
 
 
-def _build_action_executor(client: "RobotClient", action_map: Dict[str, str]) -> Callable[[str, dict], bool]:
-    def action_executor(action: str, parameters: dict) -> bool:
+class ActionRunner:
+    def __init__(self, client: "RobotClient", action_map: Dict[str, str]) -> None:
+        self.client = client
+        self.action_map = action_map
+        self._current_token = 0
+
+    def _next_token(self) -> int:
+        self._current_token += 1
+        return self._current_token
+
+    def _stop_current(self) -> None:
         try:
-            client.logger.debug(f"开始执行动作: {action}")
-            command = action_map.get(action)
+            self.client.send_command_to_process(json.dumps({"type": "move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0}))
+            self.client.send_command_to_process(
+                json.dumps({
+                    "type": "attitude", "roll_rate": 0.0, "pitch_rate": 0.0, "yaw_rate": 0.0, "height_vel": 0.0
+                })
+            )
+        except Exception:
+            pass
+
+    def _resolve_wait(self, action: str) -> float:
+        if action in ["walk_forward", "walk_backward", "turn_left", "turn_right"]:
+            return 2.5
+        if action in ["shake_hand", "nod", "wave"]:
+            return 4.5
+        if action == "dance":
+            return 5.0
+        return 3.5
+
+    def _sleep_interruptible(self, token: int, seconds: float) -> bool:
+        end_time = time.time() + seconds
+        while time.time() < end_time:
+            if token != self._current_token:
+                return False
+            time.sleep(0.1)
+        return True
+
+    def execute(self, action: str, parameters: dict) -> bool:
+        try:
+            token = self._next_token()
+            self.client.logger.debug(f"开始执行动作: {action}")
+            self._stop_current()
+            command = self.action_map.get(action)
             if not command:
-                client.logger.warning(f"不支持的动作: {action}")
+                self.client.logger.warning(f"不支持的动作: {action}")
                 return False
-            success = client.send_command_to_process(command)
+            success = self.client.send_command_to_process(command)
             if not success:
-                client.logger.error(f"发送命令 {command} 失败")
+                self.client.logger.error(f"发送命令 {command} 失败")
                 return False
-            if action in ["walk_forward", "walk_backward", "turn_left", "turn_right"]:
-                wait_time = 2.5
-            elif action in ["shake_hand", "nod", "wave"]:
-                wait_time = 4.5
-            elif action == "dance":
-                wait_time = 5
-            else:
-                wait_time = 3.5
-            time.sleep(wait_time)
-            client.logger.debug(f"动作 {action} 执行完成")
+            wait_time = self._resolve_wait(action)
+            completed = self._sleep_interruptible(token, wait_time)
+            if not completed:
+                self.client.logger.info(f"动作 {action} 被打断")
+                return False
+            self.client.logger.debug(f"动作 {action} 执行完成")
             return True
         except Exception as e:
-            client.logger.error(f"执行动作 {action} 时出错: {e}", exc_info=True)
+            self.client.logger.error(f"执行动作 {action} 时出错: {e}", exc_info=True)
             return False
 
-    return action_executor
+
+def _build_action_executor(client: "RobotClient", action_map: Dict[str, str]) -> Callable[[str, dict], bool]:
+    runner = ActionRunner(client, action_map)
+    return runner.execute
 
 
 async def main():
     """主函数"""
     client = RobotClient()
 
-    # 获取 core.py 的路径
+    # 获取 modules/actions/executor.py 的路径
     script_dir = Path(__file__).parent
-    interactive_script = script_dir / "modules" / "control" / "__main__.py"
+    interactive_script = script_dir / "modules" / "actions" / "executor.py"
 
     if not interactive_script.exists():
         client.logger.error(f"找不到交互式脚本: {interactive_script}")
