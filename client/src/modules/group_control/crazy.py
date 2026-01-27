@@ -2,7 +2,7 @@ import math
 import time
 from typing import Literal
 
-from .core import RobotDog
+from .dog_core import RobotDog
 
 
 class CrazyRobotDog(RobotDog):

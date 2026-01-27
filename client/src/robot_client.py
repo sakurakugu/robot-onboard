@@ -14,21 +14,21 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import re
 import subprocess
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlparse, urlunparse
-
 import websockets
 from core.utils import generate_uuid
 from core.logger import CNLevelFormatter
 from core.utils import get_ipc_path
 from websockets import ClientConnection
-
-from core.config import Config
+from core.config import Config, WORKSPACE_DIR
 
 _AUDIO_IMPORT_ERROR: Optional[Exception] = None
 try:
@@ -52,19 +52,11 @@ class RobotClient:
         """
         # 配置目录
         if workspace is None:
-            workspace = Path.home() / "sparkrobot"
-        self.base_dir = workspace
-        self.config_dir = self.base_dir / "config"
+            workspace = WORKSPACE_DIR
         self.project_name = "robot-chat"
-        self.log_dir = self.base_dir / "logs" / self.project_name
-
-        # 配置文件
-        self.global_config_file = self.config_dir / "config.toml"  # 全局配置（uuid等）
-        self.config_file = self.config_dir / f"{self.project_name}.toml"  # 机器人对话专用配置
+        self.log_dir = workspace / "logs" / self.project_name
 
         # 确保目录存在
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-        self.config_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         self.config_store = Config.instance(workspace, self.project_name)
@@ -921,19 +913,30 @@ class RobotClient:
         """
         try:
             self.logger.info(f"正在启动交互式子进程: {script_path}")
+            src_dir = Path(script_path).resolve().parents[2]
+            env = os.environ.copy()
+            existing_pythonpath = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = f"{src_dir}:{existing_pythonpath}" if existing_pythonpath else str(src_dir)
             self.interactive_process = subprocess.Popen(
-                ["python3", script_path],
+                [sys.executable, script_path],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
+                env=env,
             )
             # 等待子进程初始化
             time.sleep(5)
 
             if self.interactive_process.poll() is not None:
-                self.logger.error("子进程启动失败")
+                stderr_output = ""
+                if self.interactive_process.stderr:
+                    stderr_output = self.interactive_process.stderr.read().strip()
+                if stderr_output:
+                    self.logger.error(f"子进程启动失败: {stderr_output}")
+                else:
+                    self.logger.error("子进程启动失败")
                 return False
 
             self.logger.info("交互式子进程启动成功")

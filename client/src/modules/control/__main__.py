@@ -5,6 +5,10 @@ from core.utils import get_ipc_path
 from core.config import Config
 from core.dog import sdk
 
+# 万一出现重名的“core文件夹、core.py”等，就添加这个
+# from pathlib import Path
+# import sys
+# sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 def main():
     """运行交互式演示的主函数。"""
