@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from core.config import WORKSPACE_DIR, Config
+from core.config import APP_NAME, WORKSPACE_DIR, Config
 from core.logger import configure_logger
 from modules.actions.mapping import handle_action_command, handle_text_response
 from modules.audio.capture import AudioCapture
@@ -49,7 +49,7 @@ class RobotClient:
         # 配置目录
         if workspace is None:
             workspace = WORKSPACE_DIR
-        self.project_name = "robot-agent"
+        self.project_name = APP_NAME
         self.log_dir = workspace / "logs" / self.project_name
 
         # 确保目录存在
@@ -122,7 +122,12 @@ class RobotClient:
         logging_cfg = self.config.get("logging", {})
         level = logging_cfg.get("level", "INFO")
         max_file_size_mb = logging_cfg.get("max_file_size_mb")
-        self.logger = configure_logger(self.log_dir, level=level, max_file_size_mb=max_file_size_mb)
+        self.logger = configure_logger(
+            self.log_dir,
+            level=level,
+            max_file_size_mb=max_file_size_mb,
+            log_file_prefix="application",
+        )
 
     async def connect(self) -> bool:
         """连接到服务器"""
@@ -234,6 +239,27 @@ class RobotClient:
         speed_ratio = max(0.0, min(1.0, speed / 10.0))
 
         if command == "joystick":
+            if mode == "two_leg" or channel == "two_leg":
+                max_vx = 0.5
+                max_yaw = 1.0
+
+                vx = x * max_vx * speed_ratio
+                yaw = y * max_yaw * speed_ratio
+
+                # 过滤无效值
+                if abs(vx) < 0.2:
+                    vx = 0.0
+                if abs(yaw) < 0.2:
+                    yaw = 0.0
+
+                payload = {
+                    "type": "two_leg",
+                    "vx": vx,
+                    "yaw_rate": yaw,
+                }
+                self.process_controller.send_command(json.dumps(payload))
+                return
+
             if mode == "pose" or channel == "pose":
                 max_roll = 0.5
                 max_pitch = 0.5
@@ -255,25 +281,43 @@ class RobotClient:
             max_yaw = 0.6
 
             if channel == "look":
+                yaw_rate = y * max_yaw * speed_ratio
+                if abs(yaw_rate) < 0.02:
+                    yaw_rate = 0.0
                 payload = {
                     "type": "move",
                     "vx": 0.0,
                     "vy": 0.0,
-                    "yaw_rate": y * max_yaw * speed_ratio,
+                    "yaw_rate": yaw_rate,
                 }
                 self.process_controller.send_command(json.dumps(payload))
                 return
 
+            vx = x * max_vx * speed_ratio
+            vy = y * max_vy * speed_ratio
+
+            # 过滤无效的微小移动 (Deadzone)
+            if abs(vx) < 0.05:
+                vx = 0.0
+            if abs(vy) < 0.1:
+                vy = 0.0
+
             payload = {
                 "type": "move",
-                "vx": x * max_vx * speed_ratio,
-                "vy": y * max_vy * speed_ratio,
+                "vx": vx,
+                "vy": vy,
                 "yaw_rate": 0.0,
             }
             self.process_controller.send_command(json.dumps(payload))
             return
 
         if command == "joystick_stop":
+            if mode == "two_leg" or channel == "two_leg":
+                self.process_controller.send_command(
+                    json.dumps({"type": "two_leg", "vx": 0.0, "yaw_rate": 0.0})
+                )
+                return
+
             if mode == "pose" or channel == "pose":
                 self.process_controller.send_command(
                     json.dumps(
@@ -307,22 +351,31 @@ class RobotClient:
     async def run(self) -> None:
         self.logger.info("机器狗客户端启动")
         await self.ipc_server.start()
-        while True:
+        try:
+            while True:
+                try:
+                    if not await self._ensure_connected():
+                        continue
+                    tasks = self._build_tasks()
+                    await asyncio.gather(*tasks)
+                except KeyboardInterrupt:
+                    self.logger.info("收到中断信号，正在退出...")
+                    break
+                except Exception as e:
+                    self.logger.error(f"运行时错误: {e}")
+                    self.ws_manager.connected = False
+                finally:
+                    if self._has_active_ws():
+                        await self.disconnect()
+        except asyncio.CancelledError:
+            self.logger.info("收到中断信号，正在退出...")
+        finally:
+            await self.ipc_server.stop()
             try:
-                if not await self._ensure_connected():
-                    continue
-                tasks = self._build_tasks()
-                await asyncio.gather(*tasks)
-            except KeyboardInterrupt:
-                self.logger.info("收到中断信号，正在退出...")
-                break
-            except Exception as e:
-                self.logger.error(f"运行时错误: {e}")
-                self.ws_manager.connected = False
-            finally:
-                if self._has_active_ws():
-                    await self.disconnect()
-        await self.ipc_server.stop()
+                await self.deinit()
+            except Exception:
+                pass
+            self.logger.info("客户端已停止")
 
     async def _ensure_connected(self) -> bool:
         if self.ws_manager.connected:
@@ -382,6 +435,16 @@ class RobotClient:
     def send_command_to_process(self, command: str) -> bool:
         return self.process_controller.send_command(command)
 
+    async def deinit(self) -> None:
+        try:
+            stop_audio_playback(self.logger)
+        except Exception:
+            pass
+        try:
+            self.config_store.save(self.config)
+            self.logger.info("配置已保存")
+        except Exception:
+            self.logger.warning("配置保存失败")
 
 def _build_action_map() -> Dict[str, str]:
     return {
@@ -399,6 +462,7 @@ def _build_action_map() -> Dict[str, str]:
         "nod": "nod",
         "wave": "wave",
         "two_leg_stand": "two_leg_stand",
+        "cancel_two_leg_stand": "cancel_two_leg_stand",
     }
 
 
@@ -497,4 +561,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

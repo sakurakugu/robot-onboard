@@ -34,32 +34,35 @@ def get_globals_config(data: Dict[str, Any]) -> Dict[str, str]:
 DEFAULTS_CONFIG = { # 默认客户端配置
     "server": {
         # TODO: 到时候分离手机端和服务端后，将这里的地址修改
-        "base_url": f"ws://{SERVER_ADDR}",
-        "ws_path": "/api/v1/conversation/connect",
-        "control_url": f"ws://{SERVER_ADDR}:9000/api/v1/conversation/connect",
-        "business_url": f"ws://{SERVER_ADDR}:9001/api/v1/conversation/connect",
-        "audio_upload_url": f"ws://{SERVER_ADDR}:9002/api/v1/conversation/connect",
-        "audio_download_url": f"ws://{SERVER_ADDR}:9003/api/v1/conversation/connect",
-        "reconnect_interval": 5,
-        "heartbeat_interval": 30,
+        "base_url": f"ws://{SERVER_ADDR}",         # 服务器基础URL
+        "ws_path": "/api/v1/conversation/connect", # WebSocket路径
+        "control_url": f"ws://{SERVER_ADDR}:9000/api/v1/conversation/connect",        # 控制URL
+        "business_url": f"ws://{SERVER_ADDR}:9001/api/v1/conversation/connect",       # 业务URL
+        "audio_upload_url": f"ws://{SERVER_ADDR}:9002/api/v1/conversation/connect",   # 音频上传URL
+        "audio_download_url": f"ws://{SERVER_ADDR}:9003/api/v1/conversation/connect", # 音频下载URL
+        "reconnect_interval": 5,  # 重连间隔（秒）
+        "heartbeat_interval": 30, # 心跳间隔（秒）
     },
-    "sdk": {
+    "sdk": { # 这里一般保持不变（也是默认值）
         "robot_ip": "127.0.0.1",
         "local_port": 43988,
     },
     "audio": {
-        "sample_rate": 16000,
-        "channels": 1,
-        "frame_duration_ms": 20,
-        "vad_threshold": 0.015,
-        "vad_silence_ms": 800,
-        "max_segment_ms": 10000,
-        "enable_streaming": True,
-        "input_device": None,
+        "sample_rate": 16000,     # 音频采样率
+        "channels": 1,            # 音频通道数（一般为1，单声道）
+        "frame_duration_ms": 20,  # 音频帧时长（毫秒）
+        "vad_threshold": 0.015,   # VAD阈值（用于语音活动检测）
+        "vad_silence_ms": 800,    # VAD静音时长（毫秒）
+        "max_segment_ms": 10000,  # 最大音频片段时长（毫秒）
+        "enable_streaming": True, # 是否启用流式传输
+        "input_device": None,     # 音频输入设备（None表示默认设备）
+    },
+    "actions": {
+        "exit_behavior": "lie_down", # 退出后默认行为：lie_down | stand_up | stop
     },
     "logging": {
-        "log_dir": str(WORKSPACE_DIR / "logs" / APP_NAME),
-        "level": "INFO",
-        "max_file_size_mb": 10,
+        "log_dir": str(WORKSPACE_DIR / "logs" / APP_NAME), # 日志目录
+        "level": "INFO",                                   # 日志级别
+        "max_file_size_mb": 10,                            # 每个日志文件最大大小（MB）
     },
 }

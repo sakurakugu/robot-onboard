@@ -4,7 +4,7 @@ import socket
 import threading
 import time
 
-from core.config import Config
+from core.config import APP_NAME, Config
 from core.dog import sdk
 from core.logger import configure_logger, logger
 from core.utils import get_ipc_path
@@ -39,6 +39,8 @@ def _send_status_loop(app, robot_uuid, ipc_path):
                 s.close()
         except socket.timeout:
             logger.warning("状态发送超时")
+        except FileNotFoundError:
+            logger.warning("IPC服务未就绪")
         except Exception as e:
             logger.exception("状态发送错误: %s", e)
         time.sleep(1) # 1秒发送一次状态
@@ -59,15 +61,20 @@ def _handle_control_payload(app, payload: dict) -> None:
             float(payload.get("vy", 0) or 0),
             float(payload.get("yaw_rate", 0) or 0),
         )
+    elif cmd_type == "two_leg":
+        app.twoLegStand(
+            float(payload.get("vx", 0) or 0),
+            float(payload.get("yaw_rate", 0) or 0),
+        )
     elif cmd_type == "attitude":
         app.attitudeControl(
-            float(payload.get("roll_rate", 0) or 0),
-            float(payload.get("pitch_rate", 0) or 0),
-            float(payload.get("yaw_rate", 0) or 0),
-            float(payload.get("height_vel", 0) or 0),
+            float(payload.get("roll_rate", 0) or 0),  # 横滚角速度
+            float(payload.get("pitch_rate", 0) or 0), # 俯仰角速度
+            float(payload.get("yaw_rate", 0) or 0),   # 偏航角速度
+            float(payload.get("height_vel", 0) or 0), # 垂直高度速度
         )
     elif cmd_type == "estop":
-        app.passive()
+        app.passive() # 进入紧急趴下模式
 
 # 执行站立动作
 def _action_stand(app) -> None:
@@ -154,41 +161,84 @@ def _action_attitude(app) -> None:
     time.sleep(4)
     app.standUp()
     time.sleep(2)
-
-# 执行双腿站立动作
-def _action_two_leg(app) -> None:
+    
+# 执行双腿站立动作（一次性）
+def _action_two_leg_once(app) -> None:
     logger.info("执行中: 双腿站立")
     app.twoLegStand(0.0, 0.0)
     time.sleep(4)
     app.cancelTwoLegStand()
     time.sleep(2)
 
-# 执行退出动作
-def _action_exit(app) -> None:
+# 执行双腿站立动作
+def _action_two_leg(app) -> None:
+    logger.info("执行中: 双腿站立")
+    app.twoLegStand(0.0, 0.0)
+
+# 退出双腿站立
+def _action_cancel_two_leg(app) -> None:
+    logger.info("执行中: 退出双腿站立")
+    app.cancelTwoLegStand()
+    time.sleep(1)
+
+# 执行退出动作（趴下）
+def _action_exit_lie_down(app) -> None:
     logger.info("退出演示。机器人将趴下。")
     app.lieDown()
     time.sleep(3)
 
+# 执行退出动作（站立）
+def _action_exit_stand_up(app) -> None:
+    logger.info("退出演示。机器人将站立。")
+    app.standUp()
+    time.sleep(3)
+
+# 执行退出动作（先趴下后急停）
+def _action_exit_stop(app) -> None:
+    logger.info("退出演示。机器人将先趴下再急停。")
+    app.lieDown()
+    time.sleep(2)
+    app.passive()
+    time.sleep(1)
+
 # 动作处理映射
 ACTION_HANDLERS = {
-    "stand_up": _action_stand,
-    "sit_down": _action_lie_down,
-    "walk_forward": _action_forward,
-    "walk_backward": _action_backward,
-    "left": _action_left,
-    "right": _action_right,
-    "turn_left": _action_turn_left,
-    "turn_right": _action_turn_right,
-    "jump": _action_jump,
-    "front_jump": _action_front_jump,
-    "backflip": _action_backflip,
-    "shake_hand": _action_shake,
-    "nod": _action_attitude,
-    "wave": _action_attitude,
-    "dance": _action_jump,
-    "two_leg_stand": _action_two_leg,
-    "exit": _action_exit,
+    "stand_up": _action_stand,         # 站立
+    "sit_down": _action_lie_down,      # 趴下
+    "walk_forward": _action_forward,   # 前进
+    "walk_backward": _action_backward, # 后退
+    "left": _action_left,              # 左移
+    "right": _action_right,            # 右移
+    "turn_left": _action_turn_left,    # 左转
+    "turn_right": _action_turn_right,  # 右转
+    "jump": _action_jump,              # 跳跃
+    "front_jump": _action_front_jump,  # 向前跳跃
+    "backflip": _action_backflip,      # 后空翻
+    "shake_hand": _action_shake,       # 握手
+    "nod": _action_attitude,           # 点头
+    "wave": _action_attitude,          # 摇头
+    "dance": _action_jump,             # 跳舞（TODO: 暂时用跳跃代替）
+    "two_leg_once": _action_two_leg_once,            # 一次性双腿站立
+    "two_leg_stand": _action_two_leg,                # 双腿站立
+    "cancel_two_leg_stand": _action_cancel_two_leg,  # 退出双腿站立
+    "exit_lie_down": _action_exit_lie_down,  # 退出后趴下
+    "exit_stand_up": _action_exit_stand_up,  # 退出后站立
+    "exit_stop": _action_exit_stop,          # 退出后停止（先趴下再急停）
 }
+
+EXIT_COMMANDS = {"exit_lie_down", "exit_stand_up", "exit_stop"}
+
+# 解析退出命令
+def _resolve_exit_command(config: dict) -> str:
+    behavior = (
+        config.get("actions", {})
+        .get("exit_behavior", "lie_down")
+    )
+    if behavior == "stand_up":
+        return "exit_stand_up"
+    if behavior == "stop":
+        return "exit_stop"
+    return "exit_lie_down"
 
 # 执行用户选择的动作
 def _execute_choice(app, choice: str) -> bool:
@@ -197,14 +247,15 @@ def _execute_choice(app, choice: str) -> bool:
         logger.warning("无效的选择。请重试。")
         return False
     handler(app)
-    return choice == "exit"
+    return choice in EXIT_COMMANDS
 
 # 命令循环
-def _command_loop(app) -> None:
+def _command_loop(app, config: dict) -> None:
     while True:
-        raw = input("输入命令: ").strip()
+        raw = input().strip() # 从标准输入读取用户输入
         if not raw:
             continue
+        # 含参数的控制指令
         if raw.startswith("{"):
             try:
                 payload = json.loads(raw)
@@ -213,11 +264,10 @@ def _command_loop(app) -> None:
             except Exception as e:
                 logger.error(f"解析控制指令失败: {e}")
                 continue
+        if raw == "exit":
+            raw = _resolve_exit_command(config)
         if _execute_choice(app, raw):
             break
-        if raw not in ["stand_up", "sit_down", "exit"]:
-            app.standUp()
-            time.sleep(2)
 
 
 def main():
@@ -230,7 +280,9 @@ def main():
             log_dir=logging_cfg.get("log_dir"),
             level=logging_cfg.get("level", "INFO"),
             max_file_size_mb=logging_cfg.get("max_file_size_mb"),
+            log_file_prefix="executor",
         )
+
         app = sdk.HighLevel()
         sdk_cfg = config.get("sdk", {})
         robot_ip = sdk_cfg.get("robot_ip", "127.0.0.1")
@@ -239,13 +291,13 @@ def main():
         logger.info("机器人连接初始化成功。")
 
         robot_uuid = config.get("robot", {}).get("uuid", "unknown")
-        ipc_path = get_ipc_path("robot-chat")
+        ipc_path = get_ipc_path(APP_NAME)
 
         # 启动一个线程，循环发送机器人状态到IPC路径
         threading.Thread(target=_send_status_loop, args=(app, robot_uuid, ipc_path), daemon=True).start()
 
         _prepare_robot(app)
-        _command_loop(app)
+        _command_loop(app, config)
 
     except Exception as e:
         logger.error(f"发生意外错误: {e}", exc_info=True)

@@ -26,6 +26,7 @@ class ProcessController:
                 text=True,
                 bufsize=1,
                 env=env,
+                start_new_session=True,
             )
             time.sleep(5)
 
@@ -50,7 +51,7 @@ class ProcessController:
             self.logger.info("正在关闭交互式子进程...")
             try:
                 if self.process.stdin:
-                    self.process.stdin.write("0\n")
+                    self.process.stdin.write("exit\n")
                     self.process.stdin.flush()
                 self.process.wait(timeout=5)
             except Exception as e:

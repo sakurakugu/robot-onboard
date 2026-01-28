@@ -11,7 +11,6 @@ from core.logger import logger
 def generate_uuid() -> str:
     return str(uuid6.uuid7())
 
-
 # 获取IPC路径
 def get_ipc_path(name: str) -> Path:
     ipc_path = Path("/tmp") / ORG_NAME / f"{name}.sock"
@@ -34,4 +33,4 @@ def get_local_ip():
     return ip
 
 
-__all__ = ["execute_concurrently", "get_local_ip"]
+__all__ = ["execute_concurrently", "get_local_ip", "generate_uuid", "get_ipc_path"]

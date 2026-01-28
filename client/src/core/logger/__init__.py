@@ -16,10 +16,27 @@ LEVEL_NAME_CN = {
     "CRITICAL": "严重",
 }
 
+LEVEL_COLOR = {
+    "DEBUG": "\x1b[36m",     # 青色
+    "INFO": "\x1b[32m",      # 绿色
+    "WARNING": "\x1b[33m",   # 黄色
+    "ERROR": "\x1b[31m",     # 红色
+    "CRITICAL": "\x1b[1;31m",# 加粗红色
+}
+
+RESET_COLOR = "\x1b[0m"
+
 class CNLevelFormatter(logging.Formatter):
-    def __init__(self, fmt: str, time_mode: str, datefmt: Optional[str] = None):
+    def __init__(
+        self,
+        fmt: str,
+        time_mode: str,
+        datefmt: Optional[str] = None,
+        enable_color: bool = False,
+    ):
         super().__init__(fmt=fmt, datefmt=datefmt)
         self.time_mode = time_mode
+        self.enable_color = enable_color
 
     def formatTime(self, record, datefmt=None):
         if self.time_mode == "console":
@@ -33,7 +50,12 @@ class CNLevelFormatter(logging.Formatter):
 
     def format(self, record):
         original = record.levelname
-        record.levelname = LEVEL_NAME_CN.get(original, original)
+        level_cn = LEVEL_NAME_CN.get(original, original)
+        if self.enable_color:
+            color = LEVEL_COLOR.get(original, "")
+            record.levelname = f"{color}{level_cn}{RESET_COLOR}"
+        else:
+            record.levelname = level_cn
         try:
             return super().format(record)
         finally:
@@ -53,14 +75,19 @@ def _resolve_console_stream() -> Optional[io.TextIOBase]:
     return None
 
 
-def _build_log_path(base_dir: Path, date_value: Optional[datetime] = None) -> Path:
+def _build_log_path(
+    base_dir: Path,
+    date_value: Optional[datetime] = None,
+    file_prefix: Optional[str] = None,
+) -> Path:
     """ 构建日志文件路径，按日期分类 """
     now = date_value or datetime.now().astimezone()
     date_folder = now.date().isoformat()
     date_compact = now.strftime("%Y%m%d")
     daily_dir = base_dir / date_folder
     daily_dir.mkdir(parents=True, exist_ok=True)
-    return daily_dir / f"{APP_NAME}_{date_compact}.log"
+    name = file_prefix or APP_NAME
+    return daily_dir / f"{name}_{date_compact}.log"
 
 class DailySwitchingHandler(logging.Handler):
     def __init__(
@@ -69,16 +96,18 @@ class DailySwitchingHandler(logging.Handler):
         formatter: logging.Formatter,
         level: int,
         max_file_size_mb: Optional[int] = None,
+        file_prefix: Optional[str] = None,
     ) -> None:
         super().__init__(level=level)
         self.base_dir = base_dir
         self.max_file_size_mb = max_file_size_mb
         self._formatter = formatter
+        self.file_prefix = file_prefix
         self._current_date = datetime.now().astimezone().date()
         self._handler = self._create_handler(datetime.now().astimezone())
 
     def _create_handler(self, now: datetime) -> logging.Handler:
-        log_path = _build_log_path(self.base_dir, now)
+        log_path = _build_log_path(self.base_dir, now, self.file_prefix)
         handler: logging.Handler
         if self.max_file_size_mb:
             handler = RotatingFileHandler(
@@ -117,6 +146,7 @@ def configure_logger(
     log_dir: Union[str, Path, None] = None,
     level: Union[int, str] = logging.INFO,
     max_file_size_mb: Optional[int] = None,
+    log_file_prefix: Optional[str] = None,
 ) -> logging.Logger:
     resolved_level = level
     if isinstance(resolved_level, str):
@@ -135,6 +165,7 @@ def configure_logger(
         formatter=file_formatter,
         level=resolved_level,
         max_file_size_mb=max_file_size_mb,
+        file_prefix=log_file_prefix,
     )
 
     handlers: list[logging.Handler] = [file_handler]
@@ -145,6 +176,7 @@ def configure_logger(
             "[%(asctime)s] [%(levelname)s] [%(name)s] [%(filename)s:%(lineno)d %(funcName)s] %(message)s",
             time_mode="console",
             datefmt="%H:%M:%S.%f",
+            enable_color=True,
         )
         console_handler.setFormatter(console_formatter)
         handlers.append(console_handler)
