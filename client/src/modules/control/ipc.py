@@ -13,7 +13,12 @@ class IpcServer:
         self._server: Optional[asyncio.AbstractServer] = None
 
     async def start(self) -> None:
-        ipc_path = get_ipc_path(self.project_name)
+        try:
+            ipc_path = get_ipc_path(self.project_name)
+            if ipc_path.exists():
+                ipc_path.unlink()
+        except Exception:
+            pass
 
         async def _handle_ipc(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
             try:

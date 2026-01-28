@@ -244,12 +244,12 @@ class RobotConfigurator:
         if ip:
             print(f"✓ 机器狗 WIFI IP: {ip}")
         else:
-            print(f"✗ 未找到机器狗的 WIFI IP 地址")
+            print("✗ 未找到机器狗的 WIFI IP 地址")
             
         if mac:
             print(f"✓ 机器狗 MAC 地址: {mac}")
         else:
-            print(f"⚠️  未找到机器狗的 MAC 地址")
+            print("⚠️  未找到机器狗的 MAC 地址")
         
         return ip, mac
     
@@ -476,11 +476,11 @@ class RobotConfigurator:
                 print(f"提示: 可以在路由器中通过 MAC 地址 {robot_mac} 查找对应的 IP")
             return False
         
-        print(f"\n重要信息：")
+        print("\n重要信息：")
         print(f"机器狗 WIFI IP: {robot_ip}")
         if robot_mac:
             print(f"机器狗 MAC 地址: {robot_mac}")
-        print(f"后续请使用此 IP 通过 SSH 连接机器狗")
+        print("后续请使用此 IP 通过 SSH 连接机器狗")
         
         # 修改 SDK 配置
         if not self.修改SDK配置(local_ip):
@@ -538,11 +538,11 @@ class RobotConfigurator:
                 print("✗ 未提供机器狗 WIFI IP")
                 return False
         
-        print(f"\n重要信息：")
+        print("\n重要信息：")
         print(f"机器狗 WIFI IP: {robot_ip}")
         if robot_mac:
             print(f"机器狗 MAC 地址: {robot_mac}")
-        print(f"后续请使用此 IP 通过 SSH 连接机器狗")
+        print("后续请使用此 IP 通过 SSH 连接机器狗")
         
         # 获取本机 IP（用于 SDK 配置）
         print()  # 空行

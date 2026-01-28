@@ -1,4 +1,6 @@
+# 该文件是动作执行器模块，负责处理用户输入的动作指令，目前是通过作为子程序进行执行的
 import json
+import logging
 import socket
 import threading
 import time
@@ -7,11 +9,8 @@ from core.config import Config
 from core.dog import sdk
 from core.utils import get_ipc_path
 
-# 万一出现重名的“core文件夹、core.py”等，就添加这个
-# from pathlib import Path
-# import sys
-# sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+# 收集机器人状态
 def _collect_status(app):
     return {
         "battery": app.getBatteryPower(),
@@ -20,7 +19,7 @@ def _collect_status(app):
         "mode": app.getCurrentCtrlmode(),
     }
 
-
+# 循环发送机器人状态
 def _send_status_loop(app, robot_uuid, ipc_path):
     seq = 0
     while True:
@@ -44,14 +43,14 @@ def _send_status_loop(app, robot_uuid, ipc_path):
             pass
         time.sleep(1)
 
-
+# 准备机器人
 def _prepare_robot(app) -> None:
     print("机器人正在站立...")
     app.standUp()
     time.sleep(3)
     print("机器人准备好接收命令。")
 
-
+# 处理控制指令
 def _handle_control_payload(app, payload: dict) -> None:
     cmd_type = payload.get("type")
     if cmd_type == "move":
@@ -70,85 +69,85 @@ def _handle_control_payload(app, payload: dict) -> None:
     elif cmd_type == "estop":
         app.passive()
 
-
+# 执行站立动作
 def _action_stand(app) -> None:
     print("执行中: 站立")
     app.standUp()
     time.sleep(3)
 
-
+# 执行趴下动作
 def _action_lie_down(app) -> None:
     print("执行中: 趴下")
     app.lieDown()
     time.sleep(3)
 
-
+# 执行前进动作
 def _action_forward(app) -> None:
     print("执行中: 前进 (2秒)")
     app.move(0.2, 0, 0)
     time.sleep(2)
     app.move(0, 0, 0)
 
-
+# 执行后退动作
 def _action_backward(app) -> None:
     print("执行中: 后退 (2秒)")
     app.move(-0.2, 0, 0)
     time.sleep(2)
     app.move(0, 0, 0)
 
-
+# 执行左移动作
 def _action_left(app) -> None:
     print("执行中: 左移 (2秒)")
     app.move(0, 0.2, 0)
     time.sleep(2)
     app.move(0, 0, 0)
 
-
+# 执行右移动作
 def _action_right(app) -> None:
     print("执行中: 右移 (2秒)")
     app.move(0, -0.2, 0)
     time.sleep(2)
     app.move(0, 0, 0)
 
-
+# 执行左转动作
 def _action_turn_left(app) -> None:
     print("执行中: 左转 (2秒)")
     app.move(0, 0, 0.3)
     time.sleep(2)
     app.move(0, 0, 0)
 
-
+# 执行右转动作
 def _action_turn_right(app) -> None:
     print("执行中: 右转 (2秒)")
     app.move(0, 0, -0.3)
     time.sleep(2)
     app.move(0, 0, 0)
 
-
+# 执行跳跃动作
 def _action_jump(app) -> None:
     print("执行中: 跳跃")
     app.jump()
     time.sleep(4)
 
-
+# 执行向前跳跃动作
 def _action_front_jump(app) -> None:
     print("执行中: 向前跳跃")
     app.frontJump()
     time.sleep(4)
 
-
+# 执行后空翻动作
 def _action_backflip(app) -> None:
     print("执行中: 后空翻")
     app.backflip()
     time.sleep(4)
 
-
+# 执行握手动作
 def _action_shake(app) -> None:
     print("执行中: 握手")
     app.shakeHand()
     time.sleep(4)
 
-
+# 执行姿态控制动作
 def _action_attitude(app) -> None:
     print("执行中: 姿态控制 (4秒)")
     app.attitudeControl(0.1, 0.1, 0.1, 0.1)
@@ -156,7 +155,7 @@ def _action_attitude(app) -> None:
     app.standUp()
     time.sleep(2)
 
-
+# 执行双腿站立动作
 def _action_two_leg(app) -> None:
     print("执行中: 双腿站立")
     app.twoLegStand(0.0, 0.0)
@@ -164,44 +163,46 @@ def _action_two_leg(app) -> None:
     app.cancelTwoLegStand()
     time.sleep(2)
 
-
+# 执行退出动作
 def _action_exit(app) -> None:
     print("退出演示。机器人将趴下。")
     app.lieDown()
     time.sleep(3)
 
-
+# 动作处理映射
 ACTION_HANDLERS = {
-    "1": _action_stand,
-    "2": _action_lie_down,
-    "3": _action_forward,
-    "4": _action_backward,
-    "5": _action_left,
-    "6": _action_right,
-    "7": _action_turn_left,
-    "8": _action_turn_right,
-    "9": _action_jump,
-    "10": _action_front_jump,
-    "11": _action_backflip,
-    "12": _action_shake,
-    "13": _action_attitude,
-    "14": _action_two_leg,
-    "0": _action_exit,
+    "stand_up": _action_stand,
+    "sit_down": _action_lie_down,
+    "walk_forward": _action_forward,
+    "walk_backward": _action_backward,
+    "left": _action_left,
+    "right": _action_right,
+    "turn_left": _action_turn_left,
+    "turn_right": _action_turn_right,
+    "jump": _action_jump,
+    "front_jump": _action_front_jump,
+    "backflip": _action_backflip,
+    "shake_hand": _action_shake,
+    "nod": _action_attitude,
+    "wave": _action_attitude,
+    "dance": _action_jump,
+    "two_leg_stand": _action_two_leg,
+    "exit": _action_exit,
 }
 
-
+# 执行用户选择的动作
 def _execute_choice(app, choice: str) -> bool:
     handler = ACTION_HANDLERS.get(choice)
     if not handler:
         print("无效的选择。请重试。")
         return False
     handler(app)
-    return choice == "0"
+    return choice == "exit"
 
-
+# 命令循环
 def _command_loop(app) -> None:
     while True:
-        raw = input("输入命令编号: ").strip()
+        raw = input("输入命令: ").strip()
         if not raw:
             continue
         if raw.startswith("{"):
@@ -214,7 +215,7 @@ def _command_loop(app) -> None:
                 continue
         if _execute_choice(app, raw):
             break
-        if raw not in ["1", "2", "0"]:
+        if raw not in ["stand_up", "sit_down", "exit"]:
             app.standUp()
             time.sleep(2)
 
@@ -223,12 +224,11 @@ def main():
     try:
         app = sdk.HighLevel()
         app.initRobot("127.0.0.1", 43988, "127.0.0.1")
-        print("机器人连接初始化成功。")
+        logging.info("机器人连接初始化成功。")
 
         config_store = Config.instance()
         robot_uuid = config_store.get().get("robot", {}).get("uuid", "unknown")
         ipc_path = get_ipc_path("robot-chat")
-        ipc_path.parent.mkdir(parents=True, exist_ok=True)
 
         threading.Thread(target=_send_status_loop, args=(app, robot_uuid, ipc_path), daemon=True).start()
 

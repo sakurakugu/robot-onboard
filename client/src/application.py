@@ -12,7 +12,6 @@
 
 import asyncio
 import json
-import logging
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from core.config import WORKSPACE_DIR, Config
-from core.logger import CNLevelFormatter
+from core.logger import configure_logger
 from modules.actions.mapping import handle_action_command, handle_text_response
 from modules.audio.capture import AudioCapture
 from modules.audio.playback import handle_audio_response, stop_audio_playback
@@ -120,25 +119,10 @@ class RobotClient:
 
 
     def _setup_logger(self) -> None:
-        level = self.config["logging"].get("level", "INFO")
-        if isinstance(level, str):
-            level = getattr(logging, level.upper(), logging.INFO)
-        file_formatter = CNLevelFormatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-        file_handler = logging.FileHandler(
-            self.log_dir / f"robot_client_{time.strftime('%Y%m%d')}.log", encoding="utf-8"
-        )
-        file_handler.setFormatter(file_formatter)
-        console_handler = logging.StreamHandler()
-        console_formatter = CNLevelFormatter(
-            "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s", datefmt="%H:%M:%S.%f"
-        )
-        console_handler.setFormatter(console_formatter)
-        logger = logging.getLogger("RobotClient")
-        logger.setLevel(level)
-        logger.handlers = []
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-        self.logger = logger
+        logging_cfg = self.config.get("logging", {})
+        level = logging_cfg.get("level", "INFO")
+        max_file_size_mb = logging_cfg.get("max_file_size_mb")
+        self.logger = configure_logger(self.log_dir, level=level, max_file_size_mb=max_file_size_mb)
 
     async def connect(self) -> bool:
         """连接到服务器"""
@@ -401,20 +385,20 @@ class RobotClient:
 
 def _build_action_map() -> Dict[str, str]:
     return {
-        "stand_up": "1",
-        "sit_down": "2",
-        "walk_forward": "3",
-        "walk_backward": "4",
-        "turn_left": "7",
-        "turn_right": "8",
-        "dance": "9",
-        "jump": "9",
-        "front_jump": "10",
-        "backflip": "11",
-        "shake_hand": "12",
-        "nod": "13",
-        "wave": "13",
-        "two_leg_stand": "14",
+        "stand_up": "stand_up",
+        "sit_down": "sit_down",
+        "walk_forward": "walk_forward",
+        "walk_backward": "walk_backward",
+        "turn_left": "turn_left",
+        "turn_right": "turn_right",
+        "dance": "dance",
+        "jump": "jump",
+        "front_jump": "front_jump",
+        "backflip": "backflip",
+        "shake_hand": "shake_hand",
+        "nod": "nod",
+        "wave": "wave",
+        "two_leg_stand": "two_leg_stand",
     }
 
 

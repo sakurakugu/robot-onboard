@@ -1,9 +1,20 @@
 import math
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 
 from .dog_core import RobotDog
 
+
+def execute_concurrently(*actions, _interval: float = 0):
+    """并发执行不同机器狗的动作"""
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        for action in actions:
+            futures.append(executor.submit(action))  # 提交动作到线程池
+            time.sleep(_interval)  # 微小延时，避免瞬时大量请求导致网络拥堵
+        for future in futures:
+            future.result()  # 等待动作完成
 
 class CrazyRobotDog(RobotDog):
     def lean_left(self, duration: float = 0.5, reset: float = 0):
@@ -121,4 +132,4 @@ class CrazyRobotDog(RobotDog):
         self.move()
 
 
-__all__ = ["CrazyRobotDog"]
+__all__ = ["CrazyRobotDog", "execute_concurrently"]
