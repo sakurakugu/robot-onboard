@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from .const import DEFAULTS_CONFIG, WORKSPACE_DIR, get_globals_config
+from .const import APP_NAME, DEFAULTS_CONFIG, WORKSPACE_DIR, get_globals_config
 
 try:
     import tomli
@@ -13,7 +13,7 @@ except ImportError:
 class Config:
     _instance: Optional["Config"] = None
 
-    def __init__(self, workspace: Optional[Path] = None, project_name: str = "robot-chat"):
+    def __init__(self, workspace: Optional[Path] = None, project_name: str = APP_NAME):
         if workspace is None:
             workspace = WORKSPACE_DIR
         self.base_dir = workspace

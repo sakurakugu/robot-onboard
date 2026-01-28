@@ -58,6 +58,7 @@ DEFAULTS_CONFIG = { # 默认客户端配置
         "input_device": None,
     },
     "logging": {
+        "log_dir": str(WORKSPACE_DIR / "logs" / APP_NAME),
         "level": "INFO",
         "max_file_size_mb": 10,
     },

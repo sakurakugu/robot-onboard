@@ -6,7 +6,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional, Union
 
-from core.config import APP_NAME
+from core.config import APP_NAME, WORKSPACE_DIR
 
 LEVEL_NAME_CN = {
     "DEBUG": "调试",
@@ -62,31 +62,80 @@ def _build_log_path(base_dir: Path, date_value: Optional[datetime] = None) -> Pa
     daily_dir.mkdir(parents=True, exist_ok=True)
     return daily_dir / f"{APP_NAME}_{date_compact}.log"
 
+class DailySwitchingHandler(logging.Handler):
+    def __init__(
+        self,
+        base_dir: Path,
+        formatter: logging.Formatter,
+        level: int,
+        max_file_size_mb: Optional[int] = None,
+    ) -> None:
+        super().__init__(level=level)
+        self.base_dir = base_dir
+        self.max_file_size_mb = max_file_size_mb
+        self._formatter = formatter
+        self._current_date = datetime.now().astimezone().date()
+        self._handler = self._create_handler(datetime.now().astimezone())
+
+    def _create_handler(self, now: datetime) -> logging.Handler:
+        log_path = _build_log_path(self.base_dir, now)
+        handler: logging.Handler
+        if self.max_file_size_mb:
+            handler = RotatingFileHandler(
+                log_path,
+                maxBytes=self.max_file_size_mb * 1024 * 1024,
+                backupCount=5,
+                encoding="utf-8",
+            )
+        else:
+            handler = logging.FileHandler(log_path, encoding="utf-8")
+        handler.setFormatter(self._formatter)
+        return handler
+
+    def emit(self, record: logging.LogRecord) -> None:
+        now = datetime.fromtimestamp(record.created).astimezone()
+        record_date = now.date()
+        if record_date != self._current_date:
+            self._current_date = record_date
+            self._handler.close()
+            self._handler = self._create_handler(now)
+        self._handler.emit(record)
+
+    def flush(self) -> None:
+        self._handler.flush()
+
+    def close(self) -> None:
+        try:
+            self._handler.close()
+        finally:
+            super().close()
+
+def get_logger(name: str | None = None):
+    return logging.getLogger(name or APP_NAME)
 
 def configure_logger(
-    log_dir: Union[str, Path],
+    log_dir: Union[str, Path, None] = None,
     level: Union[int, str] = logging.INFO,
     max_file_size_mb: Optional[int] = None,
 ) -> logging.Logger:
     resolved_level = level
     if isinstance(resolved_level, str):
         resolved_level = getattr(logging, resolved_level.upper(), logging.INFO)
+    if log_dir is None:
+        log_dir = str(WORKSPACE_DIR / "logs" / APP_NAME)
     base_dir = Path(log_dir)
     base_dir.mkdir(parents=True, exist_ok=True)
-    log_path = _build_log_path(base_dir)
 
     file_formatter = CNLevelFormatter(
         "[%(asctime)s] [%(levelname)s] [%(name)s] [%(filename)s:%(lineno)d %(funcName)s] %(message)s",
         time_mode="file",
     )
-    file_handler: logging.Handler
-    if max_file_size_mb:
-        file_handler = RotatingFileHandler(
-            log_path, maxBytes=max_file_size_mb * 1024 * 1024, backupCount=5, encoding="utf-8"
-        )
-    else:
-        file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setFormatter(file_formatter)
+    file_handler = DailySwitchingHandler(
+        base_dir=base_dir,
+        formatter=file_formatter,
+        level=resolved_level,
+        max_file_size_mb=max_file_size_mb,
+    )
 
     handlers: list[logging.Handler] = [file_handler]
     console_stream = _resolve_console_stream()

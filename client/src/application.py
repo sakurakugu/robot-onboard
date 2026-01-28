@@ -493,7 +493,7 @@ async def main():
     try:
         await client.run()
     except KeyboardInterrupt:
-        print("\n客户端已停止")
+        client.logger.info("客户端已停止")
 
 
 if __name__ == "__main__":
