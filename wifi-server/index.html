@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>机器狗WiFi设置</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>机器人WiFi设置</h1>
+        <div class="form-group">
+            <label>可用WiFi网络</label>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <span>请选择WiFi网络</span>
+                <button type="button" id="refreshWifi" style="width: auto; padding: 5px 10px; font-size: 14px;">刷新</button>
+            </div>
+            <div id="wifiList" style="border: 1px solid #ddd; border-radius: 4px; max-height: 200px; overflow-y: auto; padding: 5px;">
+                <div style="text-align: center; color: #999; padding: 20px;">正在扫描WiFi...</div>
+            </div>
+        </div>
+        <form id="wifiForm">
+            <div class="form-group">
+                <label for="ssid">WiFi名称</label>
+                <input type="text" id="ssid" name="ssid" required>
+            </div>
+            <div class="form-group">
+                <label for="password">WiFi密码</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit">连接WiFi</button>
+        </form>
+        <div id="message" class="message" style="display: none;"></div>
+    </div>
+    <script>
+    function scanWifi() {
+        var wifiListDiv = document.getElementById('wifiList');
+        wifiListDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">正在扫描WiFi...</div>';
+        
+        fetch('/scan-wifi')
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.success && data.networks.length > 0) {
+                    wifiListDiv.innerHTML = '';
+                    data.networks.forEach(function(network) {
+                        var wifiItem = document.createElement('div');
+                        wifiItem.style.padding = '10px';
+                        wifiItem.style.borderBottom = '1px solid #eee';
+                        wifiItem.style.cursor = 'pointer';
+                        wifiItem.style.display = 'flex';
+                        wifiItem.style.justifyContent = 'space-between';
+                        wifiItem.style.alignItems = 'center';
+                        wifiItem.onclick = function() {
+                            document.getElementById('ssid').value = network.ssid;
+                            var items = wifiListDiv.querySelectorAll('div');
+                            items.forEach(function(item) {
+                                item.style.backgroundColor = '';
+                            });
+                            wifiItem.style.backgroundColor = '#f0f8ff';
+                        };
+                        
+                        var wifiInfo = document.createElement('div');
+                        wifiInfo.innerHTML = '<strong>' + network.ssid + '</strong><br><small style="color: #666;">信号: ' + network.signal + '% | 频道: ' + network.channel + ' | ' + network.security + '</small>';
+                        
+                        wifiItem.appendChild(wifiInfo);
+                        wifiListDiv.appendChild(wifiItem);
+                    });
+                } else {
+                    wifiListDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">未找到可用WiFi网络</div>';
+                }
+            })
+            .catch(function(error) {
+                wifiListDiv.innerHTML = '<div style="text-align: center; color: #ff6666; padding: 20px;">扫描失败：' + error.message + '</div>';
+            });
+    }
+    
+    window.onload = function() {
+        scanWifi();
+    };
+    
+    document.getElementById('refreshWifi').addEventListener('click', function() {
+        scanWifi();
+    });
+    
+    document.getElementById('wifiForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        var ssid = document.getElementById('ssid').value;
+        var password = document.getElementById('password').value;
+        var messageDiv = document.getElementById('message');
+        
+        messageDiv.style.display = 'block';
+        messageDiv.className = 'message';
+        messageDiv.textContent = '正在连接WiFi...';
+        
+        fetch('/connect-wifi', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ssid: ssid, password: password })
+        })
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            if (data.success) {
+                messageDiv.className = 'message success';
+                messageDiv.textContent = 'WiFi连接成功！';
+            } else {
+                messageDiv.className = 'message error';
+                messageDiv.textContent = 'WiFi连接失败：' + data.error;
+            }
+        })
+        .catch(function(error) {
+            messageDiv.className = 'message error';
+            messageDiv.textContent = '请求失败：' + error.message;
+        });
+    });
+    </script>
+</body>
+</html>
