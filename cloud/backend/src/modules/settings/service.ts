@@ -19,6 +19,9 @@ export class SettingsService {
     const deepseekKey = this.database.getParam('deepseek.apiKey') || '';
     const deepseekModel = this.database.getParam('deepseek.model') || '';
     const deepseekBaseUrl = this.database.getParam('deepseek.baseUrl') || '';
+    const tongyiKey = this.database.getParam('tongyi.apiKey') || '';
+    const tongyiModel = this.database.getParam('tongyi.model') || '';
+    const tongyiBaseUrl = this.database.getParam('tongyi.baseUrl') || '';
 
     return {
       provider,
@@ -45,6 +48,12 @@ export class SettingsService {
         baseUrl: deepseekBaseUrl,
         hasApiKey: !!(deepseekKey && String(deepseekKey).length > 0),
         apiKeyLength: deepseekKey ? String(deepseekKey).length : 0
+      },
+      tongyi: {
+        model: tongyiModel,
+        baseUrl: tongyiBaseUrl,
+        hasApiKey: !!(tongyiKey && String(tongyiKey).length > 0),
+        apiKeyLength: tongyiKey ? String(tongyiKey).length : 0
       }
     };
   }
@@ -96,6 +105,17 @@ export class SettingsService {
       hasApiKey: !!(deepseekApiKey && String(deepseekApiKey).length > 0),
       apiKeyLength: deepseekApiKey ? String(deepseekApiKey).length : 0
     };
+
+    // Tongyi (如果有的话)
+    const tongyiApiKey = this.database.getSetting('tongyi.apiKey');
+    const tongyiModel = this.database.getSetting('tongyi.model');
+    const tongyiBaseUrl = this.database.getSetting('tongyi.baseUrl');
+    allConfigs.tongyi = {
+      model: tongyiModel || '',
+      baseUrl: tongyiBaseUrl || '',
+      hasApiKey: !!(tongyiApiKey && String(tongyiApiKey).length > 0),
+      apiKeyLength: tongyiApiKey ? String(tongyiApiKey).length : 0
+    };
     
     return allConfigs;
   }
@@ -110,6 +130,7 @@ export class SettingsService {
     bigmodel?: { apiKey?: string; model?: string; baseUrl?: string };
     anthropic?: { apiKey?: string; model?: string; baseUrl?: string };
     deepseek?: { apiKey?: string; model?: string; baseUrl?: string };
+    tongyi?: { apiKey?: string; model?: string; baseUrl?: string };
   }) {
     if (typeof data.provider === 'string' && data.provider.length > 0) {
       this.database.setParam('llm.provider', data.provider);
@@ -184,6 +205,26 @@ export class SettingsService {
         this.database.setSetting('deepseek.baseUrl', data.deepseek.baseUrl || '');
       }
     }
+    if (data.tongyi) {
+      if (typeof data.tongyi.apiKey === 'string') {
+        this.database.setParam('tongyi.apiKey', data.tongyi.apiKey);
+        this.database.setSetting('tongyi.apiKey', data.tongyi.apiKey);
+        config.llm.tongyi = config.llm.tongyi || { apiKey: '', model: '' };
+        config.llm.tongyi.apiKey = data.tongyi.apiKey;
+      }
+      if (typeof data.tongyi.model === 'string') {
+        this.database.setParam('tongyi.model', data.tongyi.model);
+        this.database.setSetting('tongyi.model', data.tongyi.model);
+        config.llm.tongyi = config.llm.tongyi || { apiKey: '', model: '' };
+        config.llm.tongyi.model = data.tongyi.model;
+      }
+      if (typeof data.tongyi.baseUrl === 'string') {
+        this.database.setParam('tongyi.baseUrl', data.tongyi.baseUrl || '');
+        this.database.setSetting('tongyi.baseUrl', data.tongyi.baseUrl || '');
+        config.llm.tongyi = config.llm.tongyi || { apiKey: '', model: '' };
+        config.llm.tongyi.baseUrl = data.tongyi.baseUrl || undefined;
+      }
+    }
     return { success: true };
   }
 
@@ -193,7 +234,7 @@ export class SettingsService {
     model?: string;
     baseUrl?: string;
   }) {
-    const validProviders = ['openai', 'bigmodel', 'anthropic', 'deepseek'];
+    const validProviders = ['openai', 'bigmodel', 'anthropic', 'deepseek', 'tongyi'];
     const finalProvider = validProviders.includes(data.provider || '') 
       ? data.provider 
       : config.llm.provider;
@@ -249,6 +290,20 @@ export class SettingsService {
       }
       if (typeof data.baseUrl === 'string') {
         this.database.setSetting('deepseek.baseUrl', data.baseUrl || '');
+      }
+    } else if (finalProvider === 'tongyi') {
+      config.llm.tongyi = config.llm.tongyi || { apiKey: '', model: '' };
+      if (typeof data.apiKey === 'string') {
+        config.llm.tongyi.apiKey = data.apiKey;
+        this.database.setSetting('tongyi.apiKey', data.apiKey);
+      }
+      if (typeof data.model === 'string') {
+        config.llm.tongyi.model = data.model;
+        this.database.setSetting('tongyi.model', data.model);
+      }
+      if (typeof data.baseUrl === 'string') {
+        config.llm.tongyi.baseUrl = data.baseUrl || undefined;
+        this.database.setSetting('tongyi.baseUrl', data.baseUrl || '');
       }
     }
 

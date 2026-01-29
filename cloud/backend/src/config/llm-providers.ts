@@ -1,5 +1,5 @@
 // 导出大模型供应商值类型
-export type LLMProviderValue = 'openai' | 'anthropic' | 'deepseek' | 'bigmodel'
+export type LLMProviderValue = 'openai' | 'anthropic' | 'deepseek' | 'bigmodel' | 'tongyi'
 
 // 导出大模型模型接口
 export interface LLMModel {
@@ -53,6 +53,24 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
     models: [
       { value: 'deepseek-reasoner', label: 'DeepSeek v3.2(深度思考)' },
       { value: 'deepseek-chat', label: 'DeepSeek v3.2' }
+    ]
+  },
+  {
+    value: 'tongyi',
+    label: '通义千问',
+    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
+    models: [
+      { value: 'qwen3-0.5b-instruct', label: 'Qwen 3 0.5B' },
+      { value: 'qwen3-1.5b-instruct', label: 'Qwen 3 1.5B' },
+      { value: 'qwen3-3b-instruct', label: 'Qwen 3 3B' },
+      { value: 'qwen3-7b-instruct', label: 'Qwen 3 7B' },
+      { value: 'qwen3-14b-instruct', label: 'Qwen 3 14B' },
+      { value: 'qwen3-32b-instruct', label: 'Qwen 3 32B' },
+      { value: 'qwen3-72b-instruct', label: 'Qwen 3 72B' },
+      { value: 'qwen3-flash', label: 'Qwen 3 Flash' },
+      { value: 'qwen3-flash-1.5b', label: 'Qwen 3 Flash 1.5B' },
+      { value: 'qwen3-flash-7b', label: 'Qwen 3 Flash 7B' },
+      { value: 'qwen3-flash-14b', label: 'Qwen 3 Flash 14B' }
     ]
   }
 ]

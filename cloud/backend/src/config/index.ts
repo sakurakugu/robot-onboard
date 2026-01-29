@@ -34,6 +34,11 @@ export interface Config {
       model: string;
       baseUrl?: string;
     };
+    tongyi?: {
+      apiKey: string;
+      model: string;
+      baseUrl?: string;
+    };
   };
 
   // 语音识别配置
@@ -104,7 +109,7 @@ const config: Config = {
   llm: {
     // 仅从数据库加载配置，不使用 .env
     // 以下为初始默认值，会被数据库配置完全覆盖
-    provider: 'bigmodel',
+    provider: 'tongyi',
     openai: {
       apiKey: '',
       model: 'gpt-4',
@@ -114,6 +119,11 @@ const config: Config = {
       apiKey: '',
       model: 'glm-4-flash',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    },
+    tongyi: {
+      apiKey: '',
+      model: 'qwen-flash',
+      baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
     },
   },
 

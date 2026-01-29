@@ -15,6 +15,8 @@ export class LLMService {
         return this.chatOpenAI(messages, options);
       case 'bigmodel':
         return this.chatBigModel(messages, options);
+      case 'tongyi':
+        return this.chatTongyi(messages, options);
       default:
         throw new Error(`不支持的LLM提供商: ${provider}`);
     }
@@ -128,6 +130,69 @@ export class LLMService {
       throw new Error(`LLM调用失败: ${errorMessage}`);
     }
   }
+
+  /**
+   * Tongyi API调用 (Qwen系列)
+   */
+  private async chatTongyi(messages: Message[], options?: Partial<LLMOptions>): Promise<LLMResponse> {
+    const tongyi = config.llm.tongyi;
+    if (!tongyi?.apiKey) {
+      throw new Error('Tongyi API密钥未配置');
+    }
+    const baseUrl = tongyi.baseUrl || 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
+    const url = baseUrl;
+    try {
+      const response = await axios.post(
+        url,
+        {
+          model: options?.model || tongyi.model || 'qwen-flash',
+          messages: messages.map(m => ({ role: m.role, content: m.content })),
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens || 1000,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${tongyi.apiKey}`,
+          },
+          timeout: 30000,
+        }
+      );
+      
+      // 处理千问模型的响应格式
+      const output = response.data?.output;
+      const choice = output?.choices?.[0];
+      return {
+        content: choice?.message?.content || '',
+        finishReason: choice?.finish_reason || 'stop',
+        usage: {
+          promptTokens: response.data?.usage?.input_tokens || 0,
+          completionTokens: response.data?.usage?.output_tokens || 0,
+          totalTokens: (response.data?.usage?.input_tokens || 0) + (response.data?.usage?.output_tokens || 0),
+        },
+      };
+    } catch (error: any) {
+      const errorData = error.response?.data;
+      console.error('Tongyi API调用失败:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: errorData,
+        message: error.message
+      });
+      
+      // 提取错误信息
+      let errorMessage = error.message;
+      if (errorData?.error) {
+        errorMessage = errorData.error.message || errorData.error.code || JSON.stringify(errorData.error);
+      } else if (typeof errorData === 'string') {
+        errorMessage = errorData;
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
+      }
+      
+      throw new Error(`LLM调用失败: ${errorMessage}`);
+    }
+  }
 /**
    * 构建系统提示词
    */
@@ -153,7 +218,7 @@ export class LLMService {
 - 用户："转个圈" -> 回复："好的，我来转一圈{{action=turn_left,angle=360}}"
 
 注意事项：
-1. 保持友好、可爱的语气
+1. 保持友好、可爱的语气，说话简短一点
 2. 动作要安全，不要让我走太多步
 3. 如果用户要求危险动作，要委婉拒绝
 4. 一次回复中可以包含多个动作标记`;
