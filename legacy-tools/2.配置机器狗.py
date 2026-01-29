@@ -724,7 +724,7 @@ def main():
         validate_arguments(args)
     
     print("="*50)
-    print("机器狗自动配置脚本")
+    print("机器狗自动配置脚本（群控系统用的，不群控不要碰它）")
     print("="*50)
     
     try:
