@@ -197,7 +197,7 @@ class RobotConfigurator:
         except Exception as e:
             return False, "", str(e)
 
-    def get_local_ip(self, interface: str = "wlan0") -> Optional[str]:
+    def 获取本地IP(self, interface: str = "wlan0") -> Optional[str]:
         """
           获取本机在机器狗网络中的 IP 地址
           (WSL没用wlan0，要修改成对应的接口名称)

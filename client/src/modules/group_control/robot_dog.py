@@ -4,7 +4,7 @@ from typing import Any, Callable, cast
 
 from core.dog import sdk
 from core.logger import logger
-from core.utils import get_local_ip
+from core.utils import 获取本地IP
 
 
 class RobotDog:
@@ -14,7 +14,7 @@ class RobotDog:
         self.name = name
         self.app = cast(Any, sdk).HighLevel()
         if local_ip is None:
-            local_ip = get_local_ip()
+            local_ip = 获取本地IP()
         self.app.initRobot(local_ip, local_port, robot_ip)
 
     def get_current_ctrl_mode(self) -> int:

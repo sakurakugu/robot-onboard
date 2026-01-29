@@ -14,18 +14,11 @@ class AudioPlaybackManager:
         self._last_hash: Optional[str] = None
         self._last_time: float = 0.0
 
-    def _ensure_dir(self, media_root: Path) -> None:
-        """ 确保媒体目录存在 """
-        try:
-            media_root.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-
-    def _compute_hash(self, buf_b64: str) -> str:
+    def _计算哈希值(self, buf_b64: str) -> str:
         """ 计算音频数据的哈希值 """
         return hashlib.sha256(buf_b64.encode("utf-8")).hexdigest()
 
-    def stop(self, logger) -> None:
+    def 停止(self, logger) -> None:
         """ 停止当前音频播放 """
         try:
             if self._proc and self._proc.poll() is None:
@@ -41,7 +34,7 @@ class AudioPlaybackManager:
         finally:
             self._proc = None
 
-    def play(self, data: Dict[str, Any], logger, log_dir: Path) -> None:
+    def 播放(self, data: Dict[str, Any], logger, log_dir: Path) -> None:
         """ 播放音频数据 """
         audio_format = data.get("format", "mp3")
         audio_buffer = data.get("buffer", "")
@@ -53,7 +46,7 @@ class AudioPlaybackManager:
                 logger.error(f"不支持的音频格式: {audio_format}")
                 return
 
-            h = self._compute_hash(audio_buffer)
+            h = self._计算哈希值(audio_buffer)
             now = time.time()
             if self._last_hash == h and (now - self._last_time) < 3.0:
                 logger.info("检测到短时间内重复的音频，跳过播放")
@@ -63,7 +56,10 @@ class AudioPlaybackManager:
 
             workspace_dir = WORKSPACE_DIR
             media_root = workspace_dir / ".cache" / "tts"
-            self._ensure_dir(media_root)
+            try:
+                media_root.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
 
             ts = int(now)
             if audio_format == "webm":
@@ -76,7 +72,7 @@ class AudioPlaybackManager:
                 f.write(audio_data)
             logger.info(f"音频已保存: {audio_file}")
 
-            self.stop(logger)
+            self.停止(logger)
             try:
                 self._proc = subprocess.Popen(
                     ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(audio_file)],
@@ -94,11 +90,11 @@ class AudioPlaybackManager:
 
 _manager = AudioPlaybackManager()
 
-def handle_audio_response(data: Dict[str, Any], logger, log_dir: Path) -> None:
+def 处理音频响应并播放(data: Dict[str, Any], logger, log_dir: Path) -> None:
     """ 处理音频响应并播放 """
-    _manager.play(data, logger, log_dir)
+    _manager.播放(data, logger, log_dir)
 
 
-def stop_audio_playback(logger) -> None:
+def 停止当前音频播放(logger) -> None:
     """ 停止当前音频播放 """
-    _manager.stop(logger)
+    _manager.停止(logger)

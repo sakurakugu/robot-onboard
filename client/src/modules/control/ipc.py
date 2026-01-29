@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import Any, Awaitable, Callable, Dict, Optional
 
-from core.utils import get_ipc_path
+from core.utils import 获取IPC路径
 
 
 class IpcServer:
@@ -12,9 +12,9 @@ class IpcServer:
         self.on_status = on_status
         self._server: Optional[asyncio.AbstractServer] = None
 
-    async def start(self) -> None:
+    async def 启动(self) -> None:
         try:
-            ipc_path = get_ipc_path(self.project_name)
+            ipc_path = 获取IPC路径(self.project_name)
             if ipc_path.exists():
                 ipc_path.unlink()
         except Exception:
@@ -44,13 +44,13 @@ class IpcServer:
         self._server = await asyncio.start_unix_server(_handle_ipc, path=str(ipc_path))
         self.logger.info(f"IPC服务启动: {ipc_path}")
 
-    async def stop(self) -> None:
+    async def 关闭(self) -> None:
         if self._server:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
         try:
-            ipc_path = get_ipc_path(self.project_name)
+            ipc_path = 获取IPC路径(self.project_name)
             if ipc_path.exists():
                 ipc_path.unlink()
         except Exception:

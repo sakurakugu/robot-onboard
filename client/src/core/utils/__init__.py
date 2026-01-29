@@ -10,17 +10,17 @@ from core.logger import logger
 
 
 # 生成uuid7
-def generate_uuid() -> str:
+def 生成UUID() -> str:
     return str(uuid6.uuid7())
 
 # 获取IPC路径
-def get_ipc_path(name: str) -> Path:
+def 获取IPC路径(name: str) -> Path:
     ipc_path = Path("/tmp") / ORG_NAME / f"{name}.sock"
     ipc_path.parent.mkdir(parents=True, exist_ok=True)
     return ipc_path
 
 # 获取本地IP
-def get_local_ip():
+def 获取本地IP() -> Optional[str]:
     """通过UDP连接获取本机对外的IP地址"""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -35,7 +35,7 @@ def get_local_ip():
     return ip
 
 
-def detect_robot_version() -> Optional[str]:
+def 检测机器人运控版本() -> Optional[str]:
     """ 检测机器人运控版本 """
     try:
         result = subprocess.run(
@@ -61,8 +61,8 @@ def detect_robot_version() -> Optional[str]:
 
 __all__ = [
     "execute_concurrently",
-    "get_local_ip",
-    "generate_uuid",
-    "get_ipc_path",
-    "detect_robot_version"
+    "获取本地IP",
+    "生成UUID",
+    "获取IPC路径",
+    "检测机器人运控版本"
 ]

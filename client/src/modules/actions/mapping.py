@@ -3,7 +3,7 @@ import re
 from typing import Any, Dict, Optional
 
 
-def parse_action_format(text: str) -> Optional[Dict[str, Any]]:
+def 解析动作格式(text: str) -> Optional[Dict[str, Any]]:
     """
     解析动作格式字符串，提取动作名称和参数。
 
@@ -38,7 +38,7 @@ def parse_action_format(text: str) -> Optional[Dict[str, Any]]:
     return {"action": action, "parameters": parameters}
 
 
-async def handle_text_response(data: Dict[str, Any], logger, action_executor, executor) -> None:
+async def 处理文本响应(data: Dict[str, Any], logger, action_executor, executor) -> None:
     """
     处理文本响应，解析动作格式并执行动作。
 
@@ -50,7 +50,7 @@ async def handle_text_response(data: Dict[str, Any], logger, action_executor, ex
     text = data.get("text", "")
     logger.info(f"收到文本响应: {text}")
 
-    action_data = parse_action_format(text) # 解析动作格式
+    action_data = 解析动作格式(text)
     if not action_data:
         return
 
@@ -74,7 +74,7 @@ async def handle_text_response(data: Dict[str, Any], logger, action_executor, ex
         logger.warning("未设置动作执行器，无法执行动作")
 
 
-async def handle_action_command(data: Dict[str, Any], logger, action_executor, executor) -> None:
+async def 处理动作指令(data: Dict[str, Any], logger, action_executor, executor) -> None:
     """
     处理动作指令，将指令发送给动作执行器执行。
 

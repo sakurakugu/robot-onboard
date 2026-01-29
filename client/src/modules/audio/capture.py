@@ -1,26 +1,14 @@
 import asyncio
-from typing import Any, Awaitable, Callable, Dict, Optional, cast
+from typing import Any, Awaitable, Callable, Dict, cast
 
-from core.utils import generate_uuid
+from core.utils import 生成UUID
 
-_AUDIO_IMPORT_ERROR: Optional[Exception] = None
-np: Optional[Any] = None
-sd: Optional[Any] = None
-opuslib: Optional[Any] = None
 try:
-    import numpy as _np
-    import opuslib as _opuslib
-    import sounddevice as _sd
-except Exception as e:
-    np = None
-    sd = None
-    opuslib = None
-    _AUDIO_IMPORT_ERROR = e
-else:
-    np = _np
-    sd = _sd
-    opuslib = _opuslib
-
+    import numpy as np
+    import opuslib as opuslib
+    import sounddevice as sd
+except ImportError as e:
+    raise ImportError(f"缺少音频依赖，请安装: numpy sounddevice opuslib (导入错误: {e})") from e
 
 class AudioCapture:
     def __init__(
@@ -42,26 +30,16 @@ class AudioCapture:
         self.send_audio_end = send_audio_end
         self.audio_streaming_enabled = bool(config.get("audio", {}).get("enable_streaming", True))
 
-    async def run(self) -> None:
+    async def 开始采集(self) -> None:
         """ 运行音频捕获循环 """
         audio_cfg = self.config.get("audio", {})
-        if not self._audio_ready():
-            return
         np_module = cast(Any, np)
         sd_module = cast(Any, sd)
         opus_module = cast(Any, opuslib)
-        settings = self._build_settings(audio_cfg)
-        await self._capture_loop(settings, np_module, sd_module, opus_module)
+        settings = self._读取配置(audio_cfg)
+        await self._采集循环(settings, np_module, sd_module, opus_module)
 
-    def _audio_ready(self) -> bool:
-        """ 检查音频依赖是否就绪 """
-        if np is None or sd is None or opuslib is None:
-            detail = f" (导入错误: {_AUDIO_IMPORT_ERROR})" if _AUDIO_IMPORT_ERROR else ""
-            self.logger.warning(f"缺少音频依赖，请安装: numpy sounddevice opuslib{detail}")
-            return False
-        return True
-
-    def _build_settings(self, audio_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    def _读取配置(self, audio_cfg: Dict[str, Any]) -> Dict[str, Any]:
         """ 构建音频捕获设置 """
         sample_rate = int(audio_cfg.get("sample_rate", 16000))
         channels = int(audio_cfg.get("channels", 1))
@@ -81,7 +59,7 @@ class AudioCapture:
             "input_device": audio_cfg.get("input_device"),
         }
 
-    async def _capture_loop(self, settings: Dict[str, Any], np_module, sd_module, opus_module) -> None:
+    async def _采集循环(self, settings: Dict[str, Any], np_module, sd_module, opus_module) -> None:
         """ 音频捕获循环 """
         encoder = opus_module.Encoder(settings["sample_rate"], settings["channels"], opus_module.APPLICATION_VOIP)
         loop = asyncio.get_running_loop()
@@ -100,32 +78,32 @@ class AudioCapture:
         state = {"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0}
         try:
             while self.is_connected():
-                if self._should_pause_streaming():
-                    stream = await self._pause_stream(stream, state)
+                if self._需要暂停音频流():
+                    stream = await self._暂停音频流(stream, state)
                     await asyncio.sleep(0.5)
                     continue
 
-                stream = self._ensure_stream(stream, settings, callback, sd_module)
-                pcm_block = await self._read_block(queue)
+                stream = self._确保音频流已启动(stream, settings, callback, sd_module)
+                pcm_block = await self._读取音频块(queue)
                 if pcm_block is None:
                     break
-                await self._handle_block(pcm_block, settings, state, encoder, np_module)
+                await self._处理音频块(pcm_block, settings, state, encoder, np_module)
         finally:
-            await self._cleanup(stream, state)
+            await self._清理音频流(stream, state)
 
-    def _should_pause_streaming(self) -> bool:
+    def _需要暂停音频流(self) -> bool:
         """ 检查是否需要暂停音频流 """
         return not self.audio_streaming_enabled or not self.is_upload_connected()
 
-    async def _pause_stream(self, stream, state: Dict[str, Any]):
+    async def _暂停音频流(self, stream, state: Dict[str, Any]):
         """ 暂停音频流 """
         session_id = state["session_id"]
         if session_id is not None:
             await self.send_audio_end(session_id, "manual")
             state.update({"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0})
-        return self._stop_stream(stream)
+        return self._停止音频流(stream)
 
-    def _ensure_stream(self, stream, settings: Dict[str, Any], callback, sd_module):
+    def _确保音频流已启动(self, stream, settings: Dict[str, Any], callback, sd_module):
         """ 确保音频流已启动 """
         if stream is not None:
             return stream
@@ -141,29 +119,29 @@ class AudioCapture:
         self.logger.info("麦克风采集已启动")
         return stream
 
-    async def _read_block(self, queue: asyncio.Queue):
+    async def _读取音频块(self, queue: asyncio.Queue):
         """ 从队列读取音频块 """
         try:
             return await queue.get()
         except asyncio.CancelledError:
             return None
 
-    async def _handle_block(
+    async def _处理音频块(
         self, pcm_block, settings: Dict[str, Any], state: Dict[str, Any], encoder, np_module
     ) -> None:
         """ 处理音频块 """
         pcm = np_module.reshape(pcm_block, (-1,))
         rms = float(np_module.sqrt(np_module.mean(pcm.astype(np_module.float32) ** 2))) / 32768.0
         if rms >= settings["vad_threshold"]:
-            await self._handle_voice(pcm, settings, state, encoder)
+            await self._处理语音块(pcm, settings, state, encoder)
         else:
-            await self._handle_silence(settings, state)
+            await self._处理静音块(settings, state)
 
-    async def _handle_voice(self, pcm, settings: Dict[str, Any], state: Dict[str, Any], encoder) -> None:
+    async def _处理语音块(self, pcm, settings: Dict[str, Any], state: Dict[str, Any], encoder) -> None:
         """ 处理语音块 """
         session_id = state["session_id"]
         if session_id is None:
-            session_id = generate_uuid()
+            session_id = 生成UUID()
             state["session_id"] = session_id
             state["seq"] = 0
             state["silence_frames"] = 0
@@ -182,7 +160,7 @@ class AudioCapture:
             self.logger.debug(f"音频会话结束(长度): {session_id}")
             state["session_id"] = None
 
-    async def _handle_silence(self, settings: Dict[str, Any], state: Dict[str, Any]) -> None:
+    async def _处理静音块(self, settings: Dict[str, Any], state: Dict[str, Any]) -> None:
         """ 处理静音块 """
         session_id = state["session_id"]
         if session_id is None:
@@ -193,7 +171,7 @@ class AudioCapture:
             self.logger.debug(f"音频会话结束(静音): {session_id}")
             state.update({"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0})
 
-    def _stop_stream(self, stream):
+    def _停止音频流(self, stream):
         """ 停止音频流 """
         if stream:
             try:
@@ -203,10 +181,10 @@ class AudioCapture:
                 pass
         return None
 
-    async def _cleanup(self, stream, state: Dict[str, Any]) -> None:
+    async def _清理音频流(self, stream, state: Dict[str, Any]) -> None:
         """ 清理音频流 """
         session_id = state["session_id"]
         if session_id is not None:
             await self.send_audio_end(session_id, "manual")
-        self._stop_stream(stream)
+        self._停止音频流(stream)
         self.logger.info("麦克风采集已停止")

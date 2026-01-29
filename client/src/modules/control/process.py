@@ -11,7 +11,7 @@ class ProcessController:
         self.logger = logger
         self.process: Optional[subprocess.Popen] = None
 
-    def start(self, script_path: str) -> bool:
+    def 启动(self, script_path: str) -> bool:
         try:
             self.logger.info(f"正在启动交互式子进程: {script_path}")
             src_dir = Path(script_path).resolve().parents[2]
@@ -46,7 +46,7 @@ class ProcessController:
             self.logger.error(f"启动交互式子进程失败: {e}")
             return False
 
-    def stop(self) -> None:
+    def 关闭(self) -> None:
         if self.process and self.process.poll() is None:
             self.logger.info("正在关闭交互式子进程...")
             try:
@@ -60,7 +60,7 @@ class ProcessController:
                 self.process.wait(timeout=3)
         self.process = None
 
-    def send_command(self, command: str) -> bool:
+    def 发送命令(self, command: str) -> bool:
         if not self.process or self.process.poll() is not None:
             self.logger.error("子进程未运行")
             return False

@@ -45,8 +45,8 @@ class Config:
         return self._config
 
     def reload(self) -> None:
-        global_cfg = self._load_global()
-        project_cfg = self._load_project()
+        global_cfg = self._加载全局配置()
+        project_cfg = self._加载项目配置()
         cfg = dict(project_cfg)
         cfg["robot"] = get_globals_config(global_cfg)
         self._config = cfg
@@ -54,44 +54,44 @@ class Config:
     def save(self, config: Dict[str, Any]) -> None:
         robot_cfg = config.get("robot", {})
         global_cfg = get_globals_config(robot_cfg)
-        self._write_toml(self.global_config_file, global_cfg)
+        self._写入TOML(self.global_config_file, global_cfg)
         project_cfg = {k: v for k, v in config.items() if k != "robot"}
-        self._write_toml(self.project_config_file, project_cfg)
+        self._写入TOML(self.project_config_file, project_cfg)
         self.reload()
 
-    def _read_toml(self, path: Path) -> Dict[str, Any]:
+    def _读取TOML(self, path: Path) -> Dict[str, Any]:
         if path.exists():
             with open(path, "rb") as f:
                 data = tomli.load(f)
                 return data if isinstance(data, dict) else {}
         return {}
 
-    def _write_toml(self, path: Path, data: Dict[str, Any]) -> None:
+    def _写入TOML(self, path: Path, data: Dict[str, Any]) -> None:
         with open(path, "wb") as f:
-            tomli_w.dump(self._sanitize_for_toml(data), f)
+            tomli_w.dump(self._无害化TOML数据(data), f)
 
-    def _sanitize_for_toml(self, obj: Any) -> Any:
+    def _无害化TOML数据(self, obj: Any) -> Any:
         """递归处理对象，将 None 转换为空字符串，递归处理字典和列表。"""
         if obj is None:
             return ""
         if isinstance(obj, dict):
-            return {k: self._sanitize_for_toml(v) for k, v in obj.items()}
+            return {k: self._无害化TOML数据(v) for k, v in obj.items()}
         if isinstance(obj, list):
-            return [self._sanitize_for_toml(v) for v in obj]
+            return [self._无害化TOML数据(v) for v in obj]
         return obj
 
-    def _load_global(self) -> Dict[str, Any]:
+    def _加载全局配置(self) -> Dict[str, Any]:
         exists = self.global_config_file.exists()
-        data = self._read_toml(self.global_config_file) if exists else {}
+        data = self._读取TOML(self.global_config_file) if exists else {}
         out = get_globals_config(data)
         if not exists:
-            self._write_toml(self.global_config_file, out)
+            self._写入TOML(self.global_config_file, out)
         return out
 
-    def _load_project(self) -> Dict[str, Any]:
+    def _加载项目配置(self) -> Dict[str, Any]:
         exists = self.project_config_file.exists()
         if exists:
-            return self._read_toml(self.project_config_file)
+            return self._读取TOML(self.project_config_file)
         defaults = DEFAULTS_CONFIG
-        self._write_toml(self.project_config_file, defaults)
+        self._写入TOML(self.project_config_file, defaults)
         return defaults
