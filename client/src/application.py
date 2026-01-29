@@ -12,13 +12,13 @@
 
 import asyncio
 import json
-import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from core.config import APP_NAME, WORKSPACE_DIR, Config
+from core.utils import detect_robot_version
 from core.logger import configure_logger
 from modules.actions.mapping import handle_action_command, handle_text_response
 from modules.audio.capture import AudioCapture
@@ -65,7 +65,8 @@ class RobotClient:
         self.process_controller = ProcessController(self.logger)
         self._executor = ThreadPoolExecutor(max_workers=1)
         self.audio_task: Optional[asyncio.Task] = None
-
+        
+        """ 初始化音频捕获 """
         self.audio_capture = AudioCapture(
             self.config,
             self.logger,
@@ -76,8 +77,10 @@ class RobotClient:
             send_audio_end=self.send_audio_end,
         )
 
+        """ 初始化 IPC 服务器 """
         self.ipc_server = IpcServer(self.project_name, self.logger, self.send_status)
 
+        """ 初始化消息处理函数 """
         self.message_handlers: Dict[str, Callable] = {
             "text_response": self._handle_text_response,
             "audio_response": self._handle_audio_response,
@@ -88,37 +91,19 @@ class RobotClient:
             "error": self._handle_error,
         }
 
+        """ 初始化动作执行函数 """
         self.action_executor: Optional[Callable] = None
-
-        version = self._detect_robot_version()
+        
+        """ 初始化机器人版本 """
+        version = detect_robot_version()
         if version:
             self.config.setdefault("robot", {})
             self.config["robot"]["version"] = version
             self.config_store.save(self.config)
 
-    def _detect_robot_version(self) -> Optional[str]:
-        try:
-            result = subprocess.run(
-                "grep -oP 'motion-control_\\K[^_]+' /etc/release/*[^rootfs]*.yaml",
-                shell=True,
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            out = result.stdout.strip()
-            if not out:
-                return None
-            for line in out.splitlines():
-                ver = line.rsplit(":", 1)[-1].strip()
-                if ver:
-                    return ver
-            return None
-        except Exception:
-            return None
-
 
     def _setup_logger(self) -> None:
+        """ 初始化日志记录 """
         logging_cfg = self.config.get("logging", {})
         level = logging_cfg.get("level", "INFO")
         max_file_size_mb = logging_cfg.get("max_file_size_mb")
@@ -152,6 +137,7 @@ class RobotClient:
         await self.send_message(message, channel="business")
 
     async def send_audio_start(self, session_id: str, frame_duration_ms: int) -> None:
+        """ 发送音频开始消息 """
         message = build_audio_start(
             self.config["robot"]["uuid"],
             session_id,
@@ -162,6 +148,7 @@ class RobotClient:
         await self.send_message(message, channel="audio_upload")
 
     async def send_audio_chunk(self, session_id: str, seq: int, audio_bytes: bytes, frame_duration_ms: int) -> None:
+        """ 发送音频数据块消息 """
         message = build_audio_chunk(
             self.config["robot"]["uuid"],
             session_id,
@@ -174,10 +161,12 @@ class RobotClient:
         await self.send_message(message, channel="audio_upload")
 
     async def send_audio_end(self, session_id: str, reason: str) -> None:
+        """ 发送音频结束消息 """
         message = build_audio_end(self.config["robot"]["uuid"], session_id, reason)
         await self.send_message(message, channel="audio_upload")
 
     async def send_register(self) -> None:
+        """ 发送注册消息 """
         message = build_robot_register(
             self.config["robot"]["uuid"],
             self.config["robot"].get("name"),
@@ -187,6 +176,7 @@ class RobotClient:
         await self.send_message(message, channel="business")
 
     async def send_heartbeat(self) -> None:
+        """ 发送心跳消息 """
         message = build_heartbeat(self.config["robot"]["uuid"])
         if self.ws_manager.connected_control:
             await self.send_message(message, channel="control")
@@ -194,29 +184,35 @@ class RobotClient:
             await self.send_message(message, channel="business")
 
     async def send_status(self, status_msg: Dict[str, Any]) -> None:
+        """ 发送状态消息 """
         message = build_status(
             self.config["robot"]["uuid"], status_msg.get("seq"), status_msg.get("data", {})
         )
         await self.send_message(message, channel="control")
 
     async def _handle_text_response(self, data: Dict[str, Any]) -> None:
+        """ 处理文本响应消息 """
         await handle_text_response(data, self.logger, self.action_executor, self._executor)
 
     async def _handle_audio_control(self, data: Dict[str, Any]) -> None:
+        """ 处理音频控制消息 """
         enabled = bool(data.get("enabled", True))
         self.audio_capture.audio_streaming_enabled = enabled
         self.logger.info(f"麦克风采集{'开启' if enabled else '关闭'}")
 
     async def _handle_audio_response(self, data: Dict[str, Any]) -> None:
+        """ 处理音频响应消息 """
         handle_audio_response(data, self.logger, self.log_dir / "media")
 
     async def _handle_stop_audio(self, data: Dict[str, Any]) -> None:
+        """ 处理停止音频播放消息 """
         stop_audio_playback(self.logger)
 
     async def _handle_action_command(self, data: Dict[str, Any]) -> None:
         await handle_action_command(data, self.logger, self.action_executor, self._executor)
 
     async def _handle_control_command(self, data: Dict[str, Any]) -> None:
+        """ 处理控制指令消息 """
         command = data.get("command")
         mode = data.get("mode", "move")
         channel = data.get("channel")
@@ -330,11 +326,13 @@ class RobotClient:
             return
 
     async def _handle_error(self, data: Dict[str, Any]) -> None:
+        """ 处理服务器错误消息 """
         code = data.get("code", "")
         message = data.get("message", "")
         self.logger.error(f"服务器错误: {code} - {message}")
 
     async def _handle_message(self, message: Dict[str, Any]) -> None:
+        """ 处理收到的消息 """
         msg_type = message.get("type")
         if not isinstance(msg_type, str):
             self.logger.warning(f"未知的消息类型: {msg_type}")
@@ -349,6 +347,7 @@ class RobotClient:
             self.logger.warning(f"未知的消息类型: {msg_type}")
 
     async def run(self) -> None:
+        """ 运行机器狗客户端 """
         self.logger.info("机器狗客户端启动")
         await self.ipc_server.start()
         try:
@@ -378,6 +377,7 @@ class RobotClient:
             self.logger.info("客户端已停止")
 
     async def _ensure_connected(self) -> bool:
+        """ 确保与服务器连接 """
         if self.ws_manager.connected:
             return True
         success = await self.connect()
@@ -389,6 +389,7 @@ class RobotClient:
         return False
 
     def _build_tasks(self) -> list[asyncio.Task]:
+        """ 构建要运行的异步任务 """
         tasks: list[asyncio.Task] = []
         if self.ws_manager.ws_business and self.ws_manager.connected:
             tasks.append(
@@ -419,6 +420,7 @@ class RobotClient:
         return tasks
 
     def _has_active_ws(self) -> bool:
+        """ 检查是否有活动的 WebSocket 连接 """
         return bool(
             self.ws_manager.ws_business
             or self.ws_manager.ws_control
@@ -427,15 +429,19 @@ class RobotClient:
         )
 
     def set_action_executor(self, executor: Callable) -> None:
+        """ 设置动作执行器 """
         self.action_executor = executor
 
     def start_interactive_process(self, script_path: str) -> bool:
+        """ 启动交互式进程 """
         return self.process_controller.start(script_path)
 
     def send_command_to_process(self, command: str) -> bool:
+        """ 发送命令到交互式进程 """
         return self.process_controller.send_command(command)
 
     async def deinit(self) -> None:
+        """ 初始化客户端 """
         try:
             stop_audio_playback(self.logger)
         except Exception:
@@ -447,6 +453,7 @@ class RobotClient:
             self.logger.warning("配置保存失败")
 
 def _build_action_map() -> Dict[str, str]:
+    """ 构建动作映射 """
     return {
         "stand_up": "stand_up",
         "sit_down": "sit_down",
@@ -473,10 +480,12 @@ class ActionRunner:
         self._current_token = 0
 
     def _next_token(self) -> int:
+        """ 生成下一个令牌 """
         self._current_token += 1
         return self._current_token
 
     def _stop_current(self) -> None:
+        """ 停止当前动作 """
         try:
             self.client.send_command_to_process(json.dumps({"type": "move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0}))
             self.client.send_command_to_process(
@@ -488,6 +497,7 @@ class ActionRunner:
             pass
 
     def _resolve_wait(self, action: str) -> float:
+        """ 解析动作等待时间 """
         if action in ["walk_forward", "walk_backward", "turn_left", "turn_right"]:
             return 2.5
         if action in ["shake_hand", "nod", "wave"]:
@@ -497,6 +507,7 @@ class ActionRunner:
         return 3.5
 
     def _sleep_interruptible(self, token: int, seconds: float) -> bool:
+        """ 可中断的睡眠 """
         end_time = time.time() + seconds
         while time.time() < end_time:
             if token != self._current_token:
@@ -505,6 +516,7 @@ class ActionRunner:
         return True
 
     def execute(self, action: str, parameters: dict) -> bool:
+        """ 执行动作 """
         try:
             token = self._next_token()
             self.client.logger.debug(f"开始执行动作: {action}")
@@ -530,6 +542,7 @@ class ActionRunner:
 
 
 def _build_action_executor(client: "RobotClient", action_map: Dict[str, str]) -> Callable[[str, dict], bool]:
+    """ 构建动作执行器 """
     runner = ActionRunner(client, action_map)
     return runner.execute
 

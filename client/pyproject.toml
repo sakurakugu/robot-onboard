@@ -38,6 +38,9 @@ exclude = ["build", ".venv", ".git", "__pycache__"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "C", "B", "Q"]
 
+[tool.ruff.lint.mccabe]
+max-complexity = 20
+
 [tool.black]
 line-length = 120
 target-version = ["py310"]

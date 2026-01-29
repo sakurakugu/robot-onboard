@@ -22,11 +22,13 @@ class WebSocketManager:
         self.connected_audio_download = False
 
     def _ensure_scheme(self, url: str) -> str:
+        """ 确保URL有ws或wss方案 """
         if re.match(r"^wss?://", url):
             return url
         return f"ws://{url}"
 
     def _replace_port_and_path(self, url: str, port: int, path: str) -> str:
+        """ 替换URL的端口和路径 """
         base = self._ensure_scheme(url)
         parsed = urlparse(base)
         host = parsed.hostname or ""
@@ -35,6 +37,7 @@ class WebSocketManager:
         return urlunparse((scheme, netloc, path, "", "", ""))
 
     def _resolve_server_urls(self) -> Dict[str, str]:
+        """ 解析服务器URL配置 """
         server_cfg = self.config.get("server", {})
         ws_path = server_cfg.get("ws_path") or "/api/v1/conversation/connect"
         business_url = server_cfg.get("business_url") or server_cfg.get("url")
@@ -68,11 +71,13 @@ class WebSocketManager:
         }
 
     def _append_robot_params(self, url: str, robot_uuid: str) -> str:
+        """ 为URL添加机器人参数 """
         base = self._ensure_scheme(url)
         sep = "&" if "?" in base else "?"
         return f"{base}{sep}robotId={robot_uuid}&role=robot"
 
     async def connect(self, robot_uuid: str) -> bool:
+        """ 连接所有WebSocket通道 """
         try:
             urls = self._resolve_server_urls()
             business_url = urls.get("business")
@@ -122,6 +127,7 @@ class WebSocketManager:
             return False
 
     async def disconnect(self) -> None:
+        """ 断开所有WebSocket通道 """
         if self.ws_business:
             await self.ws_business.close()
             self.ws_business = None
@@ -141,6 +147,7 @@ class WebSocketManager:
         self.logger.info("已断开连接")
 
     async def send_message(self, message: Dict[str, Any], channel: str = "business") -> None:
+        """ 发送消息到指定通道 """
         ws_map = {
             "business": (self.ws_business, self.connected),
             "control": (self.ws_control, self.connected_control),
@@ -169,6 +176,8 @@ class WebSocketManager:
     async def receive_loop(
         self, channel: str, ws: ClientConnection, on_message: Callable[[Dict[str, Any]], Awaitable[None]]
     ) -> None:
+        """ 接收指定通道的消息循环 """
+        # 当连接关闭时，跳出循环(到时候记得搞局部重连)
         while self.connected:
             try:
                 message_str = await ws.recv()
@@ -188,6 +197,7 @@ class WebSocketManager:
                 await asyncio.sleep(1)
 
     async def heartbeat_loop(self, robot_uuid: str, build_heartbeat: Callable[[str], Dict[str, Any]]) -> None:
+        """ 发送心跳消息循环 """
         interval = self.config.get("server", {}).get("heartbeat_interval", 30)
         while self.connected:
             await asyncio.sleep(interval)

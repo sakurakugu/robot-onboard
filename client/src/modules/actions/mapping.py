@@ -62,7 +62,8 @@ async def handle_text_response(data: Dict[str, Any], logger, action_executor, ex
     if action_executor:
         try:
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(executor, action_executor, action, parameters) # 在独立线程中执行动作执行器
+            # 在独立线程中执行动作执行器
+            result = await loop.run_in_executor(executor, action_executor, action, parameters)
             if result:
                 logger.info(f"动作 {action} 执行成功")
             else:

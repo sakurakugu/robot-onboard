@@ -15,15 +15,18 @@ class AudioPlaybackManager:
         self._last_time: float = 0.0
 
     def _ensure_dir(self, media_root: Path) -> None:
+        """ 确保媒体目录存在 """
         try:
             media_root.mkdir(parents=True, exist_ok=True)
         except Exception:
             pass
 
     def _compute_hash(self, buf_b64: str) -> str:
+        """ 计算音频数据的哈希值 """
         return hashlib.sha256(buf_b64.encode("utf-8")).hexdigest()
 
     def stop(self, logger) -> None:
+        """ 停止当前音频播放 """
         try:
             if self._proc and self._proc.poll() is None:
                 self._proc.terminate()
@@ -39,6 +42,7 @@ class AudioPlaybackManager:
             self._proc = None
 
     def play(self, data: Dict[str, Any], logger, log_dir: Path) -> None:
+        """ 播放音频数据 """
         audio_format = data.get("format", "mp3")
         audio_buffer = data.get("buffer", "")
         duration = float(data.get("duration", 0) or 0)
@@ -90,10 +94,11 @@ class AudioPlaybackManager:
 
 _manager = AudioPlaybackManager()
 
-
 def handle_audio_response(data: Dict[str, Any], logger, log_dir: Path) -> None:
+    """ 处理音频响应并播放 """
     _manager.play(data, logger, log_dir)
 
 
 def stop_audio_playback(logger) -> None:
+    """ 停止当前音频播放 """
     _manager.stop(logger)

@@ -1,3 +1,4 @@
+# 目前有个bug，这两个类把sdk封装后，在机器狗身上就跑不起来了，不知道是什么原因。但是通过远程是可以跑的
 import math
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -16,7 +17,8 @@ def execute_concurrently(*actions, _interval: float = 0):
         for future in futures:
             future.result()  # 等待动作完成
 
-class CrazyRobotDog(RobotDog):
+# 原名 CrazyRobotDog
+class TrickRobotDog(RobotDog):
     def lean_left(self, duration: float = 0.5, reset: float = 0):
         """左倾"""
         self.attitude_control(roll_rate=-0.59)
@@ -132,4 +134,4 @@ class CrazyRobotDog(RobotDog):
         self.move()
 
 
-__all__ = ["CrazyRobotDog", "execute_concurrently"]
+__all__ = ["TrickRobotDog", "execute_concurrently"]

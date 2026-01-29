@@ -43,6 +43,7 @@ class AudioCapture:
         self.audio_streaming_enabled = bool(config.get("audio", {}).get("enable_streaming", True))
 
     async def run(self) -> None:
+        """ 运行音频捕获循环 """
         audio_cfg = self.config.get("audio", {})
         if not self._audio_ready():
             return
@@ -53,6 +54,7 @@ class AudioCapture:
         await self._capture_loop(settings, np_module, sd_module, opus_module)
 
     def _audio_ready(self) -> bool:
+        """ 检查音频依赖是否就绪 """
         if np is None or sd is None or opuslib is None:
             detail = f" (导入错误: {_AUDIO_IMPORT_ERROR})" if _AUDIO_IMPORT_ERROR else ""
             self.logger.warning(f"缺少音频依赖，请安装: numpy sounddevice opuslib{detail}")
@@ -60,6 +62,7 @@ class AudioCapture:
         return True
 
     def _build_settings(self, audio_cfg: Dict[str, Any]) -> Dict[str, Any]:
+        """ 构建音频捕获设置 """
         sample_rate = int(audio_cfg.get("sample_rate", 16000))
         channels = int(audio_cfg.get("channels", 1))
         frame_duration_ms = int(audio_cfg.get("frame_duration_ms", 20))
@@ -79,6 +82,7 @@ class AudioCapture:
         }
 
     async def _capture_loop(self, settings: Dict[str, Any], np_module, sd_module, opus_module) -> None:
+        """ 音频捕获循环 """
         encoder = opus_module.Encoder(settings["sample_rate"], settings["channels"], opus_module.APPLICATION_VOIP)
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue(maxsize=100)
@@ -110,9 +114,11 @@ class AudioCapture:
             await self._cleanup(stream, state)
 
     def _should_pause_streaming(self) -> bool:
+        """ 检查是否需要暂停音频流 """
         return not self.audio_streaming_enabled or not self.is_upload_connected()
 
     async def _pause_stream(self, stream, state: Dict[str, Any]):
+        """ 暂停音频流 """
         session_id = state["session_id"]
         if session_id is not None:
             await self.send_audio_end(session_id, "manual")
@@ -120,6 +126,7 @@ class AudioCapture:
         return self._stop_stream(stream)
 
     def _ensure_stream(self, stream, settings: Dict[str, Any], callback, sd_module):
+        """ 确保音频流已启动 """
         if stream is not None:
             return stream
         stream = sd_module.InputStream(
@@ -135,6 +142,7 @@ class AudioCapture:
         return stream
 
     async def _read_block(self, queue: asyncio.Queue):
+        """ 从队列读取音频块 """
         try:
             return await queue.get()
         except asyncio.CancelledError:
@@ -143,6 +151,7 @@ class AudioCapture:
     async def _handle_block(
         self, pcm_block, settings: Dict[str, Any], state: Dict[str, Any], encoder, np_module
     ) -> None:
+        """ 处理音频块 """
         pcm = np_module.reshape(pcm_block, (-1,))
         rms = float(np_module.sqrt(np_module.mean(pcm.astype(np_module.float32) ** 2))) / 32768.0
         if rms >= settings["vad_threshold"]:
@@ -151,6 +160,7 @@ class AudioCapture:
             await self._handle_silence(settings, state)
 
     async def _handle_voice(self, pcm, settings: Dict[str, Any], state: Dict[str, Any], encoder) -> None:
+        """ 处理语音块 """
         session_id = state["session_id"]
         if session_id is None:
             session_id = generate_uuid()
@@ -173,6 +183,7 @@ class AudioCapture:
             state["session_id"] = None
 
     async def _handle_silence(self, settings: Dict[str, Any], state: Dict[str, Any]) -> None:
+        """ 处理静音块 """
         session_id = state["session_id"]
         if session_id is None:
             return
@@ -183,6 +194,7 @@ class AudioCapture:
             state.update({"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0})
 
     def _stop_stream(self, stream):
+        """ 停止音频流 """
         if stream:
             try:
                 stream.stop()
@@ -192,6 +204,7 @@ class AudioCapture:
         return None
 
     async def _cleanup(self, stream, state: Dict[str, Any]) -> None:
+        """ 清理音频流 """
         session_id = state["session_id"]
         if session_id is not None:
             await self.send_audio_end(session_id, "manual")

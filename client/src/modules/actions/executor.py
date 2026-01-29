@@ -24,7 +24,7 @@ def _send_status_loop(app, robot_uuid, ipc_path):
         try:
             msg = {
                 "type": "status",
-                "robot_id": robot_uuid,
+                "robotId": robot_uuid,
                 "seq": seq,
                 "timestamp": int(time.time() * 1000), # 毫秒级时间戳
                 "data": _collect_status(app),
@@ -161,7 +161,7 @@ def _action_attitude(app) -> None:
     time.sleep(4)
     app.standUp()
     time.sleep(2)
-    
+
 # 执行双腿站立动作（一次性）
 def _action_two_leg_once(app) -> None:
     logger.info("执行中: 双腿站立")
