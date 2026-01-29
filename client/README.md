@@ -41,7 +41,7 @@ application.py 应用入口
 uuid = "自动生成的UUIDv7"
 ```
 
-**机器人对话配置** (`~/sparkrobot/config/robot-chat.toml`)：
+**机器人对话配置** (`~/sparkrobot/config/robot-agent.toml`)：
 ```toml
 [robot]
 name = "robot-dog-1"

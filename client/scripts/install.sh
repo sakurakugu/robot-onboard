@@ -7,7 +7,7 @@ set -e
 cd "$(dirname "$0")"
 
 WORKSPACE_DIR="$HOME/sparkrobot"
-LOGS_DIR="$WORKSPACE_DIR/logs/robot-chat"
+LOGS_DIR="$WORKSPACE_DIR/logs/robot-agent"
 STDOUT_LOG="$LOGS_DIR/client_stdout_$(date +'%Y%m%d').log"
 
 log() {
@@ -59,6 +59,6 @@ echo "========================================"
 echo ""
 echo "运行程序: ./start.sh"
 echo ""
-echo "配置位置: ~/sparkrobot/config/config.toml和robot-chat.toml"
-echo "日志位置: ~/sparkrobot/logs/robot-chat/"
+echo "配置位置: ~/sparkrobot/config/config.toml和robot-agent.toml"
+echo "日志位置: ~/sparkrobot/logs/robot-agent/"
 echo ""

@@ -13,7 +13,7 @@ PID_DIR="$WORKSPACE_DIR/logs/pid"
 mkdir -p "$PID_DIR"
 
 # 检查是否已运行
-PID_FILE="$PID_DIR/robot-chat.pid"
+PID_FILE="$PID_DIR/robot-agent.pid"
 SCRIPT_NAME="main.py"
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")

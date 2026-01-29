@@ -2,9 +2,9 @@
 # 停止机器狗客户端
 
 WORKSPACE_DIR="$HOME/sparkrobot"
-LOGS_DIR="$WORKSPACE_DIR/logs/robot-chat"
+LOGS_DIR="$WORKSPACE_DIR/logs/robot-agent"
 PID_DIR="$WORKSPACE_DIR/logs/pid"
-PID_FILE="$PID_DIR/robot-chat.pid"
+PID_FILE="$PID_DIR/robot-agent.pid"
 PROCESS_NAME="robot_client.py"
 STDOUT_LOG="$LOGS_DIR/client_stdout_$(date +'%Y%m%d').log"
 

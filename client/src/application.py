@@ -2,7 +2,7 @@
 """
 机器狗客户端
 功能：
-- 配置管理（~/sparkrobot/config/robot-chat.toml）
+- 配置管理（~/sparkrobot/config/robot-agent.toml）
 - WebSocket 通信
 - 心跳保持
 - 接收音频回复（opus）
@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from core.config import APP_NAME, WORKSPACE_DIR, Config
-from core.utils import detect_robot_version
 from core.logger import configure_logger
+from core.utils import detect_robot_version
 from modules.actions.mapping import handle_action_command, handle_text_response
 from modules.audio.capture import AudioCapture
 from modules.audio.playback import handle_audio_response, stop_audio_playback
@@ -65,7 +65,7 @@ class RobotClient:
         self.process_controller = ProcessController(self.logger)
         self._executor = ThreadPoolExecutor(max_workers=1)
         self.audio_task: Optional[asyncio.Task] = None
-        
+
         """ 初始化音频捕获 """
         self.audio_capture = AudioCapture(
             self.config,
@@ -93,7 +93,7 @@ class RobotClient:
 
         """ 初始化动作执行函数 """
         self.action_executor: Optional[Callable] = None
-        
+
         """ 初始化机器人版本 """
         version = detect_robot_version()
         if version:
@@ -169,9 +169,9 @@ class RobotClient:
         """ 发送注册消息 """
         message = build_robot_register(
             self.config["robot"]["uuid"],
-            self.config["robot"].get("name"),
-            self.config["robot"].get("model"),
-            self.config["robot"].get("version", "0.0.0"),
+            self.config["robot"]["name"],
+            self.config["robot"]["model"],
+            self.config["robot"]["version"],
         )
         await self.send_message(message, channel="business")
 

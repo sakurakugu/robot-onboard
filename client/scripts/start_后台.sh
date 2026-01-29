@@ -2,8 +2,8 @@
 # 后台运行机器狗客户端
 
 # TODO: 改成ubuntu22的systemd服务，然后让这个脚本用于创建该服务（如果没有的话），然后启动该服务
-# 服务名：robot-chat.service  # TODO: 到时候是用robot-chat还是robot-client
-# 服务文件路径：/etc/systemd/system/robot-chat.service
+# 服务名：robot-agent.service  # TODO: 到时候是用robot-agent还是robot-client
+# 服务文件路径：/etc/systemd/system/robot-agent.service
 
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,7 +12,7 @@ cd ../src
 
 # 定义路径
 WORKSPACE_DIR="$HOME/sparkrobot"
-LOGS_DIR="$WORKSPACE_DIR/logs/robot-chat"
+LOGS_DIR="$WORKSPACE_DIR/logs/robot-agent"
 PID_DIR="$WORKSPACE_DIR/logs/pid"
 STDOUT_LOG="$LOGS_DIR/client_stdout_$(date +'%Y%m%d').log"
 
@@ -38,7 +38,7 @@ log "    启动程序"
 log "========================================"
 
 # 检查是否已运行
-PID_FILE="$PID_DIR/robot-chat.pid"
+PID_FILE="$PID_DIR/robot-agent.pid"
 SCRIPT_NAME="main.py"
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")

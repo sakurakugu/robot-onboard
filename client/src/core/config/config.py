@@ -29,7 +29,7 @@ class Config:
     @classmethod
     def instance(cls, workspace: Optional[Path] = None, project_name: Optional[str] = None) -> "Config":
         if cls._instance is None:
-            cls._instance = cls(workspace, project_name or "robot-chat")
+            cls._instance = cls(workspace, project_name or "robot-agent")
         else:
             if workspace is not None or project_name is not None:
                 need_reinit = False
@@ -38,7 +38,7 @@ class Config:
                 if project_name is not None and cls._instance.project_name != project_name:
                     need_reinit = True
                 if need_reinit:
-                    cls._instance = cls(workspace, project_name or "robot-chat")
+                    cls._instance = cls(workspace, project_name or "robot-agent")
         return cls._instance
 
     def get(self) -> Dict[str, Any]:
