@@ -104,6 +104,11 @@ class RobotClient:
             self.config["robot"]["version"] = version
             self.config_store.save(self.config)
 
+        # 重连策略配置
+        self.initial_reconnect_interval = self.config["server"].get("reconnect_interval", 5)
+        self.max_reconnect_interval = 60
+        self.current_reconnect_interval = self.initial_reconnect_interval
+
 
     def _初始化日志(self) -> None:
         """ 初始化日志记录 """
@@ -123,6 +128,9 @@ class RobotClient:
         success = await self.ws_manager.连接(robot_uuid)
         if success:
             await self.发送注册()
+            # 确保注册消息发送后连接仍然有效
+            if not self.ws_manager.connected:
+                return False
         return success
 
     async def disconnect(self) -> None:
@@ -249,7 +257,31 @@ class RobotClient:
                     if not await self._确保与服务器连接():
                         continue
                     tasks = self._构建异步任务()
-                    await asyncio.gather(*tasks)
+                    
+                    if not tasks:
+                        await asyncio.sleep(1)
+                        continue
+
+                    # 等待任意一个任务完成
+                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+                    # 记录退出的任务
+                    for task in done:
+                        try:
+                            if not task.cancelled():
+                                task.result()
+                        except Exception as e:
+                            self.logger.warning(f"子任务退出: {e}")
+
+                    # 取消剩余任务
+                    for task in pending:
+                        task.cancel()
+                    
+                    # 等待剩余任务取消完成
+                    if pending:
+                        await asyncio.gather(*pending, return_exceptions=True)
+
+                    self.logger.info("任务组结束，准备重连...")
                 except KeyboardInterrupt:
                     self.logger.info("收到中断信号，正在退出...")
                     break
@@ -272,13 +304,23 @@ class RobotClient:
     async def _确保与服务器连接(self) -> bool:
         """ 确保与服务器连接 """
         if self.ws_manager.connected:
+            # 连接正常，重置重连间隔
+            self.current_reconnect_interval = self.initial_reconnect_interval
             return True
+
         success = await self.connect()
         if success:
+            self.current_reconnect_interval = self.initial_reconnect_interval
             return True
-        reconnect_interval = self.config["server"].get("reconnect_interval", 5)
-        self.logger.info(f"{reconnect_interval} 秒后重试连接...")
-        await asyncio.sleep(reconnect_interval)
+
+        self.logger.info(f"{self.current_reconnect_interval} 秒后重试连接...")
+        await asyncio.sleep(self.current_reconnect_interval)
+
+        # 指数退避，最大不超过 max_reconnect_interval
+        self.current_reconnect_interval = min(
+            self.current_reconnect_interval * 2,
+            self.max_reconnect_interval
+        )
         return False
 
     def _构建异步任务(self) -> list[asyncio.Task]:

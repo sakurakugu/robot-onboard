@@ -77,7 +77,7 @@ class AudioCapture:
         stream = None
         state = {"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0}
         try:
-            while self.is_connected():
+            while self.is_connected() and (not self.audio_streaming_enabled or self.is_upload_connected()):
                 if self._需要暂停音频流():
                     stream = await self._暂停音频流(stream, state)
                     await asyncio.sleep(0.5)

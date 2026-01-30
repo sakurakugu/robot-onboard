@@ -20,13 +20,12 @@ __all__ = [
 
 # GLOBALS_CONFIG 全局配置
 _uuid_val = str(uuid6.uuid7())
-def get_globals_config(data: Dict[str, Any]) -> Dict[str, str]:
-    return {
-        "uuid": data.get("uuid") or _uuid_val,
-        "name": data.get("name") or f"机器狗-{_uuid_val[:4]}",
-        "model": data.get("model") or "agibot-d1",
-        "version": data.get("version") or "0.0.0",
-    }
+GLOBALS_CONFIG = {
+    "uuid": _uuid_val,
+    "name": f"机器狗-{_uuid_val[:4]}",
+    "model": "agibot-d1",
+    "version": "0.0.0",
+}
 
 DEFAULTS_CONFIG = { # 默认客户端配置
     "server": {

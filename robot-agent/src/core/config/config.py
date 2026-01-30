@@ -1,7 +1,7 @@
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
-from .const import APP_NAME, DEFAULTS_CONFIG, WORKSPACE_DIR, get_globals_config
+from .const import APP_NAME, DEFAULTS_CONFIG, WORKSPACE_DIR, GLOBALS_CONFIG
 
 try:
     import tomli
@@ -48,12 +48,12 @@ class Config:
         global_cfg = self._加载全局配置()
         project_cfg = self._加载项目配置()
         cfg = dict(project_cfg)
-        cfg["robot"] = get_globals_config(global_cfg)
+        cfg["robot"] = GLOBALS_CONFIG(global_cfg)
         self._config = cfg
 
     def save(self, config: Dict[str, Any]) -> None:
         robot_cfg = config.get("robot", {})
-        global_cfg = get_globals_config(robot_cfg)
+        global_cfg = GLOBALS_CONFIG(robot_cfg)
         self._写入TOML(self.global_config_file, global_cfg)
         project_cfg = {k: v for k, v in config.items() if k != "robot"}
         self._写入TOML(self.project_config_file, project_cfg)
@@ -83,15 +83,40 @@ class Config:
     def _加载全局配置(self) -> Dict[str, Any]:
         exists = self.global_config_file.exists()
         data = self._读取TOML(self.global_config_file) if exists else {}
-        out = get_globals_config(data)
-        if not exists:
+        out = GLOBALS_CONFIG(data)
+        if not exists or data != out:
             self._写入TOML(self.global_config_file, out)
         return out
 
     def _加载项目配置(self) -> Dict[str, Any]:
-        exists = self.project_config_file.exists()
-        if exists:
-            return self._读取TOML(self.project_config_file)
         defaults = DEFAULTS_CONFIG
-        self._写入TOML(self.project_config_file, defaults)
-        return defaults
+        exists = self.project_config_file.exists()
+        if not exists:
+            self._写入TOML(self.project_config_file, defaults)
+            return defaults
+        
+        current = self._读取TOML(self.project_config_file)
+        merged, changed = self._填入空缺配置(defaults, current)
+        
+        if changed:
+            self._写入TOML(self.project_config_file, merged)
+        return merged
+
+    def _填入空缺配置(self, default: Dict[str, Any], current: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
+        """
+        填入空缺配置，以 default 为基准。
+        返回 (合并后的配置, 是否有变更)
+        """
+        merged = current.copy()
+        changed = False
+        
+        for key, value in default.items():
+            if key not in merged:
+                merged[key] = value
+                changed = True
+            elif isinstance(value, dict) and isinstance(merged.get(key), dict):
+                sub_merged, sub_changed = self._填入空缺配置(value, merged[key])
+                if sub_changed:
+                    merged[key] = sub_merged
+                    changed = True
+        return merged, changed
