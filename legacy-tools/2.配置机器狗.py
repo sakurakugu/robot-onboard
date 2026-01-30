@@ -10,6 +10,7 @@ import time
 import re
 import socket
 import argparse
+import os
 from typing import Optional, Tuple
 
 # 禁止输入的 IP 列表/前缀
@@ -196,6 +197,83 @@ class RobotConfigurator:
             return exit_status == 0, out, err
         except Exception as e:
             return False, "", str(e)
+
+    def 上传目录(self, local_path: str, remote_path: str):
+        """递归上传目录"""
+        if not self.client:
+            print("未连接到机器狗")
+            return False
+
+        sftp = self.client.open_sftp()
+        
+        try:
+            try:
+                sftp.stat(remote_path)
+            except FileNotFoundError:
+                # 尝试创建远程目录
+                self.执行命令(f"mkdir -p {remote_path}")
+            
+            for root, dirs, files in os.walk(local_path):
+                relative_path = os.path.relpath(root, local_path)
+                remote_root = os.path.join(remote_path, relative_path).replace("\\", "/")
+                if relative_path == ".":
+                    remote_root = remote_path
+                
+                # 确保远程目录存在
+                try:
+                    sftp.stat(remote_root)
+                except FileNotFoundError:
+                    self.执行命令(f"mkdir -p {remote_root}")
+                
+                for file in files:
+                    local_file = os.path.join(root, file)
+                    remote_file = os.path.join(remote_root, file).replace("\\", "/")
+                    print(f"正在上传: {file} ...")
+                    sftp.put(local_file, remote_file)
+            print("✓ 文件上传完成")
+            return True
+        except Exception as e:
+            print(f"✗ 上传失败: {e}")
+            return False
+        finally:
+            sftp.close()
+
+    def 安装WifiServer(self) -> bool:
+        """安装并启动 Wifi Server"""
+        print("\n正在安装 Wifi Server...")
+        
+        # 定位本地 wifi-server 目录
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        local_wifi_server_path = os.path.join(script_dir, "..", "app", "robot-agent", "wifi-server")
+        local_wifi_server_path = os.path.normpath(local_wifi_server_path)
+        
+        if not os.path.exists(local_wifi_server_path):
+            print(f"✗ 未找到本地 wifi-server 目录: {local_wifi_server_path}")
+            return False
+            
+        remote_path = "/home/firefly/sparkrobot/robot-server"
+        
+        # 1. 上传文件
+        print(f"正在将 {local_wifi_server_path} 上传到 {remote_path}...")
+        if not self.上传目录(local_wifi_server_path, remote_path):
+            return False
+        
+        # 2. 赋予执行权限
+        print("正在设置权限...")
+        install_script = f"{remote_path}/install.sh"
+        self.执行命令(f"chmod +x {install_script}")
+        
+        # 3. 执行安装脚本
+        print("正在运行安装脚本...")
+        success, output, error = self.执行命令(f"bash {install_script}", use_sudo=True)
+        
+        if success:
+            print("✓ Wifi Server 安装并启动成功")
+            print(output)
+            return True
+        else:
+            print(f"✗ 安装失败: {error}")
+            return False
 
     def 获取本地IP(self, interface: str = "wlan0") -> Optional[str]:
         """
@@ -748,12 +826,13 @@ def main():
             while True:
                 print("\n" + "-"*25)
                 print("请选择配置模式:")
-                print("1. AP/有线直连模式")
-                print("2. WIFI 局域网模式")
-                print("3. 仅修改 SDK 配置并重启运控")
-                print("4. 自连模式（IP 127.0.0.1，端口 43988）")
+                print("1. AP/有线直连模式（群控用）")
+                print("2. WIFI 局域网模式（群控用）")
+                print("3. 仅修改 SDK 配置并重启运控（群控用）")
+                print("4. 自连模式（IP 127.0.0.1，端口 43988）（群控用）")
+                print("5. 安装并启动wifi配置服务器")
                 
-                choice = input("\n请输入选项 (1/2/3/4): ").strip()
+                choice = input("\n请输入选项 (1/2/3/4/5): ").strip()
                 
                 if choice == "1":
                     while True:
@@ -798,6 +877,39 @@ def main():
                             continue
                         host = host_in
                         break
+                    break
+                elif choice == "5":
+                    print("\n请选择当前连接机器狗的方式:")
+                    print("1. AP/有线直连 (默认 IP)")
+                    print("2. WIFI 局域网 (需输入 IP)")
+                    conn_type = input("请输入选项 (1/2): ").strip()
+                    
+                    if conn_type == "1":
+                         while True:
+                            print("请输入数字选择网络")
+                            print("1. AP网络: 192.168.234.1")
+                            print("2. 有线网络: 192.168.168.168")
+                            flag = input("\n请输入选项 (1/2): ").strip()
+                            if flag == "1":
+                                host = "192.168.234.1"
+                                break
+                            elif flag == "2":
+                                host = "192.168.168.168"
+                                break
+                            else:
+                                print("✗ 无效的选项，请重新输入")
+                                continue
+                    elif conn_type == "2":
+                        while True:
+                            host_in = input("请输入机器狗 IP: ").strip()
+                            if 是否禁止IP(host_in):
+                                print("✗ 此 IP 不允许作为输入")
+                                continue
+                            host = host_in
+                            break
+                    else:
+                        print("✗ 无效选项")
+                        continue
                     break
                 else:
                     print("✗ 无效的选项，请重新输入")
@@ -935,11 +1047,13 @@ def main():
             else:
                 # 交互式模式
                 success = configurator.仅修改SDK配置并重启()
-        else:
+        elif choice == "4":
             target_ip = "127.0.0.1"
             ok1 = configurator.修改SDK配置(target_ip, 43988)
             ok2 = configurator.修改运控启动脚本(target_ip)
             success = ok1 and ok2 and configurator.重启运动控制()
+        elif choice == "5":
+             success = configurator.安装WifiServer()
         
         if success:
             print("\n" + "="*50)

@@ -101,7 +101,7 @@
         var wifiListDiv = document.getElementById('wifiList');
         wifiListDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">正在扫描WiFi...</div>';
         
-        fetch('/scan-wifi')
+        return fetch('/wifi/scan')
             .then(function(response) {
                 return response.json();
             })
@@ -126,7 +126,12 @@
                         };
                         
                         var wifiInfo = document.createElement('div');
-                        wifiInfo.innerHTML = '<strong>' + network.ssid + '</strong><br><small style="color: #666;">信号: ' + network.signal + '% | 频道: ' + network.channel + ' | ' + network.security + '</small>';
+                        var connectedBadge = network.in_use ? '<span style="background-color: #4CAF50; color: white; padding: 2px 5px; border-radius: 3px; font-size: 12px; margin-left: 5px;">已连接</span>' : '';
+                        wifiInfo.innerHTML = '<strong>' + network.ssid + '</strong>' + connectedBadge + '<br><small style="color: #666;">信号: ' + network.signal + '% | 频道: ' + network.channel + ' | ' + network.security + '</small>';
+                        
+                        if (network.in_use) {
+                            wifiItem.style.borderLeft = '4px solid #4CAF50';
+                        }
                         
                         wifiItem.appendChild(wifiInfo);
                         wifiListDiv.appendChild(wifiItem);
@@ -145,7 +150,15 @@
     };
     
     document.getElementById('refreshWifi').addEventListener('click', function() {
-        scanWifi();
+        var btn = this;
+        var originalText = btn.innerText;
+        btn.innerText = '刷新中...';
+        btn.disabled = true;
+        
+        scanWifi().then(function() {
+            btn.innerText = originalText;
+            btn.disabled = false;
+        });
     });
     
     document.getElementById('wifiForm').addEventListener('submit', function(e) {
@@ -158,7 +171,7 @@
         messageDiv.className = 'message';
         messageDiv.textContent = '正在连接WiFi...';
         
-        fetch('/connect-wifi', {
+        fetch('/wifi/connect', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

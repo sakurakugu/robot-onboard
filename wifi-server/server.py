@@ -11,7 +11,7 @@ PORT = 8080
 app = FastAPI()
 
 # 连接WiFi的POST端点
-@app.post("/connect-wifi")
+@app.post("/wifi/connect")
 async def connect_wifi(request: Request):
     try:
         data = await request.json()
@@ -39,34 +39,60 @@ async def connect_wifi(request: Request):
         raise HTTPException(status_code=500, detail={"success": False, "error": error_msg})
 
 # 扫描WiFi的GET端点
-@app.get("/scan-wifi")
+@app.get("/wifi/scan")
 async def scan_wifi():
     try:
-        # 扫描WiFi网络
-        scan_cmd = "sudo nmcli device wifi list"
+        # 扫描WiFi网络，使用-t参数获取易于解析的格式
+        # 格式: IN-USE:SSID:CHAN:SIGNAL:SECURITY
+        scan_cmd = "sudo nmcli -t -f IN-USE,SSID,CHAN,SIGNAL,SECURITY device wifi list"
         result = subprocess.run(scan_cmd, shell=True, check=True, capture_output=True, text=True)
         
         # 解析扫描结果
         wifi_list = []
         lines = result.stdout.strip().split('\n')
-        if len(lines) > 1:
-            # 跳过表头
-            for line in lines[1:]:
-                # 解析每一行，提取SSID、信号强度、频道等信息
-                parts = line.split()
-                if len(parts) >= 6:
-                    ssid = ' '.join(parts[1:-5])
-                    signal = parts[-5]
-                    channel = parts[-4]
-                    mode = parts[-3]
-                    security = parts[-2]
-                    wifi_list.append({
-                        'ssid': ssid,
-                        'signal': signal,
-                        'channel': channel,
-                        'mode': mode,
-                        'security': security
-                    })
+        
+        for line in lines:
+            if not line:
+                continue
+                
+            # 手动解析以处理转义字符
+            parts = []
+            current = ''
+            escaped = False
+            for char in line:
+                if escaped:
+                    current += char
+                    escaped = False
+                elif char == '\\':
+                    escaped = True
+                elif char == ':':
+                    parts.append(current)
+                    current = ''
+                else:
+                    current += char
+            parts.append(current)
+            
+            if len(parts) >= 5:
+                in_use = parts[0] == '*'
+                ssid = parts[1]
+                channel = parts[2]
+                signal = parts[3]
+                security = parts[4]
+                
+                # 忽略没有SSID的网络
+                if not ssid:
+                    continue
+                    
+                wifi_list.append({
+                    'ssid': ssid,
+                    'signal': signal,
+                    'channel': channel,
+                    'security': security,
+                    'in_use': in_use
+                })
+        
+        # 排序：当前连接的在最前，然后按信号强度降序
+        wifi_list.sort(key=lambda x: (not x['in_use'], -int(x['signal']) if x['signal'].isdigit() else 0))
         
         return {"success": True, "networks": wifi_list}
     except subprocess.CalledProcessError as e:
@@ -80,6 +106,7 @@ if __name__ == '__main__':
     # 确保服务器在正确的目录中运行
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     
+    print("正在启动机器狗WiFi设置服务器...")
     print(f"服务器运行在 http://0.0.0.0:{PORT}")
     print("请在浏览器中访问 http://<机器狗IP>:8080 来设置WiFi")
     uvicorn.run(app, host="0.0.0.0", port=PORT)
