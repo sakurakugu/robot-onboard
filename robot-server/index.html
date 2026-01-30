@@ -101,7 +101,7 @@
         var wifiListDiv = document.getElementById('wifiList');
         wifiListDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">正在扫描WiFi...</div>';
         
-        return fetch('/wifi/scan')
+        return fetch('/api/v1/wifi/scan')
             .then(function(response) {
                 return response.json();
             })
@@ -171,7 +171,7 @@
         messageDiv.className = 'message';
         messageDiv.textContent = '正在连接WiFi...';
         
-        fetch('/wifi/connect', {
+        fetch('/api/v1/wifi/connect', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

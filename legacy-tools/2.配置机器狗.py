@@ -238,24 +238,24 @@ class RobotConfigurator:
         finally:
             sftp.close()
 
-    def 安装WifiServer(self) -> bool:
-        """安装并启动 Wifi Server"""
-        print("\n正在安装 Wifi Server...")
+    def 安装RobotServer(self) -> bool:
+        """安装并启动 Robot Server"""
+        print("\n正在安装 Robot Server...")
         
-        # 定位本地 wifi-server 目录
+        # 定位本地 robot-server 目录
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        local_wifi_server_path = os.path.join(script_dir, "..", "app", "robot-agent", "wifi-server")
-        local_wifi_server_path = os.path.normpath(local_wifi_server_path)
+        local_robot_server_path = os.path.join(script_dir, "..", "app", "robot-agent", "robot-server")
+        local_robot_server_path = os.path.normpath(local_robot_server_path)
         
-        if not os.path.exists(local_wifi_server_path):
-            print(f"✗ 未找到本地 wifi-server 目录: {local_wifi_server_path}")
+        if not os.path.exists(local_robot_server_path):
+            print(f"✗ 未找到本地 robot-server 目录: {local_robot_server_path}")
             return False
             
         remote_path = "/home/firefly/sparkrobot/robot-server"
         
         # 1. 上传文件
-        print(f"正在将 {local_wifi_server_path} 上传到 {remote_path}...")
-        if not self.上传目录(local_wifi_server_path, remote_path):
+        print(f"正在将 {local_robot_server_path} 上传到 {remote_path}...")
+        if not self.上传目录(local_robot_server_path, remote_path):
             return False
         
         # 2. 赋予执行权限
@@ -268,7 +268,8 @@ class RobotConfigurator:
         success, output, error = self.执行命令(f"bash {install_script}", use_sudo=True)
         
         if success:
-            print("✓ Wifi Server 安装并启动成功")
+            print("✓ Robot Server 安装并启动成功")
+            print(f"请打开: http://{self.host}:8080 进行配置")
             print(output)
             return True
         else:
@@ -1053,7 +1054,7 @@ def main():
             ok2 = configurator.修改运控启动脚本(target_ip)
             success = ok1 and ok2 and configurator.重启运动控制()
         elif choice == "5":
-             success = configurator.安装WifiServer()
+             success = configurator.安装RobotServer()
         
         if success:
             print("\n" + "="*50)

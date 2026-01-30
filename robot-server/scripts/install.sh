@@ -23,7 +23,7 @@ BASE_DIR=$(dirname "$SCRIPT_DIR")
 SERVICE_NAME="wifi-server.service"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME"
 
-echo -e "${GREEN}正在安装机器狗 WiFi Server...${NC}"
+echo -e "${GREEN}正在安装机器狗 Robot Server...${NC}"
 echo "工作目录: $BASE_DIR"
 
 # 1. 赋予相关脚本执行权限
@@ -36,7 +36,7 @@ chmod +x "$BASE_DIR/server.py"
 echo "正在生成服务配置文件 $SERVICE_FILE ..."
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=机器人WiFi配置服务器
+Description=机器人配置服务器
 After=network.target
 
 [Service]

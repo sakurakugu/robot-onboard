@@ -11,7 +11,7 @@ PORT = 8080
 app = FastAPI()
 
 # 连接WiFi的POST端点
-@app.post("/wifi/connect")
+@app.post("/api/v1/wifi/connect")
 async def connect_wifi(request: Request):
     try:
         data = await request.json()
@@ -39,7 +39,7 @@ async def connect_wifi(request: Request):
         raise HTTPException(status_code=500, detail={"success": False, "error": error_msg})
 
 # 扫描WiFi的GET端点
-@app.get("/wifi/scan")
+@app.get("/api/v1/wifi/scan")
 async def scan_wifi():
     try:
         # 扫描WiFi网络，使用-t参数获取易于解析的格式
