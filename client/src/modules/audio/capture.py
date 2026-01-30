@@ -25,9 +25,9 @@ class AudioCapture:
         self.logger = logger
         self.is_connected = is_connected
         self.is_upload_connected = is_upload_connected
-        self.send_audio_start = send_audio_start
-        self.send_audio_chunk = send_audio_chunk
-        self.send_audio_end = send_audio_end
+        self.发送音频开始 = send_audio_start
+        self.发送音频数据块 = send_audio_chunk
+        self.发送音频结束 = send_audio_end
         self.audio_streaming_enabled = bool(config.get("audio", {}).get("enable_streaming", True))
 
     async def 开始采集(self) -> None:
@@ -99,7 +99,7 @@ class AudioCapture:
         """ 暂停音频流 """
         session_id = state["session_id"]
         if session_id is not None:
-            await self.send_audio_end(session_id, "manual")
+            await self.发送音频结束(session_id, "manual")
             state.update({"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0})
         return self._停止音频流(stream)
 
@@ -146,17 +146,17 @@ class AudioCapture:
             state["seq"] = 0
             state["silence_frames"] = 0
             state["frames_in_segment"] = 0
-            await self.send_audio_start(session_id, settings["frame_duration_ms"])
+            await self.发送音频开始(session_id, settings["frame_duration_ms"])
             self.logger.debug(f"音频会话开始: {session_id}")
 
         opus_bytes = encoder.encode(pcm.tobytes(), settings["frame_size"])
-        await self.send_audio_chunk(session_id, state["seq"], opus_bytes, settings["frame_duration_ms"])
+        await self.发送音频数据块(session_id, state["seq"], opus_bytes, settings["frame_duration_ms"])
         state["seq"] += 1
         state["frames_in_segment"] += 1
         state["silence_frames"] = 0
 
         if state["frames_in_segment"] >= settings["max_frames"]:
-            await self.send_audio_end(session_id, "max_length")
+            await self.发送音频结束(session_id, "max_length")
             self.logger.debug(f"音频会话结束(长度): {session_id}")
             state["session_id"] = None
 
@@ -167,7 +167,7 @@ class AudioCapture:
             return
         state["silence_frames"] += 1
         if state["silence_frames"] >= settings["silence_frames_limit"]:
-            await self.send_audio_end(session_id, "silence")
+            await self.发送音频结束(session_id, "silence")
             self.logger.debug(f"音频会话结束(静音): {session_id}")
             state.update({"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0})
 
@@ -185,6 +185,6 @@ class AudioCapture:
         """ 清理音频流 """
         session_id = state["session_id"]
         if session_id is not None:
-            await self.send_audio_end(session_id, "manual")
+            await self.发送音频结束(session_id, "manual")
         self._停止音频流(stream)
         self.logger.info("麦克风采集已停止")
