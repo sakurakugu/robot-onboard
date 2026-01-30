@@ -12,7 +12,7 @@ app = FastAPI()
 
 # 连接WiFi的POST端点
 @app.post("/api/v1/wifi/connect")
-async def connect_wifi(request: Request):
+async def 连接WIFI(request: Request):
     try:
         data = await request.json()
         ssid = data.get('ssid')
@@ -40,7 +40,7 @@ async def connect_wifi(request: Request):
 
 # 扫描WiFi的GET端点
 @app.get("/api/v1/wifi/scan")
-async def scan_wifi():
+async def 扫描WIFI():
     try:
         # 扫描WiFi网络，使用-t参数获取易于解析的格式
         # 格式: IN-USE:SSID:CHAN:SIGNAL:SECURITY

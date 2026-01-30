@@ -49,11 +49,11 @@ model = "unitree-go2"
 
 [server]
 base_url = "ws://localhost"
-ws_path = "/api/v1/conversation/connect"
-control_url = "ws://localhost:9000/api/v1/conversation/connect"
-business_url = "ws://localhost:9001/api/v1/conversation/connect"
-audio_upload_url = "ws://localhost:9002/api/v1/conversation/connect"
-audio_download_url = "ws://localhost:9003/api/v1/conversation/connect"
+ws_path = "/api/v1/interaction/connect"
+control_url = "ws://localhost:9000/api/v1/interaction/connect"
+business_url = "ws://localhost:9001/api/v1/interaction/connect"
+audio_upload_url = "ws://localhost:9002/api/v1/interaction/connect"
+audio_download_url = "ws://localhost:9003/api/v1/interaction/connect"
 reconnect_interval = 5
 heartbeat_interval = 30
 

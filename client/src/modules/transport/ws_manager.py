@@ -39,7 +39,7 @@ class WebSocketManager:
     def _解析服务器URL配置(self) -> Dict[str, str]:
         """ _resolve_server_urls """
         server_cfg = self.config.get("server", {})
-        ws_path = server_cfg.get("ws_path") or "/api/v1/conversation/connect"
+        ws_path = server_cfg.get("ws_path") or "/api/v1/interaction/connect"
         business_url = server_cfg.get("business_url") or server_cfg.get("url")
         control_url = server_cfg.get("control_url")
         audio_upload_url = server_cfg.get("audio_upload_url")

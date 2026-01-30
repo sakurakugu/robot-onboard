@@ -32,11 +32,11 @@ DEFAULTS_CONFIG = { # 默认客户端配置
     "server": {
         # TODO: 到时候分离手机端和服务端后，将这里的地址修改
         "base_url": f"ws://{SERVER_ADDR}",         # 服务器基础URL
-        "ws_path": "/api/v1/conversation/connect", # WebSocket路径
-        "control_url": f"ws://{SERVER_ADDR}:9000/api/v1/conversation/connect",        # 控制URL
-        "business_url": f"ws://{SERVER_ADDR}:9001/api/v1/conversation/connect",       # 业务URL
-        "audio_upload_url": f"ws://{SERVER_ADDR}:9002/api/v1/conversation/connect",   # 音频上传URL
-        "audio_download_url": f"ws://{SERVER_ADDR}:9003/api/v1/conversation/connect", # 音频下载URL
+        "ws_path": "/api/v1/interaction/connect", # WebSocket路径
+        "control_url": f"ws://{SERVER_ADDR}:9000/api/v1/interaction/connect",        # 控制URL
+        "business_url": f"ws://{SERVER_ADDR}:9001/api/v1/interaction/connect",       # 业务URL
+        "audio_upload_url": f"ws://{SERVER_ADDR}:9002/api/v1/interaction/connect",   # 音频上传URL
+        "audio_download_url": f"ws://{SERVER_ADDR}:9003/api/v1/interaction/connect", # 音频下载URL
         "reconnect_interval": 5,  # 重连间隔（秒）
         "heartbeat_interval": 30, # 心跳间隔（秒）
     },
