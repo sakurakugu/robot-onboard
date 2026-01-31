@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import Any, Awaitable, Callable, Dict, Optional
 
-from core.utils import 获取IPC路径
+from sparkrobot_common import ORG_NAME, get_ipc_path
 
 
 class IpcServer:
@@ -14,7 +14,7 @@ class IpcServer:
 
     async def 启动(self) -> None:
         try:
-            ipc_path = 获取IPC路径(self.project_name)
+            ipc_path = get_ipc_path(ORG_NAME, self.project_name)
             if ipc_path.exists():
                 ipc_path.unlink()
         except Exception:
@@ -50,7 +50,7 @@ class IpcServer:
             await self._server.wait_closed()
             self._server = None
         try:
-            ipc_path = 获取IPC路径(self.project_name)
+            ipc_path = get_ipc_path(ORG_NAME, self.project_name)
             if ipc_path.exists():
                 ipc_path.unlink()
         except Exception:

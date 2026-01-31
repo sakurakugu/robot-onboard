@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Awaitable, Callable, Dict, cast
 
-from core.utils import 生成UUID
+from sparkrobot_common import generate_uuid
 
 try:
     import numpy as np
@@ -141,7 +141,7 @@ class AudioCapture:
         """ 处理语音块 """
         session_id = state["session_id"]
         if session_id is None:
-            session_id = 生成UUID()
+            session_id = generate_uuid()
             state["session_id"] = session_id
             state["seq"] = 0
             state["silence_frames"] = 0

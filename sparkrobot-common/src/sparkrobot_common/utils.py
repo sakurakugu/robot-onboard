@@ -1,42 +1,49 @@
+"""
+通用工具函数
+"""
 import socket
 import subprocess
 from pathlib import Path
-from typing import Optional
-
-import uuid6  # python3.11才自带uuid7，需要用第三方库
-
-from core.config import ORG_NAME
-from core.logger import logger
 
 
-# 生成uuid7
-def 生成UUID() -> str:
-    return str(uuid6.uuid7())
+def generate_uuid() -> str:
+    """生成 UUID7"""
+    try:
+        import uuid6
+        return str(uuid6.uuid7())
+    except ImportError:
+        import uuid
+        return str(uuid.uuid4())  # fallback to uuid4
 
-# 获取IPC路径
-def 获取IPC路径(name: str) -> Path:
-    ipc_path = Path("/tmp") / ORG_NAME / f"{name}.sock"
+
+def generate_robot_name(uuid_val: str) -> str:
+    """生成机器人名称"""
+    return f"机器狗-{uuid_val[:4]}"
+
+
+def get_ipc_path(org_name: str, name: str) -> Path:
+    """获取 IPC socket 路径"""
+    ipc_path = Path("/tmp") / org_name / f"{name}.sock"
     ipc_path.parent.mkdir(parents=True, exist_ok=True)
     return ipc_path
 
-# 获取本地IP
-def 获取本地IP() -> Optional[str]:
-    """通过UDP连接获取本机对外的IP地址"""
+
+def get_local_ip() -> str | None:
+    """通过 UDP 连接获取本机对外的 IP 地址"""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # 不会真的建立连接，仅用于获取本机出口IP
+        # 不会真的建立连接，仅用于获取本机出口 IP
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
-    except Exception as e:
-        logger.error(f"获取出口IP失败: {e}")
+    except Exception:
         ip = None
     finally:
         s.close()
     return ip
 
 
-def 检测机器人运控版本() -> Optional[str]:
-    """ 检测机器人运控版本 """
+def detect_robot_version() -> str | None:
+    """检测机器人运控版本"""
     try:
         result = subprocess.run(
             "grep -oP 'motion-control_\\K[^_]+' /etc/release/*[^rootfs]*.yaml",
@@ -59,10 +66,11 @@ def 检测机器人运控版本() -> Optional[str]:
     except Exception:
         return None
 
+
 __all__ = [
-    "execute_concurrently",
-    "获取本地IP",
-    "生成UUID",
-    "获取IPC路径",
-    "检测机器人运控版本"
+    "generate_uuid",
+    "generate_robot_name",
+    "get_ipc_path",
+    "get_local_ip",
+    "detect_robot_version",
 ]

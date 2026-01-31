@@ -4,7 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 
-from .dog_core import RobotDog
+from .robot_dog import RobotDog
 
 
 def execute_concurrently(*actions, _interval: float = 0):

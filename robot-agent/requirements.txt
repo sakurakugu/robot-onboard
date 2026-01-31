@@ -1,8 +1,5 @@
+sparkrobot-common[watchdog]
 websockets>=16.0
-tomli>=2.4.0
-tomli-w>=1.2.0
-uuid6>=2025.0.1
 numpy>=2.2.6
 sounddevice>=0.5.5
 opuslib>=3.0.1
-watchdog>=6.0.0

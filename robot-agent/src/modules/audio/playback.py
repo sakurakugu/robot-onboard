@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from core.config import WORKSPACE_DIR
+from sparkrobot_common import WORKSPACE_DIR
 
 
 class AudioPlaybackManager:

@@ -2,9 +2,11 @@
 import time
 from typing import Any, Callable, cast
 
+from sparkrobot_common import get_local_ip, get_logger
+
 from core.dog import sdk
-from core.logger import logger
-from core.utils import 获取本地IP
+
+logger = get_logger("robot-agent")
 
 
 class RobotDog:
@@ -14,7 +16,7 @@ class RobotDog:
         self.name = name
         self.app = cast(Any, sdk).HighLevel()
         if local_ip is None:
-            local_ip = 获取本地IP()
+            local_ip = get_local_ip()
         self.app.initRobot(local_ip, local_port, robot_ip)
 
     def get_current_ctrl_mode(self) -> int:

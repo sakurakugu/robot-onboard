@@ -3,27 +3,19 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "robot-agent"
+name = "robot-server"
 version = "0.1.0"
-description = "机器狗代理 (放置在机器狗身上)"
+description = "机器狗配置服务器 - 提供配置管理和 WiFi 配置的 HTTP API"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "sparkrobot-common[watchdog]",
-    "websockets>=16.0",
-    "numpy>=2.2.6",
-    "sounddevice>=0.5.5",
-    "opuslib>=3.0.1",
+    "sparkrobot-common",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
 ]
 
 [tool.setuptools]
-package-dir = { "" = "src" }
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[project.scripts]
-sparkrobot-robot-agent = "main:main"
+py-modules = ["server", "config_manager"]
 
 # ============================
 # 下面是 lint/typecheck 配置
@@ -42,15 +34,8 @@ max-complexity = 20
 [tool.black]
 line-length = 120
 target-version = ["py310"]
-include = '\.pyi?$'
-
-[tool.isort]
-profile = "black"
-line_length = 120
-src_paths = ["src"]
 
 [tool.mypy]
 python_version = "3.10"
-ignore_missing_imports = true
-explicit_package_bases = true
-files = ["src"]
+warn_return_any = true
+warn_unused_configs = true

@@ -4,10 +4,13 @@ import socket
 import threading
 import time
 
-from core.config import APP_NAME, Config
+from sparkrobot_common import ORG_NAME, configure_logger, get_ipc_path, get_logger
+
+from core.config import Config
 from core.dog import sdk
-from core.logger import configure_logger, logger
-from core.utils import 获取IPC路径
+
+APP_NAME = "robot-agent"
+logger = get_logger(APP_NAME)
 
 
 def _收集机器人状态(app):
@@ -272,6 +275,7 @@ def main():
         config = config_store.get()
         logging_cfg = config.get("logging", {})
         configure_logger(
+            app_name=APP_NAME,
             log_dir=logging_cfg.get("log_dir"),
             level=logging_cfg.get("level", "INFO"),
             max_file_size_mb=logging_cfg.get("max_file_size_mb"),
@@ -286,7 +290,7 @@ def main():
         logger.info("机器人连接初始化成功。")
 
         robot_uuid = config.get("robot", {}).get("uuid", "unknown")
-        ipc_path = 获取IPC路径(APP_NAME)
+        ipc_path = get_ipc_path(ORG_NAME, APP_NAME)
 
         # 启动一个线程，循环发送机器人状态到IPC路径
         threading.Thread(target=_循环发送机器人状态, args=(app, robot_uuid, ipc_path), daemon=True).start()

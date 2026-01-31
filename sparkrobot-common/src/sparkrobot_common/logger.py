@@ -1,13 +1,19 @@
+"""
+日志工具模块
+
+提供统一的日志格式化和文件管理。
+"""
 import io
 import logging
 import sys
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Optional, Union
+from typing import TextIO
 
-from core.config import APP_NAME, WORKSPACE_DIR
+from sparkrobot_common.const import ORG_NAME, WORKSPACE_DIR
 
+# 日志级别中文名
 LEVEL_NAME_CN = {
     "DEBUG": "调试",
     "INFO": "信息",
@@ -16,29 +22,33 @@ LEVEL_NAME_CN = {
     "CRITICAL": "严重",
 }
 
+# 日志级别颜色
 LEVEL_COLOR = {
-    "DEBUG": "\x1b[36m",     # 青色
-    "INFO": "\x1b[32m",      # 绿色
-    "WARNING": "\x1b[33m",   # 黄色
-    "ERROR": "\x1b[31m",     # 红色
-    "CRITICAL": "\x1b[1;31m",# 加粗红色
+    "DEBUG": "\x1b[36m",      # 青色
+    "INFO": "\x1b[32m",       # 绿色
+    "WARNING": "\x1b[33m",    # 黄色
+    "ERROR": "\x1b[31m",      # 红色
+    "CRITICAL": "\x1b[1;31m", # 加粗红色
 }
 
 RESET_COLOR = "\x1b[0m"
 
+
 class CNLevelFormatter(logging.Formatter):
+    """中文日志级别格式化器"""
+
     def __init__(
         self,
         fmt: str,
-        time_mode: str,
-        datefmt: Optional[str] = None,
+        time_mode: str = "file",
+        datefmt: str | None = None,
         enable_color: bool = False,
     ):
         super().__init__(fmt=fmt, datefmt=datefmt)
         self.time_mode = time_mode
         self.enable_color = enable_color
 
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         if self.time_mode == "console":
             local_dt = datetime.fromtimestamp(record.created).astimezone()
             return local_dt.strftime(datefmt or "%H:%M:%S.%f")
@@ -48,7 +58,7 @@ class CNLevelFormatter(logging.Formatter):
             ts = ts[:-1] + "+00:00"
         return ts
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         original = record.levelname
         level_cn = LEVEL_NAME_CN.get(original, original)
         if self.enable_color:
@@ -62,41 +72,39 @@ class CNLevelFormatter(logging.Formatter):
             record.levelname = original
 
 
-logger = logging.getLogger(APP_NAME)
-if not logger.handlers:
-    logger.addHandler(logging.NullHandler())
-
-
-def _resolve_console_stream() -> Optional[io.TextIOBase]:
-    """ 解析控制台输出流，优先选择stdout，其次选择stderr """
+def _resolve_console_stream() -> TextIO | None:
+    """解析控制台输出流"""
     for stream in (sys.stdout, sys.stderr):
         if isinstance(stream, io.TextIOBase) and stream.isatty():
-            return stream
+            return stream  # type: ignore[return-value]
     return None
 
 
 def _build_log_path(
     base_dir: Path,
-    date_value: Optional[datetime] = None,
-    file_prefix: Optional[str] = None,
+    date_value: datetime | None = None,
+    file_prefix: str | None = None,
 ) -> Path:
-    """ 构建日志文件路径，按日期分类 """
+    """构建日志文件路径，按日期分类"""
     now = date_value or datetime.now().astimezone()
     date_folder = now.date().isoformat()
     date_compact = now.strftime("%Y%m%d")
     daily_dir = base_dir / date_folder
     daily_dir.mkdir(parents=True, exist_ok=True)
-    name = file_prefix or APP_NAME
+    name = file_prefix or "app"
     return daily_dir / f"{name}_{date_compact}.log"
 
+
 class DailySwitchingHandler(logging.Handler):
+    """每日切换的日志处理器"""
+
     def __init__(
         self,
         base_dir: Path,
         formatter: logging.Formatter,
         level: int,
-        max_file_size_mb: Optional[int] = None,
-        file_prefix: Optional[str] = None,
+        max_file_size_mb: int | None = None,
+        file_prefix: str | None = None,
     ) -> None:
         super().__init__(level=level)
         self.base_dir = base_dir
@@ -139,20 +147,37 @@ class DailySwitchingHandler(logging.Handler):
         finally:
             super().close()
 
-def get_logger(name: str | None = None):
-    return logging.getLogger(name or APP_NAME)
+
+def get_logger(name: str | None = None) -> logging.Logger:
+    """获取 logger 实例"""
+    return logging.getLogger(name or ORG_NAME)
+
 
 def configure_logger(
-    log_dir: Union[str, Path, None] = None,
-    level: Union[int, str] = logging.INFO,
-    max_file_size_mb: Optional[int] = None,
-    log_file_prefix: Optional[str] = None,
+    app_name: str,
+    log_dir: str | Path | None = None,
+    level: int | str = logging.INFO,
+    max_file_size_mb: int | None = None,
+    log_file_prefix: str | None = None,
 ) -> logging.Logger:
+    """配置 logger
+
+    Args:
+        app_name: 应用名称
+        log_dir: 日志目录，默认 ~/sparkrobot/logs/{app_name}
+        level: 日志级别
+        max_file_size_mb: 日志文件最大大小（MB）
+        log_file_prefix: 日志文件前缀
+
+    Returns:
+        配置好的 logger
+    """
     resolved_level = level
     if isinstance(resolved_level, str):
         resolved_level = getattr(logging, resolved_level.upper(), logging.INFO)
+
     if log_dir is None:
-        log_dir = str(WORKSPACE_DIR / "logs" / APP_NAME)
+        log_dir = WORKSPACE_DIR / "logs" / app_name
     base_dir = Path(log_dir)
     base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -163,9 +188,9 @@ def configure_logger(
     file_handler = DailySwitchingHandler(
         base_dir=base_dir,
         formatter=file_formatter,
-        level=resolved_level,
+        level=resolved_level,  # type: ignore
         max_file_size_mb=max_file_size_mb,
-        file_prefix=log_file_prefix,
+        file_prefix=log_file_prefix or app_name,
     )
 
     handlers: list[logging.Handler] = [file_handler]
@@ -181,11 +206,18 @@ def configure_logger(
         console_handler.setFormatter(console_formatter)
         handlers.append(console_handler)
 
-    logger.setLevel(resolved_level)
+    logger = logging.getLogger(app_name)
+    logger.setLevel(resolved_level)  # type: ignore
     logger.handlers = []
     for handler in handlers:
         logger.addHandler(handler)
     logger.propagate = False
     return logger
 
-__all__ = ["logger", "configure_logger", "CNLevelFormatter"]
+
+__all__ = [
+    "get_logger",
+    "configure_logger",
+    "CNLevelFormatter",
+    "DailySwitchingHandler",
+]

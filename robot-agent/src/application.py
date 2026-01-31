@@ -18,9 +18,13 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from core.config import APP_NAME, WORKSPACE_DIR, Config
-from core.logger import configure_logger
-from core.utils import 检测机器人运控版本
+from sparkrobot_common import (
+    WORKSPACE_DIR,
+    configure_logger,
+    detect_robot_version,
+)
+
+from core.config import Config
 from modules.actions.mapping import 处理动作指令, 处理文本响应
 from modules.audio.capture import AudioCapture
 from modules.audio.playback import 停止当前音频播放, 处理音频响应并播放
@@ -37,6 +41,8 @@ from modules.transport.protocol import (
     构建音频结束消息,
 )
 from modules.transport.ws_manager import WebSocketManager
+
+APP_NAME = "robot-agent"
 
 
 class RobotClient:
@@ -58,16 +64,16 @@ class RobotClient:
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         # 初始化配置
-        self.config_store = Config.instance(workspace, self.project_name)
+        self.config_store = Config.instance(workspace)
         self.config = self.config_store.get()
 
         # 设置日志
         self._初始化日志()
 
         # 启动配置文件监听（热更新）
-        if self.config_store.启动配置文件监听():
+        if self.config_store.start_watching():
             self.logger.info("配置文件监听已启动")
-            self.config_store.如果配置变化(self._处理配置变化)
+            self.config_store.on_change(self._处理配置变化)
         else:
             self.logger.warning("配置文件监听启动失败，热更新功能不可用")
 
@@ -107,10 +113,10 @@ class RobotClient:
         self.action_executor: Optional[Callable] = None
 
         """ 初始化机器人版本 """
-        version = 检测机器人运控版本()
+        version = detect_robot_version()
         if version:
             # 使用新的扁平化配置格式
-            self.config_store.set("robot_version", version)
+            self.config_store.set_via_server("robot.version", version)
             self.config = self.config_store.get()
 
         # 重连策略配置
@@ -135,7 +141,8 @@ class RobotClient:
         level = logging_cfg.get("level", "INFO")
         max_file_size_mb = logging_cfg.get("max_file_size_mb")
         self.logger = configure_logger(
-            self.log_dir,
+            app_name=self.project_name,
+            log_dir=self.log_dir,
             level=level,
             max_file_size_mb=max_file_size_mb,
             log_file_prefix="application",
@@ -402,16 +409,10 @@ class RobotClient:
             pass
         try:
             # 停止配置文件监听
-            self.config_store.停止配置文件监听()
+            self.config_store.stop_watching()
             self.logger.info("配置文件监听已停止")
         except Exception:
             pass
-        try:
-            # 保存配置（使用扁平格式）
-            self.config_store.save(self.config)
-            self.logger.info("配置已保存")
-        except Exception:
-            self.logger.warning("配置保存失败")
 
 def _构建动作映射() -> Dict[str, str]:
     """ 构建动作映射 """

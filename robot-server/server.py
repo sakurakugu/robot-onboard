@@ -8,16 +8,15 @@ Robot Server - 机器狗配置服务器
 3. 提供Web界面进行配置
 4. 提供HTTP API供robot-agent调用
 """
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
-import subprocess
 import os
-import uvicorn
-from typing import Optional
-from pathlib import Path
+import subprocess
 
-from config_manager import ConfigManager, 获取配置字段信息, CONFIG_DIR
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from sparkrobot_common import CONFIG_DIR, get_config_field_info
+
+from config_manager import ConfigManager
 
 PORT = 8080
 
@@ -37,17 +36,17 @@ async def 获取全部配置():
         config = config_manager.get()
         return {"success": True, "config": config}
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 
 
 @app.get("/api/v1/config/fields")
-async def 获取配置字段定义信息():
+async def get_config_fields():
     """获取配置字段定义信息（用于前端展示）"""
     try:
-        fields = 获取配置字段信息()
+        fields = get_config_field_info()
         return {"success": True, "fields": fields}
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 
 
 @app.get("/api/v1/config/path")
@@ -55,12 +54,12 @@ async def 获取配置文件路径():
     """获取配置文件路径"""
     try:
         return {
-            "success": True, 
+            "success": True,
             "config_file": str(config_manager.config_path),
             "config_dir": str(config_manager.config_dir)
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 
 
 @app.post("/api/v1/config/reset")
@@ -69,16 +68,16 @@ async def 重置配置(request: Request):
     try:
         data = await request.json() if request.headers.get("content-length", "0") != "0" else {}
         key = data.get("key")  # 可选，如果不提供则重置全部
-        
+
         success = config_manager.reset(key)
         if not success:
             raise HTTPException(status_code=400, detail={"success": False, "error": f"重置失败，配置项 {key} 不存在"})
-        
-        return {"success": True, "message": f"配置已重置" + (f"（{key}）" if key else "（全部）")}
+
+        return {"success": True, "message": "配置已重置" + (f"（{key}）" if key else "（全部）")}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 
 
 @app.post("/api/v1/config/reload")
@@ -88,7 +87,7 @@ async def 重新加载配置():
         config_manager.reload()
         return {"success": True, "message": "配置已重新加载"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 
 
 @app.get("/api/v1/config/{key}")
@@ -102,7 +101,7 @@ async def 获取单项配置(key: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 
 
 @app.post("/api/v1/config")
@@ -110,26 +109,26 @@ async def 更新配置(request: Request):
     """更新配置（支持批量更新）"""
     try:
         data = await request.json()
-        
+
         if not isinstance(data, dict):
             raise HTTPException(status_code=400, detail={"success": False, "error": "请求数据必须是JSON对象"})
-        
+
         results = config_manager.set_many(data)
-        
+
         # 检查是否有失败的配置项
         failed = [k for k, v in results.items() if not v]
         if failed:
             return {
-                "success": False, 
-                "message": f"部分配置项更新失败: {', '.join(failed)}", 
+                "success": False,
+                "message": f"部分配置项更新失败: {', '.join(failed)}",
                 "results": results
             }
-        
+
         return {"success": True, "message": "配置更新成功", "results": results}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 
 
 # ==================== WiFi API ====================
@@ -139,28 +138,28 @@ async def 连接WIFI(request: Request):
     """连接WiFi"""
     try:
         data = await request.json()
-        ssid = data.get('ssid')
-        password = data.get('password')
-        
+        ssid = data.get("ssid")
+        password = data.get("password")
+
         if not ssid or not password:
             return {"success": False, "error": "未提供SSID或密码"}
-        
+
         # 连接WiFi
         connect_cmd = f"sudo nmcli device wifi connect '{ssid}' password '{password}' ifname wlan0"
         subprocess.run(connect_cmd, shell=True, check=True, capture_output=True, text=True)
-        
+
         # 关闭网络清除服务
         subprocess.run("sudo systemctl stop networkmanager-cleanup.service", shell=True, capture_output=True, text=True)
         subprocess.run("sudo systemctl disable networkmanager-cleanup.service", shell=True, capture_output=True, text=True)
-        
+
         # 开启自动连接
         auto_connect_cmd = f"sudo nmcli connection modify '{ssid}' connection.autoconnect yes"
         subprocess.run(auto_connect_cmd, shell=True, capture_output=True, text=True)
-        
+
         return {"success": True, "message": "WiFi连接成功"}
     except subprocess.CalledProcessError as e:
         error_msg = f"连接失败: {e.stderr.strip()}"
-        raise HTTPException(status_code=500, detail={"success": False, "error": error_msg})
+        raise HTTPException(status_code=500, detail={"success": False, "error": error_msg}) from e
 
 
 @app.get("/api/v1/wifi/scan")
@@ -171,58 +170,58 @@ async def 扫描WIFI():
         # 格式: IN-USE:SSID:CHAN:SIGNAL:SECURITY
         scan_cmd = "sudo nmcli -t -f IN-USE,SSID,CHAN,SIGNAL,SECURITY device wifi list"
         result = subprocess.run(scan_cmd, shell=True, check=True, capture_output=True, text=True)
-        
+
         # 解析扫描结果
         wifi_list = []
-        lines = result.stdout.strip().split('\n')
-        
+        lines = result.stdout.strip().split("\n")
+
         for line in lines:
             if not line:
                 continue
-                
+
             # 手动解析以处理转义字符
             parts = []
-            current = ''
+            current = ""
             escaped = False
             for char in line:
                 if escaped:
                     current += char
                     escaped = False
-                elif char == '\\':
+                elif char == "\\":
                     escaped = True
-                elif char == ':':
+                elif char == ":":
                     parts.append(current)
-                    current = ''
+                    current = ""
                 else:
                     current += char
             parts.append(current)
-            
+
             if len(parts) >= 5:
-                in_use = parts[0] == '*'
+                in_use = parts[0] == "*"
                 ssid = parts[1]
                 channel = parts[2]
                 signal = parts[3]
                 security = parts[4]
-                
+
                 # 忽略没有SSID的网络
                 if not ssid:
                     continue
-                    
+
                 wifi_list.append({
-                    'ssid': ssid,
-                    'signal': signal,
-                    'channel': channel,
-                    'security': security,
-                    'in_use': in_use
+                    "ssid": ssid,
+                    "signal": signal,
+                    "channel": channel,
+                    "security": security,
+                    "in_use": in_use
                 })
-        
+
         # 排序：当前连接的在最前，然后按信号强度降序
-        wifi_list.sort(key=lambda x: (not x['in_use'], -int(x['signal']) if x['signal'].isdigit() else 0))
-        
+        wifi_list.sort(key=lambda x: (not x["in_use"], -int(x["signal"]) if x["signal"].isdigit() else 0))
+
         return {"success": True, "networks": wifi_list}
     except subprocess.CalledProcessError as e:
         error_msg = f"扫描失败: {e.stderr.strip()}"
-        raise HTTPException(status_code=500, detail={"success": False, "error": error_msg})
+        raise HTTPException(status_code=500, detail={"success": False, "error": error_msg}) from e
 
 
 # ==================== 系统信息API ====================
@@ -237,17 +236,17 @@ async def 获取系统信息():
         }
         return {"success": True, "info": info}
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)})
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 
 
 # 挂载静态文件目录
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 确保服务器在正确的目录中运行
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    
+
     print("正在启动机器狗配置服务器...")
     print(f"服务器运行在 http://0.0.0.0:{PORT}")
     print(f"配置文件位置: {config_manager.config_path}")
