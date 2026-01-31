@@ -43,7 +43,7 @@ After=network.target
 Type=simple
 User=firefly
 WorkingDirectory=$BASE_DIR
-ExecStart=/bin/bash $SCRIPT_DIR/start.sh
+ExecStart=/usr/bin/python3 server.py
 Restart=always
 RestartSec=10
 

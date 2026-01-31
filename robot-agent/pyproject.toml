@@ -16,6 +16,7 @@ dependencies = [
     "numpy>=2.2.6",
     "sounddevice>=0.5.5",
     "opuslib>=3.0.1",
+    "watchdog>=6.0.0",
 ]
 
 [tool.setuptools]
@@ -32,7 +33,7 @@ sparkrobot-robot-agent = "main:main"
 # ============================
 
 [tool.ruff]
-line-length = 120
+line-length = 200
 exclude = ["build", ".venv", ".git", "__pycache__"]
 
 [tool.ruff.lint]

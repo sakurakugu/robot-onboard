@@ -2,7 +2,8 @@
 """
 机器狗客户端
 功能：
-- 配置管理（~/sparkrobot/config/robot-agent.toml）
+- 配置管理（~/sparkrobot/config/config.toml）
+- 配置热更新（watchdog 监听）
 - WebSocket 通信
 - 心跳保持
 - 接收音频回复（opus）
@@ -56,11 +57,19 @@ class RobotClient:
         # 确保目录存在
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
+        # 初始化配置
         self.config_store = Config.instance(workspace, self.project_name)
         self.config = self.config_store.get()
 
         # 设置日志
         self._初始化日志()
+
+        # 启动配置文件监听（热更新）
+        if self.config_store.启动配置文件监听():
+            self.logger.info("配置文件监听已启动")
+            self.config_store.如果配置变化(self._处理配置变化)
+        else:
+            self.logger.warning("配置文件监听启动失败，热更新功能不可用")
 
         self.ws_manager = WebSocketManager(self.config, self.logger)
         self.process_controller = ProcessController(self.logger)
@@ -100,14 +109,24 @@ class RobotClient:
         """ 初始化机器人版本 """
         version = 检测机器人运控版本()
         if version:
-            self.config.setdefault("robot", {})
-            self.config["robot"]["version"] = version
-            self.config_store.save(self.config)
+            # 使用新的扁平化配置格式
+            self.config_store.set("robot_version", version)
+            self.config = self.config_store.get()
 
         # 重连策略配置
         self.initial_reconnect_interval = self.config["server"].get("reconnect_interval", 5)
         self.max_reconnect_interval = 60
         self.current_reconnect_interval = self.initial_reconnect_interval
+
+    def _处理配置变化(self, new_config: Dict[str, Any]) -> None:
+        """配置变更回调"""
+        self.logger.info("检测到配置变更，正在更新...")
+        self.config = new_config
+        # 更新相关组件的配置
+        self.ws_manager.config = new_config
+        self.audio_capture.config = new_config
+        # 更新重连间隔
+        self.initial_reconnect_interval = self.config["server"].get("reconnect_interval", 5)
 
 
     def _初始化日志(self) -> None:
@@ -257,7 +276,7 @@ class RobotClient:
                     if not await self._确保与服务器连接():
                         continue
                     tasks = self._构建异步任务()
-                    
+
                     if not tasks:
                         await asyncio.sleep(1)
                         continue
@@ -276,7 +295,7 @@ class RobotClient:
                     # 取消剩余任务
                     for task in pending:
                         task.cancel()
-                    
+
                     # 等待剩余任务取消完成
                     if pending:
                         await asyncio.gather(*pending, return_exceptions=True)
@@ -382,6 +401,13 @@ class RobotClient:
         except Exception:
             pass
         try:
+            # 停止配置文件监听
+            self.config_store.停止配置文件监听()
+            self.logger.info("配置文件监听已停止")
+        except Exception:
+            pass
+        try:
+            # 保存配置（使用扁平格式）
             self.config_store.save(self.config)
             self.logger.info("配置已保存")
         except Exception:
