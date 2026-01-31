@@ -12,10 +12,11 @@ dependencies = [
     "sparkrobot-common",
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
+    "zeroconf>=0.131.0",
 ]
 
 [tool.setuptools]
-py-modules = ["server", "config_manager"]
+py-modules = ["server", "config_manager", "mdns_service"]
 
 # ============================
 # 下面是 lint/typecheck 配置

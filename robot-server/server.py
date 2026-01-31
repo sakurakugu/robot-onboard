@@ -7,7 +7,9 @@ Robot Server - 机器狗配置服务器
 2. 配置文件管理（读取/修改/重置）
 3. 提供Web界面进行配置
 4. 提供HTTP API供robot-agent调用
+5. mDNS服务广播（局域网自动发现）
 """
+import atexit
 import os
 import subprocess
 
@@ -17,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from sparkrobot_common import CONFIG_DIR, get_config_field_info
 
 from config_manager import ConfigManager
+from mdns_service import init_mdns_service
 
 PORT = 8080
 
@@ -25,6 +28,12 @@ app = FastAPI(title="Robot Server", description="机器狗配置服务器")
 
 # 创建配置管理器
 config_manager = ConfigManager()
+
+# 初始化 mDNS 服务
+mdns_service = init_mdns_service(config_manager, PORT)
+
+# 注册退出时停止 mDNS 服务
+atexit.register(mdns_service.stop)
 
 
 # ==================== 配置API ====================

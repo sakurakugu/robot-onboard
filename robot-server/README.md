@@ -7,6 +7,7 @@
 - **配置管理**: 读取、写入、重置配置文件
 - **WiFi 配置**: 扫描和连接 WiFi 网络
 - **Web 界面**: 提供配置页面
+- **mDNS 广播**: 自动在局域网广播服务，支持 robot-cloud 自动发现
 
 ## 安装
 
@@ -24,6 +25,11 @@ python server.py
 
 服务器将运行在 `http://0.0.0.0:8080`。
 
+启动后会自动通过 mDNS 广播以下信息：
+- 服务类型: `_sparkrobot._tcp.local.`
+- 机器人 UUID、名称、型号、版本
+- IP 地址和端口
+
 ## API
 
 ### 配置 API
@@ -40,6 +46,20 @@ python server.py
 
 - `GET /api/v1/wifi/scan` - 扫描 WiFi 网络
 - `POST /api/v1/wifi/connect` - 连接 WiFi
+
+## mDNS 服务发现
+
+Robot Server 启动后会自动在局域网广播 mDNS 服务，robot-cloud 可以通过 `/api/v1/robots/discover` 接口自动发现局域网内的所有机器人。
+
+### TXT 记录
+
+广播的 TXT 记录包含：
+- `uuid`: 机器人唯一标识
+- `name`: 机器人名称
+- `model`: 机器人型号
+- `version`: 运控版本
+- `ip`: IP 地址
+- `port`: 服务端口
 
 ## 配置文件
 
