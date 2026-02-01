@@ -72,7 +72,7 @@ class CNLevelFormatter(logging.Formatter):
             record.levelname = original
 
 
-def _resolve_console_stream() -> TextIO | None:
+def _解析控制台输出流() -> TextIO | None:
     """解析控制台输出流"""
     for stream in (sys.stdout, sys.stderr):
         if isinstance(stream, io.TextIOBase) and stream.isatty():
@@ -147,7 +147,7 @@ class DailySwitchingHandler(logging.Handler):
         finally:
             super().close()
 
-
+# 传入同一个名称，就会返回同一个 logger 实例
 def get_logger(name: str | None = None) -> logging.Logger:
     """获取 logger 实例"""
     return logging.getLogger(name or ORG_NAME)
@@ -194,7 +194,7 @@ def configure_logger(
     )
 
     handlers: list[logging.Handler] = [file_handler]
-    console_stream = _resolve_console_stream()
+    console_stream = _解析控制台输出流()
     if console_stream is not None:
         console_handler = logging.StreamHandler(console_stream)
         console_formatter = CNLevelFormatter(

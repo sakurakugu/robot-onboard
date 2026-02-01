@@ -1,3 +1,4 @@
+# 该SDK目前只支持Linux
 import platform
 import sys
 from pathlib import Path
@@ -9,7 +10,7 @@ lib_dir = Path(__file__).parent / "lib" / "zsl-1" / arch
 sys.path.insert(0, str(lib_dir))
 
 try:
-    import mc_sdk_zsl_1_py as 小型点足狗SDK # type: ignore[import-not-found]
+    import mc_sdk_zsl_1_py as 小型点足狗SDK  # type: ignore[import-not-found]
 except ImportError as e:
     raise ImportError(f"无法导入 mc_sdk_zsl_1_py，请检查 {lib_dir} 下是否存在 .so 文件") from e
 

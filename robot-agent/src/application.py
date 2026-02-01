@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, Optional
 from sparkrobot_common import (
     WORKSPACE_DIR,
     configure_logger,
-    detect_robot_version,
+    检测机器人运控版本,
 )
 
 from core.config import Config
@@ -113,7 +113,7 @@ class RobotClient:
         self.action_executor: Optional[Callable] = None
 
         """ 初始化机器人版本 """
-        version = detect_robot_version()
+        version = 检测机器人运控版本()
         if version:
             # 使用新的扁平化配置格式
             self.config_store.set_via_server("robot.version", version)

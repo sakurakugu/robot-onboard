@@ -16,13 +16,13 @@ from sparkrobot_common.const import (
     ROBOT_SERVER_PORT,
     ROBOT_SERVER_URL,
     WORKSPACE_DIR,
+    获取字段信息,
+    获取所有分组,
+    获取配置项字段信息,
+    获取默认配置,
+    通过完整键名获取字段信息,
     # 配置字段
-    ConfigField,
-    get_all_sections,
-    get_config_field_info,
-    get_default_config,
-    get_field_by_full_key,
-    get_field_info,
+    配置字段,
 )
 from sparkrobot_common.logger import (
     configure_logger,
@@ -30,11 +30,11 @@ from sparkrobot_common.logger import (
 )
 from sparkrobot_common.toml_parser import TomlParser
 from sparkrobot_common.utils import (
-    detect_robot_version,
-    generate_robot_name,
-    generate_uuid,
-    get_ipc_path,
-    get_local_ip,
+    生成UUID,
+    获取IPC路径,
+    获取本机IP,
+    检测机器人运控版本,
+    生成机器人名称,
 )
 
 __version__ = "0.1.0"
@@ -52,23 +52,23 @@ __all__ = [
     "ROBOT_SERVER_URL",
     "DEFAULT_SERVER_ADDR",
     # 配置字段
-    "ConfigField",
+    "配置字段",
     "DEFAULT_CONFIG_FIELDS",
     "READONLY_FIELDS",
-    "get_default_config",
-    "get_all_sections",
-    "get_field_info",
-    "get_field_by_full_key",
-    "get_config_field_info",
+    "获取默认配置",
+    "获取所有分组",
+    "获取字段信息",
+    "通过完整键名获取字段信息",
+    "获取配置项字段信息",
     # TOML 解析
     "TomlParser",
     # 日志
     "configure_logger",
     "get_logger",
     # 工具
-    "generate_uuid",
-    "generate_robot_name",
-    "get_local_ip",
-    "get_ipc_path",
-    "detect_robot_version",
+    "生成UUID",
+    "生成机器人名称",
+    "获取本机IP",
+    "获取IPC路径",
+    "检测机器人运控版本",
 ]

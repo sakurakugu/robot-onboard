@@ -1,9 +1,13 @@
 import asyncio
 from typing import Any, Awaitable, Callable, Dict, cast
 
-from sparkrobot_common import generate_uuid
+from sparkrobot_common import 生成UUID
 
 try:
+    import os
+    dll_path = r"C:\Software\Deps\C++\vcpkg\installed\x64-windows\bin"
+    os.add_dll_directory(dll_path)
+
     import numpy as np
     import opuslib as opuslib
     import sounddevice as sd
@@ -141,7 +145,7 @@ class AudioCapture:
         """ 处理语音块 """
         session_id = state["session_id"]
         if session_id is None:
-            session_id = generate_uuid()
+            session_id = 生成UUID()
             state["session_id"] = session_id
             state["seq"] = 0
             state["silence_frames"] = 0

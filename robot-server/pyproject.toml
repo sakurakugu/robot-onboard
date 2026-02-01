@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["server", "config_manager", "mdns_service"]
+packages = ["robot_server", "robot_server.路由", "robot_server.服务"]
 
 # ============================
 # 下面是 lint/typecheck 配置

@@ -3,13 +3,12 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 
 class ProcessController:
     def __init__(self, logger):
         self.logger = logger
-        self.process: Optional[subprocess.Popen] = None
+        self.process: subprocess.Popen = None
 
     def 启动(self, script_path: str) -> bool:
         try:

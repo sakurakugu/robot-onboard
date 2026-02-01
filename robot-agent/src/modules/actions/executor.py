@@ -4,7 +4,7 @@ import socket
 import threading
 import time
 
-from sparkrobot_common import ORG_NAME, configure_logger, get_ipc_path, get_logger
+from sparkrobot_common import ORG_NAME, 获取IPC路径, configure_logger, get_logger
 
 from core.config import Config
 from core.dog import sdk
@@ -290,7 +290,7 @@ def main():
         logger.info("机器人连接初始化成功。")
 
         robot_uuid = config.get("robot", {}).get("uuid", "unknown")
-        ipc_path = get_ipc_path(ORG_NAME, APP_NAME)
+        ipc_path = 获取IPC路径(ORG_NAME, APP_NAME)
 
         # 启动一个线程，循环发送机器人状态到IPC路径
         threading.Thread(target=_循环发送机器人状态, args=(app, robot_uuid, ipc_path), daemon=True).start()

@@ -32,8 +32,8 @@ from sparkrobot_common import (
     # 配置字段
     DEFAULT_CONFIG_FIELDS,
     READONLY_FIELDS,
-    get_default_config,
-    get_field_info,
+    获取默认配置,
+    获取字段信息,
     
     # TOML 解析
     TomlParser,
@@ -43,8 +43,8 @@ from sparkrobot_common import (
     get_logger,
     
     # 工具
-    generate_uuid,
-    get_local_ip,
+    生成UUID,
+    获取本机IP,
 )
 ```
 

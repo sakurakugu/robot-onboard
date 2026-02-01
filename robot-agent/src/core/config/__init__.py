@@ -23,7 +23,7 @@ from sparkrobot_common import (
     ROBOT_SERVER_URL,
     WORKSPACE_DIR,
     TomlParser,
-    get_default_config,
+    获取默认配置,
 )
 
 # 尝试导入 watchdog
@@ -135,7 +135,7 @@ class Config:
             file_config = {}
 
         # 合并默认配置
-        default_config = get_default_config()
+        default_config = 获取默认配置()
         self._config = self._merge_config(default_config, file_config)
 
     def _merge_config(

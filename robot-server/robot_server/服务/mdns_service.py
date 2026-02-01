@@ -6,25 +6,13 @@ mDNS 服务模块 - 在局域网广播机器人服务
 import socket
 from typing import TYPE_CHECKING
 
+from sparkrobot_common.utils import 获取本机IP
 from zeroconf import ServiceInfo, Zeroconf
 
 if TYPE_CHECKING:
-    from config_manager import ConfigManager
+    from .config_service import ConfigManager
 
-# mDNS 服务类型
 SERVICE_TYPE = "_sparkrobot._tcp.local."
-
-
-def get_local_ip() -> str:
-    """获取本机 IP 地址"""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
 
 
 class MDNSService:
@@ -43,9 +31,9 @@ class MDNSService:
         self.zeroconf: Zeroconf | None = None
         self.service_info: ServiceInfo | None = None
 
-    def _get_robot_info(self) -> dict[str, str]:
+    def _获取机器人信息(self) -> dict[str, str]:
         """从配置中获取机器人信息"""
-        config = self.config_manager.get()
+        config = self.config_manager.获取()
         robot_config = config.get("robot", {})
 
         return {
@@ -55,7 +43,7 @@ class MDNSService:
             "version": robot_config.get("version", "0.0.0"),
         }
 
-    def start(self) -> bool:
+    def 启动(self) -> bool:
         """
         启动 mDNS 服务广播
 
@@ -63,19 +51,17 @@ class MDNSService:
             是否成功启动
         """
         try:
-            robot_info = self._get_robot_info()
+            robot_info = self._获取机器人信息()
             robot_uuid = robot_info["uuid"]
 
             if not robot_uuid:
                 print("[mDNS] 警告: 机器人 UUID 为空，无法启动 mDNS 服务")
                 return False
 
-            local_ip = get_local_ip()
+            local_ip = 获取本机IP()
 
-            # 服务名称: sparkrobot-<uuid前8位>
             service_name = f"sparkrobot-{robot_uuid[:8]}.{SERVICE_TYPE}"
 
-            # 服务属性（TXT 记录）
             properties = {
                 "uuid": robot_uuid,
                 "name": robot_info["name"] or f"机器狗-{robot_uuid[:4]}",
@@ -97,7 +83,7 @@ class MDNSService:
             self.zeroconf = Zeroconf()
             self.zeroconf.register_service(self.service_info)
 
-            print(f"[mDNS] 服务已启动:")
+            print("[mDNS] 服务已启动:")
             print(f"       服务名称: {service_name}")
             print(f"       IP: {local_ip}:{self.port}")
             print(f"       UUID: {robot_uuid}")
@@ -109,7 +95,7 @@ class MDNSService:
             print(f"[mDNS] 启动失败: {e}")
             return False
 
-    def stop(self) -> None:
+    def 停止(self) -> None:
         """停止 mDNS 服务广播"""
         try:
             if self.zeroconf and self.service_info:
@@ -122,23 +108,22 @@ class MDNSService:
             self.zeroconf = None
             self.service_info = None
 
-    def update(self) -> None:
+    def 更新(self) -> None:
         """更新 mDNS 服务信息（配置变更时调用）"""
         if self.zeroconf and self.service_info:
-            self.stop()
-            self.start()
+            self.停止()
+            self.启动()
 
 
-# 全局实例
 _mdns_service: MDNSService | None = None
 
 
-def get_mdns_service() -> MDNSService | None:
+def 获取_mDNS_服务单例() -> MDNSService | None:
     """获取全局 mDNS 服务实例"""
     return _mdns_service
 
 
-def init_mdns_service(config_manager: "ConfigManager", port: int = 8080) -> MDNSService:
+def 初始化并启动_mDNS_服务(config_manager: "ConfigManager", port: int = 8080) -> MDNSService:
     """
     初始化并启动 mDNS 服务
 
@@ -151,5 +136,5 @@ def init_mdns_service(config_manager: "ConfigManager", port: int = 8080) -> MDNS
     """
     global _mdns_service
     _mdns_service = MDNSService(config_manager, port)
-    _mdns_service.start()
+    _mdns_service.启动()
     return _mdns_service

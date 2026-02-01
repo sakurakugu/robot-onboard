@@ -23,13 +23,13 @@ BASE_DIR=$(dirname "$SCRIPT_DIR")
 SERVICE_NAME="wifi-server.service"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME"
 
-echo -e "${GREEN}正在安装机器狗 Robot Server...${NC}"
+echo -e "${GREEN}正在安装机器狗本体服务器 Robot Server...${NC}"
 echo "工作目录: $BASE_DIR"
 
 # 1. 赋予相关脚本执行权限
 echo "正在设置文件权限..."
 chmod +x "$SCRIPT_DIR/start.sh"
-chmod +x "$BASE_DIR/server.py"
+chmod +x "$BASE_DIR/main.py"
 
 # 2. 生成 systemd 服务文件
 # 使用当前路径动态生成，确保路径正确
@@ -43,7 +43,7 @@ After=network.target
 Type=simple
 User=firefly
 WorkingDirectory=$BASE_DIR
-ExecStart=/usr/bin/python3 server.py
+ExecStart=/usr/bin/python3 main.py
 Restart=always
 RestartSec=10
 

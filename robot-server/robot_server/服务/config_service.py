@@ -23,9 +23,9 @@ from sparkrobot_common import (
     DEFAULT_CONFIG_FIELDS,
     READONLY_FIELDS,
     TomlParser,
-    get_all_sections,
-    get_default_config,
-    get_field_info,
+    获取字段信息,
+    获取所有分组,
+    获取默认配置,
 )
 
 
@@ -41,30 +41,30 @@ class ConfigManager:
         self.config_file = config_file or CONFIG_FILE
         self.config_file.parent.mkdir(parents=True, exist_ok=True)
         self._config: dict[str, dict[str, Any]] = {}
-        self._load()
+        self._加载()
 
-    def _load(self) -> None:
+    def _加载(self) -> None:
         """加载配置文件"""
         if not self.config_file.exists():
             # 文件不存在，创建默认配置
-            self._config = get_default_config()
-            self._save()
+            self._config = 获取默认配置()
+            self._保存()
             return
 
         # 读取现有配置
         file_config = TomlParser.parse(self.config_file.read_text(encoding="utf-8"))
 
         # 合并默认配置（填补缺失项）
-        default_config = get_default_config()
-        merged = self._merge_config(default_config, file_config)
+        default_config = 获取默认配置()
+        merged = self._合并配置(default_config, file_config)
 
         self._config = merged
 
         # 如果有变更（填补了缺失项），保存配置
         if merged != file_config:
-            self._save()
+            self._保存()
 
-    def _merge_config(
+    def _合并配置(
         self,
         default: dict[str, dict[str, Any]],
         current: dict[str, dict[str, Any]],
@@ -89,7 +89,7 @@ class ConfigManager:
 
         return merged
 
-    def _save(self) -> None:
+    def _保存(self) -> None:
         """保存配置到文件"""
         # 构建字段信息用于注释
         field_info: dict[str, dict[str, Any]] = {}
@@ -102,7 +102,7 @@ class ConfigManager:
 
         content = TomlParser.dumps(
             self._config,
-            sections=get_all_sections(),
+            sections=获取所有分组(),
             field_info=field_info,
             header_lines=[
                 "# 机器狗配置文件",
@@ -112,12 +112,12 @@ class ConfigManager:
 
         self.config_file.write_text(content, encoding="utf-8")
 
-    def get(self, key: str | None = None) -> Any:
+    def 获取(self, key: str | None = None) -> Any:
         """获取配置
 
         Args:
             key: 配置键名，格式为 "section.key" 或 "section"，如果为None则返回全部配置
-        
+
         Returns:
             配置值或配置字典
         """
@@ -130,7 +130,7 @@ class ConfigManager:
         else:
             return self._config.get(key)
 
-    def set(self, key: str, value: Any) -> bool:
+    def 设置(self, key: str, value: Any) -> bool:
         """设置配置项
 
         Args:
@@ -150,12 +150,12 @@ class ConfigManager:
         section, subkey = key.split(".", 1)
 
         # 验证键名是否有效
-        field = get_field_info(section, subkey)
+        field = 获取字段信息(section, subkey)
         if field is None:
             return False
 
         # 验证并转换类型
-        validated_value = self._validate_value(value, field)
+        validated_value = self._验证并转换值类型(value, field)
         if validated_value is None and field.default != "":
             return False
 
@@ -163,10 +163,10 @@ class ConfigManager:
             self._config[section] = {}
 
         self._config[section][subkey] = validated_value if validated_value is not None else field.default
-        self._save()
+        self._保存()
         return True
 
-    def set_many(self, updates: dict[str, Any]) -> dict[str, bool]:
+    def 批量设置(self, updates: dict[str, Any]) -> dict[str, bool]:
         """批量设置配置项
 
         Args:
@@ -203,13 +203,13 @@ class ConfigManager:
                 continue
 
             section, subkey = key.split(".", 1)
-            field = get_field_info(section, subkey)
+            field = 获取字段信息(section, subkey)
 
             if field is None:
                 results[key] = False
                 continue
 
-            validated_value = self._validate_value(value, field)
+            validated_value = self._验证并转换值类型(value, field)
             if validated_value is None and field.default != "":
                 results[key] = False
             else:
@@ -220,11 +220,11 @@ class ConfigManager:
                 changed = True
 
         if changed:
-            self._save()
+            self._保存()
 
         return results
 
-    def _validate_value(self, value: Any, field: Any) -> Any:
+    def _验证并转换值类型(self, value: Any, field: Any) -> Any:
         """验证并转换值类型"""
         try:
             if field.value_type == "string":
@@ -258,11 +258,11 @@ class ConfigManager:
 
         return value
 
-    def reload(self) -> None:
+    def 重新加载(self) -> None:
         """重新加载配置"""
-        self._load()
+        self._加载()
 
-    def reset(self, key: str | None = None) -> bool:
+    def 重置(self, key: str | None = None) -> bool:
         """重置配置为默认值
 
         Args:
@@ -271,7 +271,7 @@ class ConfigManager:
         Returns:
             是否重置成功
         """
-        default_config = get_default_config()
+        default_config = 获取默认配置()
 
         if key is None:
             # 重置全部，但保留只读字段的值
@@ -304,7 +304,7 @@ class ConfigManager:
                 self._config[section] = {}
             self._config[section][subkey] = default_config[section][subkey]
 
-        self._save()
+        self._保存()
         return True
 
     @property
@@ -322,7 +322,7 @@ class ConfigManager:
 _manager: ConfigManager | None = None
 
 
-def get_config_manager() -> ConfigManager:
+def 获取配置管理器单例() -> ConfigManager:
     """获取全局配置管理器实例"""
     global _manager
     if _manager is None:
@@ -332,6 +332,6 @@ def get_config_manager() -> ConfigManager:
 
 __all__ = [
     "ConfigManager",
-    "get_config_manager",
+    "获取配置管理器单例",
     "CONFIG_DIR",
 ]

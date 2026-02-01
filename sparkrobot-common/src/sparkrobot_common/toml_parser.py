@@ -46,12 +46,12 @@ class TomlParser:
             if kv_match and current_section is not None:
                 key = kv_match.group(1)
                 value_str = kv_match.group(2).strip()
-                config[current_section][key] = TomlParser._parse_value(value_str)
+                config[current_section][key] = TomlParser._解析值字符串(value_str)
 
         return config
 
     @staticmethod
-    def _parse_value(value_str: str) -> Any:
+    def _解析值字符串(value_str: str) -> Any:
         """解析值字符串"""
         value_str = value_str.strip()
 
@@ -67,8 +67,8 @@ class TomlParser:
             if not inner:
                 return []
             items = []
-            for item in TomlParser._split_array_items(inner):
-                items.append(TomlParser._parse_value(item.strip()))
+            for item in TomlParser._分割数组元素(inner):
+                items.append(TomlParser._解析值字符串(item.strip()))
             return items
 
         # 字符串（带引号）
@@ -87,7 +87,7 @@ class TomlParser:
         return value_str
 
     @staticmethod
-    def _split_array_items(inner: str) -> list[str]:
+    def _分割数组元素(inner: str) -> list[str]:
         """分割数组元素"""
         items: list[str] = []
         current = ""

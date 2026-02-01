@@ -55,7 +55,7 @@ echo "配置文件位置: $WORKSPACE_DIR/config/config.toml"
 echo "日志文件位置: $LOG_DIR"
 
 # 运行Python服务器
-exec -a "$PROCESS_NAME" python3 server.py &
+exec -a "$PROCESS_NAME" python3 main.py &
 echo $! > "$PID_FILE"
 
 echo "Robot Server 启动成功 (PID: $(cat $PID_FILE))"
