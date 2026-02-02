@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Optional
 import shutil
 
+from sparkrobot_common import get_logger
+
 class ProcessController:
-    def __init__(self, logger):
-        self.logger = logger
+    def __init__(self):
+        self.logger = get_logger("robot-agent")
         self.process: Optional[subprocess.Popen] = None
 
     def 启动(self, script_path: str) -> bool:

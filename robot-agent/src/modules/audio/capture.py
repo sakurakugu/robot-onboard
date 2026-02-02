@@ -15,11 +15,12 @@ try:
 except ImportError as e:
     raise ImportError(f"缺少音频依赖，请安装: numpy sounddevice opuslib (导入错误: {e})") from e
 
+from sparkrobot_common import get_logger
+
 class AudioCapture:
     def __init__(
         self,
         config: Dict[str, Any],
-        logger,
         is_connected: Callable[[], bool],
         is_upload_connected: Callable[[], bool],
         send_audio_start: Callable[[str, int], Awaitable[None]],
@@ -27,7 +28,7 @@ class AudioCapture:
         send_audio_end: Callable[[str, str], Awaitable[None]],
     ):
         self.config = config
-        self.logger = logger
+        self.logger = get_logger("robot-agent")
         self.is_connected = is_connected
         self.is_upload_connected = is_upload_connected
         self.发送音频开始 = send_audio_start

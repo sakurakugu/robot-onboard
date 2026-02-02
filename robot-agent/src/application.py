@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, Optional
 from sparkrobot_common import (
     WORKSPACE_DIR,
     configure_logger,
+    get_logger,
     检测机器人运控版本,
 )
 
@@ -77,16 +78,15 @@ class RobotClient:
         else:
             self.logger.warning("配置文件监听启动失败，热更新功能不可用")
 
-        self.ws_manager = WebSocketManager(self.config, self.logger)
-        self.process_controller = ProcessController(self.logger)
-        self.joystick_controller = JoystickController(self.process_controller, self.logger)
+        self.ws_manager = WebSocketManager(self.config)
+        self.process_controller = ProcessController()
+        self.joystick_controller = JoystickController(self.process_controller)
         self._executor = ThreadPoolExecutor(max_workers=1)
         self.audio_task: Optional[asyncio.Task] = None
 
         """ 初始化音频捕获 """
         self.audio_capture = AudioCapture(
             self.config,
-            self.logger,
             is_connected=lambda: self.ws_manager.connected,
             is_upload_connected=lambda: self.ws_manager.connected_audio_upload,
             send_audio_start=self.发送音频开始,
@@ -96,7 +96,7 @@ class RobotClient:
         )
 
         """ 初始化 IPC 服务器 """
-        self.ipc_server = IpcServer(self.project_name, self.logger, self.发送状态)
+        self.ipc_server = IpcServer(self.project_name, self.发送状态)
 
         """ 初始化消息处理函数 """
         self.message_handlers: Dict[str, Callable] = {
@@ -107,6 +107,9 @@ class RobotClient:
             "audio_control": self._处理音频控制,
             "stop_audio": self._处理停止音频播放,
             "error": self._处理服务器错误,
+            "audio_stream_start": self._处理音频流开始,
+            "audio_stream_chunk": self._处理音频流数据块,
+            "audio_stream_end": self._处理音频流结束,
         }
 
         """ 初始化动作执行函数 """
@@ -229,7 +232,7 @@ class RobotClient:
 
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
         """ 处理文本响应消息 """
-        await 处理文本响应(data, self.logger, self.action_executor, self._executor)
+        await 处理文本响应(data, self.action_executor, self._executor)
 
     async def _处理音频控制(self, data: Dict[str, Any]) -> None:
         """ 处理音频控制消息 """
@@ -239,14 +242,14 @@ class RobotClient:
 
     async def _处理音频响应并播放(self, data: Dict[str, Any]) -> None:
         """ 处理音频响应消息 """
-        处理音频响应并播放(data, self.logger, self.log_dir / "media")
+        处理音频响应并播放(data, self.log_dir / "media")
 
     async def _处理停止音频播放(self, data: Dict[str, Any]) -> None:
         """ 处理停止音频播放消息 """
-        停止当前音频播放(self.logger)
+        停止当前音频播放()
 
     async def _处理动作指令(self, data: Dict[str, Any]) -> None:
-        await 处理动作指令(data, self.logger, self.action_executor, self._executor)
+        await 处理动作指令(data, self.action_executor, self._executor)
 
     async def _处理控制指令(self, data: Dict[str, Any]) -> None:
         """ 处理控制指令消息 """
@@ -257,6 +260,19 @@ class RobotClient:
         code = data.get("code", "")
         message = data.get("message", "")
         self.logger.error(f"服务器错误: {code} - {message}")
+
+    async def _处理音频流开始(self, data: Dict[str, Any]) -> None:
+        """ 处理音频流开始消息 """
+        self.logger.debug("音频流开始")
+
+    async def _处理音频流数据块(self, data: Dict[str, Any]) -> None:
+        """ 处理音频流数据块消息 """
+        # 音频流数据块由底层处理，这里不需要额外处理
+        pass
+
+    async def _处理音频流结束(self, data: Dict[str, Any]) -> None:
+        """ 处理音频流结束消息 """
+        self.logger.debug("音频流结束")
 
     async def _处理收到的消息(self, message: Dict[str, Any]) -> None:
         """ 处理收到的消息 """
@@ -404,7 +420,7 @@ class RobotClient:
     async def 取消初始化(self) -> None:
         """ 取消初始化客户端 """
         try:
-            停止当前音频播放(self.logger)
+            停止当前音频播放()
         except Exception:
             pass
         try:

@@ -1,21 +1,21 @@
 import json
-import logging
 from typing import Any, Dict, Optional
+
+from sparkrobot_common import get_logger
 
 
 class JoystickController:
     """手柄控制器"""
 
-    def __init__(self, process_controller: Any, logger: logging.Logger):
+    def __init__(self, process_controller: Any):
         """
         初始化手柄控制器
 
         Args:
             process_controller: 进程控制器实例
-            logger: 日志记录器
         """
         self.process_controller = process_controller
-        self.logger = logger
+        self.logger = get_logger("robot-agent")
 
     def 处理命令(self, data: Dict[str, Any]) -> None:
         """

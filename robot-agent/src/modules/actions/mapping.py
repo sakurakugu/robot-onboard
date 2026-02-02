@@ -2,6 +2,10 @@ import asyncio
 import re
 from typing import Any, Dict, Optional
 
+from sparkrobot_common import get_logger
+
+logger = get_logger("robot-agent")
+
 
 def 解析动作格式(text: str) -> Optional[Dict[str, Any]]:
     """
@@ -38,12 +42,11 @@ def 解析动作格式(text: str) -> Optional[Dict[str, Any]]:
     return {"action": action, "parameters": parameters}
 
 
-async def 处理文本响应(data: Dict[str, Any], logger, action_executor, executor) -> None:
+async def 处理文本响应(data: Dict[str, Any], action_executor, executor) -> None:
     """
     处理文本响应，解析动作格式并执行动作。
 
     :param data: 包含文本响应的字典，必须包含 "text" 键。
-    :param logger: 日志记录器实例，用于记录日志信息。
     :param action_executor: 动作执行器函数，用于执行具体的动作。
     :param executor: 线程池执行器，用于在独立线程中执行动作执行器。
     """
@@ -74,12 +77,11 @@ async def 处理文本响应(data: Dict[str, Any], logger, action_executor, exec
         logger.warning("未设置动作执行器，无法执行动作")
 
 
-async def 处理动作指令(data: Dict[str, Any], logger, action_executor, executor) -> None:
+async def 处理动作指令(data: Dict[str, Any], action_executor, executor) -> None:
     """
     处理动作指令，将指令发送给动作执行器执行。
 
     :param data: 包含动作指令的字典，必须包含 "action" 和 "parameters" 键。
-    :param logger: 日志记录器实例，用于记录日志信息。
     :param action_executor: 动作执行器函数，用于执行具体的动作。
     :param executor: 线程池执行器，用于在独立线程中执行动作执行器。
     """

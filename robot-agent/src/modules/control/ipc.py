@@ -2,13 +2,13 @@ import asyncio
 import json
 from typing import Any, Awaitable, Callable, Dict, Optional
 
-from sparkrobot_common import ORG_NAME, 获取IPC路径
+from sparkrobot_common import ORG_NAME, get_logger, 获取IPC路径
 
 
 class IpcServer:
-    def __init__(self, project_name: str, logger, on_status: Callable[[Dict[str, Any]], Awaitable[None]]):
+    def __init__(self, project_name: str, on_status: Callable[[Dict[str, Any]], Awaitable[None]]):
         self.project_name = project_name
-        self.logger = logger
+        self.logger = get_logger("robot-agent")
         self.on_status = on_status
         self._server: Optional[asyncio.AbstractServer] = None
 
