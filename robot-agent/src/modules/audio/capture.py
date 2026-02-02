@@ -5,8 +5,9 @@ from sparkrobot_common import 生成UUID
 
 try:
     import os
-    dll_path = r"C:\Software\Deps\C++\vcpkg\installed\x64-windows\bin"
-    os.add_dll_directory(dll_path)
+    if os.name == "nt":
+        dll_path = r"C:\Software\Deps\C++\vcpkg\installed\x64-windows\bin"
+        os.add_dll_directory(dll_path)
 
     import numpy as np
     import opuslib as opuslib

@@ -1,49 +1,48 @@
 #!/bin/bash
-# 停止机器狗客户端
 
+# Robot Agent 停止脚本
+
+set -e
+
+# 颜色定义
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# 定义路径
+PROCESS_NAME="robot-agent"
 WORKSPACE_DIR="$HOME/sparkrobot"
-LOGS_DIR="$WORKSPACE_DIR/logs/robot-agent"
 PID_DIR="$WORKSPACE_DIR/logs/pid"
-PID_FILE="$PID_DIR/robot-agent.pid"
-PROCESS_NAME="robot_client.py"
-STDOUT_LOG="$LOGS_DIR/client_stdout_$(date +'%Y%m%d').log"
+PID_FILE="$PID_DIR/${PROCESS_NAME}.pid"
+SCRIPT_NAME="main.py"
 
-log() {
-    # 获取 ISO 格式时间戳
-    local timestamp
-    timestamp=$(date '+%Y-%m-%dT%H:%M:%S%:z')
-    timestamp=${timestamp//Z/+00:00}
-
-    local msg="[$timestamp] $1"
-    # echo 输出内容
-    # | tee -a 追加到文件
-    echo "$msg" | tee -a "$STDOUT_LOG"
-}
-
-if [ ! -f "$PID_FILE" ]; then
-    log "未找到 PID 文件，客户端可能未运行。"
+# 检查 systemd 服务是否在运行
+SERVICE_NAME="${PROCESS_NAME}.service"
+if systemctl is-active --quiet "$SERVICE_NAME"; then
+    echo -e "${BLUE}检测到 $SERVICE_NAME 正在运行，请先停止它: sudo systemctl stop $SERVICE_NAME${NC}"
     exit 1
 fi
-
-PID=$(cat "$PID_FILE")
-
-# 如果进程存在且名称匹配
-if ps -p $PID -o args= | grep -q "$PROCESS_NAME"; then
-    log "正在停止客户端 (PID: $PID)"
-    kill $PID
-    # 等待进程完全退出（最多等待5秒）
-    for i in {1..5}; do
-        if ! ps -p $PID > /dev/null; then break; fi
-        sleep 1
-    done
-    # 如果还没强制退出，使用 kill -9
-    if ps -p $PID > /dev/null; then
-        log "进程未响应，强制关闭..."
-        kill -9 $PID
+    
+# 检查 PID 文件
+if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE")
+    if ps -p "$PID" -o comm= | grep -qx "$PROCESS_NAME"; then
+        echo -e "${BLUE}正在停止 $PROCESS_NAME (PID: $PID)...${NC}"
+        kill $PID
+        rm -f "$PID_FILE"
+        echo -e "${BLUE}$PROCESS_NAME 已停止${NC}"
+        exit 0
+    else
+        echo -e "${BLUE}进程已不存在，清理 PID 文件${NC}"
+        rm -f "$PID_FILE"
     fi
-    rm -f "$PID_FILE"
-    log "客户端已停止。"
+fi
+
+# 尝试通过进程名查找
+EXISTING_PID=$(pgrep -f "$PROCESS_NAME" 2>/dev/null || true)
+if [ -n "$EXISTING_PID" ]; then
+    echo -e "${BLUE}正在停止 $PROCESS_NAME (PID: $EXISTING_PID)...${NC}"
+    kill $EXISTING_PID
+    echo -e "${BLUE}$PROCESS_NAME 已停止${NC}"
 else
-    log "发现 PID $PID 但不属于 $PROCESS_NAME，可能是陈旧的 PID 文件。"
-    rm "$PID_FILE"
+    echo -e "${BLUE}$PROCESS_NAME 未运行${NC}"
 fi
