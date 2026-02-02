@@ -304,26 +304,42 @@ class RobotClient:
                         await asyncio.sleep(1)
                         continue
 
-                    # 等待任意一个任务完成
-                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                    # 使用 ALL_COMPLETED 模式，只有所有任务都完成才会返回
+                    # 单个次要通道断开不会影响其他任务，它们会在后台自动重连
+                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
 
-                    # 记录退出的任务
+                    # 检查是否有任务因异常退出
+                    should_reconnect = False
                     for task in done:
                         try:
                             if not task.cancelled():
-                                task.result()
+                                exc = task.exception()
+                                if exc:
+                                    self.logger.warning(f"子任务异常退出: {exc}")
+                                    should_reconnect = True
                         except Exception as e:
                             self.logger.warning(f"子任务退出: {e}")
+                            should_reconnect = True
 
-                    # 取消剩余任务
-                    for task in pending:
-                        task.cancel()
+                    # 只有主连接（business）断开才需要完全重连
+                    if not self.ws_manager.connected:
+                        should_reconnect = True
+                        self.logger.info("主连接已断开，准备重连...")
+                    
+                    if should_reconnect:
+                        # 取消剩余任务
+                        for task in pending:
+                            task.cancel()
 
-                    # 等待剩余任务取消完成
-                    if pending:
-                        await asyncio.gather(*pending, return_exceptions=True)
+                        # 等待剩余任务取消完成
+                        if pending:
+                            await asyncio.gather(*pending, return_exceptions=True)
 
-                    self.logger.info("任务组结束，准备重连...")
+                        self.logger.info("任务组结束，准备重连...")
+                    else:
+                        # 所有任务正常结束，继续运行
+                        self.logger.debug("所有任务正常结束")
+                        
                 except KeyboardInterrupt:
                     self.logger.info("收到中断信号，正在退出...")
                     break

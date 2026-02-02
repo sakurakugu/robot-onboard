@@ -220,8 +220,8 @@ class WebSocketManager:
                 message_str = await ws.recv()
                 message = json.loads(message_str)
                 await on_message(message)
-            except websockets.exceptions.ConnectionClosed:
-                self.logger.warning(f"连接已关闭: {channel}")
+            except websockets.exceptions.ConnectionClosed as e:
+                self.logger.warning(f"连接已关闭: {channel}, code={e.code}, reason={e.reason}")
                 if channel == "business":
                     self.connected = False
                 elif channel == "control":
@@ -231,11 +231,12 @@ class WebSocketManager:
                 elif channel == "audio_download":
                     self.connected_audio_download = False
                 
-                # 如果不是主连接断开，尝试重连该通道
+                # 如果不是主连接断开，尝试重连该通道（不阻塞当前循环）
                 if channel != "business" and self.connected and self.robot_uuid:
-                    self.logger.info(f"尝试重连通道: {channel}")
+                    self.logger.info(f"尝试后台重连通道: {channel}")
                     asyncio.create_task(self._自动重连通道(channel, on_message))
-                break
+                # 不要 break，让任务正常结束但不触发外层重连
+                return
             except Exception as e:
                 self.logger.error(f"接收消息失败({channel}): {e}")
                 await asyncio.sleep(1)
@@ -342,29 +343,50 @@ class WebSocketManager:
         max_retries = 3
         retry_delay = 5  # 秒
         
-        for attempt in range(1, max_retries + 1):
-            self.logger.info(f"尝试重连 {channel} (第 {attempt}/{max_retries} 次)")
-            await asyncio.sleep(retry_delay)
-            
-            if not self.connected:
-                self.logger.info(f"主连接已断开，停止重连 {channel}")
-                return
-            
-            success = await self._重连单个通道(channel)
-            if success:
-                # 重连成功，重启接收循环
-                ws_map = {
-                    "control": self.ws_control,
-                    "audio_upload": self.ws_audio_upload,
-                    "audio_download": self.ws_audio_download,
-                }
-                ws = ws_map.get(channel)
-                if ws:
-                    self.logger.info(f"重启 {channel} 接收循环")
-                    asyncio.create_task(self.接受消息循环(channel, ws, on_message))
-                return
-            
-            if attempt < max_retries:
-                self.logger.warning(f"重连 {channel} 失败，{retry_delay} 秒后重试...")
+        # 防止重复重连
+        if channel in self._reconnecting_channels:
+            self.logger.debug(f"通道 {channel} 已在重连中，跳过")
+            return
         
-        self.logger.error(f"重连 {channel} 失败，已达到最大重试次数")
+        self._reconnecting_channels.add(channel)
+        
+        try:
+            for attempt in range(1, max_retries + 1):
+                if not self.connected:
+                    self.logger.info(f"主连接已断开，停止重连 {channel}")
+                    return
+                
+                self.logger.info(f"尝试重连 {channel} (第 {attempt}/{max_retries} 次)")
+                
+                # 等待一段时间再重连，避免立即重连导致的循环
+                if attempt > 1:
+                    await asyncio.sleep(retry_delay)
+                else:
+                    # 第一次重连也稍微等待一下，避免服务器还没准备好
+                    await asyncio.sleep(1)
+                
+                if not self.connected:
+                    self.logger.info(f"主连接已断开，停止重连 {channel}")
+                    return
+                
+                success = await self._重连单个通道(channel)
+                if success:
+                    # 重连成功，重启接收循环
+                    ws_map = {
+                        "control": self.ws_control,
+                        "audio_upload": self.ws_audio_upload,
+                        "audio_download": self.ws_audio_download,
+                    }
+                    ws = ws_map.get(channel)
+                    if ws:
+                        self.logger.info(f"重启 {channel} 接收循环")
+                        # 创建新的接收循环任务
+                        asyncio.create_task(self.接受消息循环(channel, ws, on_message))
+                    return
+                
+                if attempt < max_retries:
+                    self.logger.warning(f"重连 {channel} 失败，{retry_delay} 秒后重试...")
+            
+            self.logger.error(f"重连 {channel} 失败，已达到最大重试次数")
+        finally:
+            self._reconnecting_channels.discard(channel)
