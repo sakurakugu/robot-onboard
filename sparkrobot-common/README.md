@@ -13,10 +13,9 @@ SparkRobot 通用库，提供配置管理、日志、工具函数等通用功能
 
 ```bash
 # 开发模式安装
+# 先进入当前目录（含有Readmd的目录）
+python -m pip install --upgrade pip setuptools wheel
 pip install -e .
-
-# 带 watchdog 支持（文件监听）
-pip install -e ".[watchdog]"
 ```
 
 ## 使用
@@ -28,20 +27,20 @@ from sparkrobot_common import (
     WORKSPACE_DIR,
     CONFIG_DIR,
     CONFIG_FILE,
-    
+
     # 配置字段
     DEFAULT_CONFIG_FIELDS,
     READONLY_FIELDS,
     获取默认配置,
     获取字段信息,
-    
+
     # TOML 解析
     TomlParser,
-    
+
     # 日志
     configure_logger,
     get_logger,
-    
+
     # 工具
     生成UUID,
     获取本机IP,

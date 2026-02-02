@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # 检查是否以 root 运行
-if ! (sudo -n true 2>/dev/null); then
+if (sudo -n true 2>/dev/null); then
   echo -e "${RED}错误: 请使用 sudo 运行此脚本${NC}"
   echo "示例: sudo ./install.sh"
   exit 1

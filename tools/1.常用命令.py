@@ -9,7 +9,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 # 配置
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -90,150 +90,17 @@ def change_robot_ip():
         time.sleep(1)
         change_robot_ip()
 
-def get_ssh_config_path() -> Path:
-    return Path.home() / ".ssh" / "config"
-
-def get_robot_key_dir() -> Path:
-    return Path.home() / ".ssh" / "robot"
-
-def get_robot_key_path(robot_ip: str) -> Path:
-    return get_robot_key_dir() / robot_ip
-
-def upsert_ssh_config(robot_ip: str, robot_user: str, identity_file: Path):
-    config_path = get_ssh_config_path()
-    if not config_path.exists():
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        content = ""
-    else:
-        content = config_path.read_text(encoding="utf-8")
-    lines = content.splitlines()
-    new_block = [
-        f"Host {robot_ip}",
-        f"    HostName {robot_ip}",
-        f"    User {robot_user}",
-        f"    IdentityFile {identity_file}",
-        "    IdentitiesOnly yes",
-    ]
-    i = 0
-    replaced = False
-    while i < len(lines):
-        line = lines[i].strip()
-        if line.startswith("Host "):
-            hosts = line[5:].split()
-            if robot_ip in hosts:
-                j = i + 1
-                while j < len(lines) and not lines[j].strip().startswith("Host "):
-                    j += 1
-                lines = lines[:i] + new_block + lines[j:]
-                replaced = True
-                break
-        i += 1
-    if not replaced:
-        if lines and lines[-1].strip() != "":
-            lines.append("")
-        lines.extend(new_block)
-    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-def find_matching_key_path(key_dir: Path, key_bytes: bytes, exclude: Path) -> Optional[Path]:
-    if not key_dir.exists():
-        return None
-    for path in key_dir.iterdir():
-        if path == exclude or path.is_dir():
-            continue
-        if path.suffix in [".pub", ".tmp"]:
-            continue
-        try:
-            if path.read_bytes() == key_bytes:
-                return path
-        except Exception:
-            continue
-    return None
-
-def reconcile_local_key(temp_path: Path, final_path: Path) -> bool:
-    if not temp_path.exists():
-        return False
-    key_dir = temp_path.parent
-    key_bytes = temp_path.read_bytes()
-    match_path = find_matching_key_path(key_dir, key_bytes, temp_path)
-    if match_path:
-        if match_path != final_path:
-            if final_path.exists():
-                final_path.unlink()
-            match_path.rename(final_path)
-        temp_path.unlink()
-        return True
-    if final_path.exists():
-        if final_path.read_bytes() == key_bytes:
-            temp_path.unlink()
-            return True
-        final_path.unlink()
-    temp_path.rename(final_path)
-    return True
-
 def run_ssh_command(command: List[str], use_sshpass: bool):
     if use_sshpass:
         return subprocess.run(["sshpass", "-p", "firefly"] + command)
     return subprocess.run(command)
 
-def ensure_remote_key_and_fetch(use_sshpass: bool) -> Optional[Path]:
-    key_dir = get_robot_key_dir()
-    key_dir.mkdir(parents=True, exist_ok=True)
-    temp_key_path = key_dir / f"{ROBOT_IP}.tmp"
-    remote_cmd = (
-        "mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
-        "if [ ! -f ~/.ssh/robot_dog ]; then ssh-keygen -t rsa -b 4096 -N '' -f ~/.ssh/robot_dog; fi && "
-        "if ! grep -q -F \"$(cat ~/.ssh/robot_dog.pub)\" ~/.ssh/authorized_keys 2>/dev/null; then "
-        "cat ~/.ssh/robot_dog.pub >> ~/.ssh/authorized_keys; fi && "
-        "chmod 600 ~/.ssh/authorized_keys"
-    )
-    ssh_cmd = ["ssh", f"{ROBOT_USER}@{ROBOT_IP}", "sh", "-lc", remote_cmd]
-    scp_cmd = ["scp", f"{ROBOT_USER}@{ROBOT_IP}:~/.ssh/robot_dog", str(temp_key_path)]
-    try:
-        result = run_ssh_command(ssh_cmd, use_sshpass)
-        if result.returncode != 0:
-            return None
-        result = run_ssh_command(scp_cmd, use_sshpass)
-        if result.returncode != 0:
-            return None
-        final_key_path = get_robot_key_path(ROBOT_IP)
-        if reconcile_local_key(temp_key_path, final_key_path):
-            return final_key_path
-    except FileNotFoundError:
-        print_error("未找到 ssh 或 scp 命令，请确保已安装 OpenSSH Client")
-    except Exception:
-        pass
-    return None
-
-def try_ssh_with_key(key_path: Path) -> bool:
-    if not key_path.exists():
-        return False
-    try:
-        result = subprocess.run([
-            "ssh",
-            "-i",
-            str(key_path),
-            "-o",
-            "IdentitiesOnly=yes",
-            f"{ROBOT_USER}@{ROBOT_IP}",
-        ])
-        return result.returncode == 0
-    except FileNotFoundError:
-        print_error("未找到 ssh 命令，请确保已安装 OpenSSH Client")
-    return False
-
 def connect_robot():
     print_info(f"正在连接机器狗 ({ROBOT_USER}@{ROBOT_IP})...")
-    key_path = get_robot_key_path(ROBOT_IP)
-    if key_path.exists() and try_ssh_with_key(key_path):
-        return
     use_sshpass = sys.platform != "win32" and shutil.which("sshpass")
-    fetched_key_path = ensure_remote_key_and_fetch(use_sshpass)
-    if fetched_key_path:
-        upsert_ssh_config(ROBOT_IP, ROBOT_USER, fetched_key_path)
-        if try_ssh_with_key(fetched_key_path):
-            return
+    ssh_cmd = ["ssh", f"{ROBOT_USER}@{ROBOT_IP}"]
     try:
-        subprocess.run(["ssh", f"{ROBOT_USER}@{ROBOT_IP}"])
+        run_ssh_command(ssh_cmd, use_sshpass)
     except FileNotFoundError:
         print_error("未找到 ssh 命令，请确保已安装 OpenSSH Client")
 

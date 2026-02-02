@@ -1,7 +1,6 @@
 import asyncio
 
-from application import main as robot_main
-
+from src.application import main as robot_main
 
 def main():
     try:

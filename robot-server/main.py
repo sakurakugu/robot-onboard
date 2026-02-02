@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 import uvicorn
 
-from robot_server.app import PORT, app
-from robot_server.服务.config_service import 获取配置管理器单例
+from src.app import PORT, app
+from src.服务.config_service import 获取配置管理器单例
 
 if __name__ == "__main__":
     config_manager = 获取配置管理器单例()
