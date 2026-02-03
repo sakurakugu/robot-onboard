@@ -19,9 +19,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from sparkrobot_common import (
-    READONLY_FIELDS,
-    ROBOT_SERVER_URL,
-    WORKSPACE_DIR,
+    READONLY_FIELDS,   # 只读字段
+    ROBOT_SERVER_URL,  # 机器人服务器 URL
+    WORKSPACE_DIR,     # 工作目录
     TomlParser,
     获取默认配置,
 )

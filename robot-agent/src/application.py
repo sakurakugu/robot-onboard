@@ -81,7 +81,7 @@ class RobotClient:
         self.ws_manager = WebSocketManager(self.config)
         self.process_controller = ProcessController()
         self.joystick_controller = JoystickController(self.process_controller)
-        self._executor = ThreadPoolExecutor(max_workers=1)
+        self._action_executor = ThreadPoolExecutor(max_workers=1)
         self.audio_task: Optional[asyncio.Task] = None
 
         """ 初始化音频捕获 """
@@ -162,11 +162,13 @@ class RobotClient:
                 return False
         return success
 
-    async def disconnect(self) -> None:
+    async def disconnect(self, shutdown_resources: bool = False) -> None:
         """断开连接"""
         await self.ws_manager.断开连接()
-        self.process_controller.关闭()
-        self._executor.shutdown(wait=False)
+        if shutdown_resources:
+            self.process_controller.关闭()
+            if self._action_executor:
+                self._action_executor.shutdown(wait=False)
 
     async def 发送消息(self, message: Dict[str, Any], channel: str = "business") -> None:
         """发送消息到服务器"""
@@ -232,7 +234,7 @@ class RobotClient:
 
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
         """ 处理文本响应消息 """
-        await 处理文本响应(data, self.action_executor, self._executor)
+        await 处理文本响应(data, self.action_executor, self._确保动作执行器())
 
     async def _处理音频控制(self, data: Dict[str, Any]) -> None:
         """ 处理音频控制消息 """
@@ -249,7 +251,7 @@ class RobotClient:
         停止当前音频播放()
 
     async def _处理动作指令(self, data: Dict[str, Any]) -> None:
-        await 处理动作指令(data, self.action_executor, self._executor)
+        await 处理动作指令(data, self.action_executor, self._确保动作执行器())
 
     async def _处理控制指令(self, data: Dict[str, Any]) -> None:
         """ 处理控制指令消息 """
@@ -348,10 +350,11 @@ class RobotClient:
                     self.ws_manager.connected = False
                 finally:
                     if self._是否有活跃的WebSocket连接():
-                        await self.disconnect()
+                        await self.disconnect(shutdown_resources=False)
         except asyncio.CancelledError:
             self.logger.info("收到中断信号，正在退出...")
         finally:
+            await self.disconnect(shutdown_resources=True)
             await self.ipc_server.关闭()
             try:
                 await self.取消初始化()
@@ -411,6 +414,11 @@ class RobotClient:
             asyncio.create_task(self.ws_manager.发送心跳消息循环(self.config["robot"]["uuid"], 构建心跳消息))
         )
         return tasks
+
+    def _确保动作执行器(self) -> ThreadPoolExecutor:
+        if not self._action_executor or getattr(self._action_executor, "_shutdown", False):
+            self._action_executor = ThreadPoolExecutor(max_workers=1)
+        return self._action_executor
 
     def _是否有活跃的WebSocket连接(self) -> bool:
         """ 检查是否有活动的 WebSocket 连接 """
