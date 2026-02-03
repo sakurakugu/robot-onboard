@@ -59,7 +59,7 @@ async def 处理文本响应(data: Dict[str, Any], action_executor, executor) ->
 
     action = action_data["action"]
     parameters = action_data["parameters"]
-    logger.info(f"检测到动作格式: action={action}, parameters={parameters}")
+    logger.info(f"检测到动作格式: 动作={action}, 参数={parameters}")
 
     # 执行动作
     if action_executor:

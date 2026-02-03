@@ -471,6 +471,7 @@ def _构建动作映射() -> Dict[str, str]:
         "wave": "wave",
         "two_leg_stand": "two_leg_stand",
         "cancel_two_leg_stand": "cancel_two_leg_stand",
+        "move": "move",  # move动作需要特殊处理
     }
 
 
@@ -520,8 +521,36 @@ class ActionRunner:
         """ 执行动作 """
         try:
             token = self._下一个_token()
-            self.client.logger.debug(f"开始执行动作: {action}")
+            self.client.logger.debug(f"开始执行动作: {action}, 参数: {parameters}")
             self._停止当前动作()
+            
+            # 特殊处理move动作
+            if action == "move":
+                # 将参数编码为JSON并发送
+                move_params = {
+                    "vx": parameters.get("vx", 0),
+                    "vy": parameters.get("vy", 0),
+                    "yaw_rate": parameters.get("yaw_rate", 0),
+                    "duration": parameters.get("duration", 2),
+                }
+                command = json.dumps({
+                    "action": "move",
+                    "parameters": move_params
+                })
+                self.client.logger.info(f"发送move命令: {command}")
+                success = self.client.发送命令到交互式进程(command)
+                if not success:
+                    self.client.logger.error(f"发送move命令失败")
+                    return False
+                wait_time = float(move_params.get("duration", 2)) + 0.5  # 多等0.5秒确保完成
+                completed = self._可中断的睡眠(token, wait_time)
+                if not completed:
+                    self.client.logger.info(f"move动作被打断")
+                    return False
+                self.client.logger.debug(f"move动作执行完成")
+                return True
+            
+            # 其他动作的处理
             command = self.action_map.get(action)
             if not command:
                 self.client.logger.warning(f"不支持的动作: {action}")

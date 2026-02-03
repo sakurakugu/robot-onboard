@@ -87,48 +87,6 @@ def _执行趴下动作(app) -> None:
     app.lieDown()
     time.sleep(3)
 
-# 执行前进动作
-def _执行前进动作(app) -> None:
-    logger.info("执行中: 前进 (2秒)")
-    app.move(0.2, 0, 0)
-    time.sleep(2)
-    app.move(0, 0, 0)
-
-# 执行后退动作
-def _执行后退动作(app) -> None:
-    logger.info("执行中: 后退 (2秒)")
-    app.move(-0.2, 0, 0)
-    time.sleep(2)
-    app.move(0, 0, 0)
-
-# 执行左移动作
-def _执行左移动作(app) -> None:
-    logger.info("执行中: 左移 (2秒)")
-    app.move(0, 0.2, 0)
-    time.sleep(2)
-    app.move(0, 0, 0)
-
-# 执行右移动作
-def _执行右移动作(app) -> None:
-    logger.info("执行中: 右移 (2秒)")
-    app.move(0, -0.2, 0)
-    time.sleep(2)
-    app.move(0, 0, 0)
-
-# 执行左转动作
-def _执行左转动作(app) -> None:
-    logger.info("执行中: 左转 (2秒)")
-    app.move(0, 0, 0.3)
-    time.sleep(2)
-    app.move(0, 0, 0)
-
-# 执行右转动作
-def _执行右转动作(app) -> None:
-    logger.info("执行中: 右转 (2秒)")
-    app.move(0, 0, -0.3)
-    time.sleep(2)
-    app.move(0, 0, 0)
-
 # 执行跳跃动作
 def _执行跳跃动作(app) -> None:
     logger.info("执行中: 跳跃")
@@ -200,29 +158,36 @@ def _执行退出停止动作(app) -> None:
     app.passive()
     time.sleep(1)
 
+# 执行move动作（带参数的移动控制）
+def _执行move动作(app, params: dict) -> None:
+    vx = float(params.get("vx", 0) or 0)
+    vy = float(params.get("vy", 0) or 0)
+    yaw_rate = float(params.get("yaw_rate", 0) or 0)
+    duration = float(params.get("duration", 2) or 2)
+    
+    logger.info(f"执行中: 移动控制 (vx={vx}, vy={vy}, yaw_rate={yaw_rate}, {duration}秒)")
+    app.move(vx, vy, yaw_rate)
+    time.sleep(duration)
+    app.move(0, 0, 0)
+
 # 动作处理映射
 ACTION_HANDLERS = {
     "stand_up": _执行站立动作,
     "sit_down": _执行趴下动作,
-    "walk_forward": _执行前进动作,
-    "walk_backward": _执行后退动作,
-    "left": _执行左移动作,
-    "right": _执行右移动作,
-    "turn_left": _执行左转动作,
-    "turn_right": _执行右转动作,
     "jump": _执行跳跃动作,
     "front_jump": _执行向前跳跃动作,
     "backflip": _执行后空翻动作,
     "shake_hand": _执行握手动作,
     "nod": _执行姿态控制动作,
     "wave": _执行姿态控制动作,
-    "dance": _执行跳跃动作, # 跳舞（TODO: 暂时用跳跃代替）
+    "dance": _执行姿态控制动作, # 跳舞（TODO: 暂时用姿态控制代替）
     "two_leg_once": _执行双腿站立动作_一次性,
     "two_leg_stand": _执行双腿站立动作,
     "cancel_two_leg_stand": _执行退出双腿站立动作,
     "exit_lie_down": _执行退出趴下动作,
     "exit_stand_up": _执行退出站立动作,
     "exit_stop": _执行退出停止动作,
+    "move": None,  # move动作需要特殊处理，带参数
 }
 
 EXIT_COMMANDS = {"exit_lie_down", "exit_stand_up", "exit_stop"}
@@ -239,7 +204,15 @@ def _解析退出命令(config: dict) -> str:
     return "exit_lie_down"
 
 # 执行用户选择的动作
-def _执行选择的动作(app, choice: str) -> bool:
+def _执行选择的动作(app, choice: str, params: dict = None) -> bool:
+    # 特殊处理move动作
+    if choice == "move":
+        if params:
+            _执行move动作(app, params)
+        else:
+            logger.warning("move动作需要参数（vx, vy, yaw_rate, duration）")
+        return False
+    
     handler = ACTION_HANDLERS.get(choice)
     if not handler:
         logger.warning("无效的选择。请重试。")
@@ -253,14 +226,20 @@ def _循环处理用户输入(app, config: dict) -> None:
         raw = input().strip() # 从标准输入读取用户输入
         if not raw:
             continue
-        # 含参数的控制指令
+        # 含参数的控制指令或move动作
         if raw.startswith("{"):
             try:
                 payload = json.loads(raw)
-                _处理控制指令(app, payload)
+                # 检查是否是move动作
+                if payload.get("action") == "move":
+                    params = payload.get("parameters", {})
+                    _执行move动作(app, params)
+                else:
+                    # 普通控制指令
+                    _处理控制指令(app, payload)
                 continue
             except Exception as e:
-                logger.error(f"解析控制指令失败: {e}")
+                logger.error(f"解析命令失败: {e}")
                 continue
         if raw == "exit":
             raw = _解析退出命令(config)
