@@ -32,7 +32,7 @@ if [ -f "$PID_FILE" ]; then
         echo -e "${BLUE}$PROCESS_NAME 已停止${NC}"
         exit 0
     else
-        echo -e "${BLUE}进程已不存在，清理 PID 文件${NC}"
+        echo -e "${BLUE}进程的 PID 文件已不存在，清理 PID 文件${NC}"
         rm -f "$PID_FILE"
     fi
 fi

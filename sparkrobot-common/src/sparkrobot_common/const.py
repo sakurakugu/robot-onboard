@@ -77,8 +77,8 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     配置字段("audio", "frame_duration_ms", 20, "音频帧时长（毫秒）", "int"),
     配置字段("audio", "vad_threshold", 0.015, "VAD阈值", "float"),
     配置字段("audio", "vad_silence_ms", 800, "VAD静音时长（毫秒）", "int"),
-    配置字段("audio", "max_segment_ms", 10000, "最大音频片段时长（毫秒）", "int"),
-    配置字段("audio", "enable_streaming", True, "是否启用流式传输", "bool"),
+    配置字段("audio", "max_segment_ms", 30000, "最大音频片段时长（毫秒）", "int"),  # 从10000增加到30000ms
+    配置字段("audio", "enable_streaming", False, "是否启用流式传输", "bool"),  # 改为False，禁用流式传输以支持一次性收集
     配置字段("audio", "input_device", "", "音频输入设备（空表示默认）", "string"),
 
     # 动作配置 [actions]
