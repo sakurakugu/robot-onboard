@@ -21,7 +21,6 @@ from typing import Any, Callable, Dict, Optional
 from sparkrobot_common import (
     WORKSPACE_DIR,
     configure_logger,
-    get_logger,
     检测机器人运控版本,
 )
 
@@ -72,9 +71,9 @@ class RobotClient:
         self._初始化日志()
 
         # 启动配置文件监听（热更新）
-        if self.config_store.start_watching():
+        if self.config_store.启动监听():
             self.logger.info("配置文件监听已启动")
-            self.config_store.on_change(self._处理配置变化)
+            self.config_store.注册配置变更回调(self._处理配置变化)
         else:
             self.logger.warning("配置文件监听启动失败，热更新功能不可用")
 
@@ -119,7 +118,7 @@ class RobotClient:
         version = 检测机器人运控版本()
         if version:
             # 使用新的扁平化配置格式
-            self.config_store.set_via_server("robot.version", version)
+            self.config_store.设置("robot.version", version)
             self.config = self.config_store.get()
 
         # 重连策略配置
@@ -327,7 +326,7 @@ class RobotClient:
                     if not self.ws_manager.connected:
                         should_reconnect = True
                         self.logger.info("主连接已断开，准备重连...")
-                    
+
                     if should_reconnect:
                         # 取消剩余任务
                         for task in pending:
@@ -341,7 +340,7 @@ class RobotClient:
                     else:
                         # 所有任务正常结束，继续运行
                         self.logger.debug("所有任务正常结束")
-                        
+
                 except KeyboardInterrupt:
                     self.logger.info("收到中断信号，正在退出...")
                     break
@@ -449,7 +448,7 @@ class RobotClient:
             pass
         try:
             # 停止配置文件监听
-            self.config_store.stop_watching()
+            self.config_store.停止监听()
             self.logger.info("配置文件监听已停止")
         except Exception:
             pass
@@ -553,7 +552,7 @@ async def main():
     """主函数"""
     client = RobotClient()
 
-    # 获取 modules/actions/executor.py 的路径
+    # get modules/actions/executor.py 的路径
     script_dir = Path(__file__).parent
     interactive_script = script_dir / "modules" / "actions" / "executor.py"
 

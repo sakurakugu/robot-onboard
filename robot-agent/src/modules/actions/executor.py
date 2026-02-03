@@ -31,7 +31,7 @@ def _循环发送机器人状态(app, robot_uuid, ipc_path):
                 "data": _收集机器人状态(app),
             }
             seq += 1
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) # type: ignore[attr-defined]
             try:
                 s.settimeout(1.0) # 1秒超时
                 s.connect(str(ipc_path))

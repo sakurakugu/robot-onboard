@@ -1,4 +1,4 @@
-sparkrobot-common[watchdog]
+sparkrobot-common
 websockets>=16.0
 numpy>=2.2.6
 sounddevice>=0.5.5

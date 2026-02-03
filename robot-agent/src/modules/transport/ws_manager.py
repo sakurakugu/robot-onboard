@@ -5,9 +5,8 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 from urllib.parse import urlparse, urlunparse
 
 import websockets
-from websockets import ClientConnection
-
 from sparkrobot_common import get_logger
+from websockets import ClientConnection
 
 
 class WebSocketManager:
@@ -162,7 +161,7 @@ class WebSocketManager:
             "audio_download": (self.ws_audio_download, self.connected_audio_download),
         }
         ws, is_connected = ws_map.get(channel, (None, False))
-        
+
         # 如果通道未连接且可以重连（非业务通道或有robot_uuid），尝试重连
         if (not ws or not is_connected) and self.robot_uuid and channel != "business":
             self.logger.info(f"通道 {channel} 未连接，尝试重连...")
@@ -177,7 +176,7 @@ class WebSocketManager:
                     "audio_download": (self.ws_audio_download, self.connected_audio_download),
                 }
                 ws, is_connected = ws_map.get(channel, (None, False))
-        
+
         if not ws or not is_connected:
             self.logger.warning(f"通道未连接，无法发送消息: {channel}")
             return
@@ -207,15 +206,15 @@ class WebSocketManager:
             "audio_upload": lambda: self.connected_audio_upload,
             "audio_download": lambda: self.connected_audio_download,
         }
-        
+
         get_status = status_map.get(channel, lambda: self.connected)
-        
+
         while self.connected:
             # 如果当前通道状态变为未连接（可能被其他地方断开），退出循环
             if not get_status():
                 self.logger.info(f"通道 {channel} 已标记为断开，退出接收循环")
                 break
-                
+
             try:
                 message_str = await ws.recv()
                 message = json.loads(message_str)
@@ -230,7 +229,7 @@ class WebSocketManager:
                     self.connected_audio_upload = False
                 elif channel == "audio_download":
                     self.connected_audio_download = False
-                
+
                 # 如果不是主连接断开，尝试重连该通道（不阻塞当前循环）
                 if channel != "business" and self.connected and self.robot_uuid:
                     self.logger.info(f"尝试后台重连通道: {channel}")
@@ -252,31 +251,31 @@ class WebSocketManager:
                     await self.发送消息(message, channel="control")
                 else:
                     await self.发送消息(message, channel="business")
-                
+
                 # 为 audio_upload 通道也发送心跳
                 if self.connected_audio_upload:
                     await self.发送消息(message, channel="audio_upload")
-                
+
                 # 为 audio_download 通道也发送心跳
                 if self.connected_audio_download:
                     await self.发送消息(message, channel="audio_download")
-    
+
     async def _重连单个通道(self, channel: str) -> bool:
         """ 重连单个通道 """
         if not self.robot_uuid:
             self.logger.error(f"无法重连 {channel}，robot_uuid 未设置")
             return False
-        
+
         # 防止重复重连
         if channel in self._reconnecting_channels:
             self.logger.debug(f"通道 {channel} 正在重连中，跳过")
             return False
-        
+
         self._reconnecting_channels.add(channel)
-        
+
         try:
             urls = self._解析服务器URL配置()
-            
+
             if channel == "control":
                 control_url = urls.get("control")
                 if not control_url:
@@ -287,13 +286,13 @@ class WebSocketManager:
                 if self.ws_control:
                     try:
                         await self.ws_control.close()
-                    except:
+                    except Exception:
                         pass
                 self.ws_control = await websockets.connect(control_full)
                 self.connected_control = True
                 self.logger.info("控制通道重连成功")
                 return True
-                
+
             elif channel == "audio_upload":
                 audio_upload_url = urls.get("audio_upload")
                 if not audio_upload_url:
@@ -304,13 +303,13 @@ class WebSocketManager:
                 if self.ws_audio_upload:
                     try:
                         await self.ws_audio_upload.close()
-                    except:
+                    except Exception:
                         pass
                 self.ws_audio_upload = await websockets.connect(audio_upload_full)
                 self.connected_audio_upload = True
                 self.logger.info("音频上传通道重连成功")
                 return True
-                
+
             elif channel == "audio_download":
                 audio_download_url = urls.get("audio_download")
                 if not audio_download_url:
@@ -321,54 +320,54 @@ class WebSocketManager:
                 if self.ws_audio_download:
                     try:
                         await self.ws_audio_download.close()
-                    except:
+                    except Exception:
                         pass
                 self.ws_audio_download = await websockets.connect(audio_download_full)
                 self.connected_audio_download = True
                 self.logger.info("音频下载通道重连成功")
                 return True
-            
+
             else:
                 self.logger.warning(f"不支持重连通道: {channel}")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"重连通道 {channel} 失败: {e}")
             return False
         finally:
             self._reconnecting_channels.discard(channel)
-    
+
     async def _自动重连通道(self, channel: str, on_message: Callable[[Dict[str, Any]], Awaitable[None]]) -> None:
         """ 自动重连通道并重启接收循环 """
         max_retries = 3
         retry_delay = 5  # 秒
-        
+
         # 防止重复重连
         if channel in self._reconnecting_channels:
             self.logger.debug(f"通道 {channel} 已在重连中，跳过")
             return
-        
+
         self._reconnecting_channels.add(channel)
-        
+
         try:
             for attempt in range(1, max_retries + 1):
                 if not self.connected:
                     self.logger.info(f"主连接已断开，停止重连 {channel}")
                     return
-                
+
                 self.logger.info(f"尝试重连 {channel} (第 {attempt}/{max_retries} 次)")
-                
+
                 # 等待一段时间再重连，避免立即重连导致的循环
                 if attempt > 1:
                     await asyncio.sleep(retry_delay)
                 else:
                     # 第一次重连也稍微等待一下，避免服务器还没准备好
                     await asyncio.sleep(1)
-                
+
                 if not self.connected:
                     self.logger.info(f"主连接已断开，停止重连 {channel}")
                     return
-                
+
                 success = await self._重连单个通道(channel)
                 if success:
                     # 重连成功，重启接收循环
@@ -383,10 +382,10 @@ class WebSocketManager:
                         # 创建新的接收循环任务
                         asyncio.create_task(self.接受消息循环(channel, ws, on_message))
                     return
-                
+
                 if attempt < max_retries:
                     self.logger.warning(f"重连 {channel} 失败，{retry_delay} 秒后重试...")
-            
+
             self.logger.error(f"重连 {channel} 失败，已达到最大重试次数")
         finally:
             self._reconnecting_channels.discard(channel)

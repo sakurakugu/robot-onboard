@@ -9,7 +9,7 @@ description = "机器狗代理 (放置在机器狗身上)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "sparkrobot-common[watchdog]",
+    "sparkrobot-common",
     "websockets>=16.0",
     "numpy>=2.2.6",
     "sounddevice>=0.5.5",
@@ -53,4 +53,5 @@ src_paths = ["src"]
 python_version = "3.10"
 ignore_missing_imports = true
 explicit_package_bases = true
+check_untyped_defs = true 
 files = ["src"]

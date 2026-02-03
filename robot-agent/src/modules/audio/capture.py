@@ -17,6 +17,7 @@ except ImportError as e:
 
 from sparkrobot_common import get_logger
 
+
 class AudioCapture:
     def __init__(
         self,

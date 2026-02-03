@@ -19,9 +19,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from sparkrobot_common import (
-    READONLY_FIELDS,   # 只读字段
+    READONLY_FIELDS,  # 只读字段
     ROBOT_SERVER_URL,  # 机器人服务器 URL
-    WORKSPACE_DIR,     # 工作目录
+    WORKSPACE_DIR,  # 工作目录
     TomlParser,
     获取默认配置,
 )
@@ -36,17 +36,18 @@ except ImportError:
     Observer = None  # type: ignore
     FileSystemEventHandler = object  # type: ignore
 
-
 class ConfigFileHandler(FileSystemEventHandler if HAS_WATCHDOG else object):  # type: ignore
     """配置文件变更事件处理器"""
 
     def __init__(self, config_manager: "Config", config_file: Path):
         self.config_manager = config_manager
         self.config_file = config_file
-        self._last_modified = 0.0
-        self._debounce_seconds = 0.5  # 防抖时间
+        self._最后修改时间 = 0.0
+        self._防抖秒数 = 0.5  # 防抖时间
 
+    # 不能修改成中文，该函数自动触发
     def on_modified(self, event: Any) -> None:
+        """处理文件修改事件"""
         if not HAS_WATCHDOG:
             return
         if not isinstance(event, FileModifiedEvent):
@@ -57,13 +58,13 @@ class ConfigFileHandler(FileSystemEventHandler if HAS_WATCHDOG else object):  # 
             return
 
         # 防抖：避免短时间内多次触发
-        current_time = time.time()
-        if current_time - self._last_modified < self._debounce_seconds:
+        当前时间 = time.time()
+        if 当前时间 - self._最后修改时间 < self._防抖秒数:
             return
-        self._last_modified = current_time
+        self._最后修改时间 = 当前时间
 
         # 触发配置重载
-        self.config_manager._on_file_changed()
+        self.config_manager._处理配置文件变更()
 
 
 class Config:
@@ -123,7 +124,7 @@ class Config:
         """重置单例实例（用于测试）"""
         with cls._lock:
             if cls._instance is not None:
-                cls._instance.stop_watching()
+                cls._instance.停止监听()
                 cls._instance = None
 
     def _load(self) -> None:
@@ -186,7 +187,7 @@ class Config:
         else:
             return self._config.get(key)
 
-    def set_via_server(
+    def 设置(
         self,
         key: str,
         value: Any,
@@ -223,7 +224,7 @@ class Config:
             print(f"[Config] 设置配置失败: {e}")
             return False
 
-    def set_many_via_server(
+    def 批量设置(
         self,
         updates: dict[str, Any],
         server_url: str | None = None,
@@ -352,7 +353,7 @@ class Config:
 
     # ==================== watchdog 文件监听 ====================
 
-    def start_watching(self) -> bool:
+    def 启动监听(self) -> bool:
         """启动配置文件监听
 
         Returns:
@@ -377,7 +378,7 @@ class Config:
             print(f"[Config] 启动文件监听失败: {e}")
             return False
 
-    def stop_watching(self) -> None:
+    def 停止监听(self) -> None:
         """停止配置文件监听"""
         if self._observer is not None and self._watching:
             self._observer.stop()
@@ -385,7 +386,7 @@ class Config:
             self._watching = False
             print("[Config] 已停止配置文件监听")
 
-    def _on_file_changed(self) -> None:
+    def _处理配置文件变更(self) -> None:
         """配置文件变更处理"""
         print("[Config] 检测到配置文件变更，重新加载...")
         try:
@@ -393,14 +394,14 @@ class Config:
             self._load()
 
             if old_config != self._config:
-                self._notify_change()
+                self._通知配置变更()
                 print("[Config] 配置已更新")
         except Exception as e:
             print(f"[Config] 重新加载配置失败: {e}")
 
     # ==================== 配置变更回调 ====================
 
-    def on_change(self, callback: Callable[[dict[str, dict[str, Any]]], None]) -> None:
+    def 注册配置变更回调(self, callback: Callable[[dict[str, dict[str, Any]]], None]) -> None:
         """注册配置变更回调
 
         Args:
@@ -409,12 +410,12 @@ class Config:
         if callback not in self._on_change_callbacks:
             self._on_change_callbacks.append(callback)
 
-    def remove_change_callback(self, callback: Callable[[dict[str, dict[str, Any]]], None]) -> None:
+    def 移除配置变更回调(self, callback: Callable[[dict[str, dict[str, Any]]], None]) -> None:
         """移除配置变更回调"""
         if callback in self._on_change_callbacks:
             self._on_change_callbacks.remove(callback)
 
-    def _notify_change(self) -> None:
+    def _通知配置变更(self) -> None:
         """通知配置变更"""
         for callback in self._on_change_callbacks:
             try:
@@ -424,7 +425,8 @@ class Config:
 
     # ==================== HTTP 同步 ====================
 
-    def sync_from_server(self, server_url: str | None = None) -> bool:
+    # sync_from_server
+    def 获取配置(self, server_url: str | None = None) -> bool:
         """从 robot-server 同步配置
 
         Args:
@@ -456,7 +458,7 @@ class Config:
                             if full_key not in READONLY_FIELDS:
                                 self._config[section][key] = value
 
-                    self._notify_change()
+                    self._通知配置变更()
                     print(f"[Config] 已从服务器同步配置: {api_url}")
                     return True
                 else:
@@ -473,7 +475,7 @@ class Config:
     def reload(self) -> None:
         """重新加载配置"""
         self._load()
-        self._notify_change()
+        self._通知配置变更()
 
 
 # 便捷访问函数

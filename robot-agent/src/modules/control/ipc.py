@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import Any, Awaitable, Callable, Dict, Optional
 
-from sparkrobot_common import ORG_NAME, get_logger, 获取IPC路径
+from sparkrobot_common import ORG_NAME, 获取IPC路径, get_logger
 
 
 class IpcServer:
@@ -41,7 +41,7 @@ class IpcServer:
                 except Exception:
                     pass
 
-        self._server = await asyncio.start_unix_server(_handle_ipc, path=str(ipc_path))
+        self._server = await asyncio.start_unix_server(_handle_ipc, path=str(ipc_path)) # type: ignore[attr-defined]
         self.logger.info(f"IPC服务启动: {ipc_path}")
 
     async def 关闭(self) -> None:
