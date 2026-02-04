@@ -36,6 +36,8 @@ from modules.transport.protocol import (
     构建音频开始消息,
     构建音频结束消息,
     构建拍照响应消息,
+    构建音量响应消息,
+    构建配置响应消息,
 )
 from modules.transport.ws_manager import WebSocketManager
 from modules.vision.camera import capture_photo
@@ -110,6 +112,11 @@ class RobotClient:
             "audio_stream_chunk": self._处理音频流数据块,
             "audio_stream_end": self._处理音频流结束,
             "camera_capture": self._处理相机拍照,
+            "volume_get": self._处理音量获取,
+            "volume_set": self._处理音量设置,
+            "volume_mute": self._处理设置静音,
+            "config_get": self._处理配置获取,
+            "config_update": self._处理配置更新,
         }
 
         """ 初始化动作执行函数 """
@@ -241,6 +248,24 @@ class RobotClient:
         )
         await self.发送消息(message, channel="business")
 
+    async def 发送音量响应(
+        self, request_id: str, success: bool, data: Optional[Dict] = None, error: Optional[str] = None
+    ) -> None:
+        """发送音量响应消息"""
+        message = 构建音量响应消息(
+            self.config["robot"]["uuid"], request_id, success, data, error
+        )
+        await self.发送消息(message, channel="business")
+
+    async def 发送配置响应(
+        self, request_id: str, success: bool, data: Optional[Dict] = None, error: Optional[str] = None
+    ) -> None:
+        """发送配置响应消息"""
+        message = 构建配置响应消息(
+            self.config["robot"]["uuid"], request_id, success, data, error
+        )
+        await self.发送消息(message, channel="business")
+
     async def _处理IPC状态(self, status_msg: Dict[str, Any]) -> None:
         await self._ipc_status_queue.put(status_msg)
 
@@ -276,6 +301,141 @@ class RobotClient:
         except Exception as e:
             self.logger.error(f"处理拍照请求时出错: {e}", exc_info=True)
             await self.发送拍照响应(request_id, False, None, str(e))
+
+    async def _处理音量获取(self, data: Dict[str, Any]) -> None:
+        """处理音量获取消息"""
+        request_id = data.get("requestId", "")
+        self.logger.info(f"收到音量获取请求: {request_id}")
+        
+        try:
+            import httpx
+            
+            # 调用 robot-server API
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://127.0.0.1:8000/api/v1/volume", timeout=10.0)
+                result = response.json()
+                
+                if result.get("success"):
+                    await self.发送音量响应(request_id, True, result.get("data"))
+                    self.logger.info(f"音量获取成功: {request_id}")
+                else:
+                    await self.发送音量响应(request_id, False, None, result.get("error", "获取音量失败"))
+                    self.logger.error(f"音量获取失败: {request_id}")
+                    
+        except Exception as e:
+            self.logger.error(f"处理音量获取请求时出错: {e}", exc_info=True)
+            await self.发送音量响应(request_id, False, None, str(e))
+
+    async def _处理音量设置(self, data: Dict[str, Any]) -> None:
+        """处理音量设置消息"""
+        request_id = data.get("requestId", "")
+        volume = data.get("volume")
+        self.logger.info(f"收到音量设置请求: {request_id}, 音量: {volume}")
+        
+        try:
+            import httpx
+            
+            # 调用 robot-server API
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "http://127.0.0.1:8000/api/v1/volume",
+                    json={"volume": volume},
+                    timeout=10.0
+                )
+                result = response.json()
+                
+                if result.get("success"):
+                    await self.发送音量响应(request_id, True, {"message": result.get("message")})
+                    self.logger.info(f"音量设置成功: {request_id}")
+                else:
+                    await self.发送音量响应(request_id, False, None, result.get("error", "设置音量失败"))
+                    self.logger.error(f"音量设置失败: {request_id}")
+                    
+        except Exception as e:
+            self.logger.error(f"处理音量设置请求时出错: {e}", exc_info=True)
+            await self.发送音量响应(request_id, False, None, str(e))
+
+    async def _处理设置静音(self, data: Dict[str, Any]) -> None:
+        """处理设置静音消息"""
+        request_id = data.get("requestId", "")
+        mute = data.get("mute")
+        self.logger.info(f"收到设置静音请求: {request_id}, 静音: {mute}")
+        
+        try:
+            import httpx
+            
+            # 调用 robot-server API
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "http://127.0.0.1:8000/api/v1/volume/mute",
+                    json={"mute": mute},
+                    timeout=10.0
+                )
+                result = response.json()
+                
+                if result.get("success"):
+                    await self.发送音量响应(request_id, True, {"message": result.get("message")})
+                    self.logger.info(f"设置静音成功: {request_id}")
+                else:
+                    await self.发送音量响应(request_id, False, None, result.get("error", "设置静音失败"))
+                    self.logger.error(f"设置静音失败: {request_id}")
+                    
+        except Exception as e:
+            self.logger.error(f"处理设置静音请求时出错: {e}", exc_info=True)
+            await self.发送音量响应(request_id, False, None, str(e))
+
+    async def _处理配置获取(self, data: Dict[str, Any]) -> None:
+        """处理配置获取消息"""
+        request_id = data.get("requestId", "")
+        self.logger.info(f"收到配置获取请求: {request_id}")
+        
+        try:
+            import httpx
+            
+            # 调用 robot-server API
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://127.0.0.1:8000/api/v1/config", timeout=10.0)
+                result = response.json()
+                
+                if result.get("success"):
+                    await self.发送配置响应(request_id, True, result.get("config"))
+                    self.logger.info(f"配置获取成功: {request_id}")
+                else:
+                    await self.发送配置响应(request_id, False, None, result.get("error", "获取配置失败"))
+                    self.logger.error(f"配置获取失败: {request_id}")
+                    
+        except Exception as e:
+            self.logger.error(f"处理配置获取请求时出错: {e}", exc_info=True)
+            await self.发送配置响应(request_id, False, None, str(e))
+
+    async def _处理配置更新(self, data: Dict[str, Any]) -> None:
+        """处理配置更新消息"""
+        request_id = data.get("requestId", "")
+        config_data = data.get("config", {})
+        self.logger.info(f"收到配置更新请求: {request_id}")
+        
+        try:
+            import httpx
+            
+            # 调用 robot-server API
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "http://127.0.0.1:8000/api/v1/config",
+                    json=config_data,
+                    timeout=10.0
+                )
+                result = response.json()
+                
+                if result.get("success"):
+                    await self.发送配置响应(request_id, True, {"message": result.get("message"), "results": result.get("results")})
+                    self.logger.info(f"配置更新成功: {request_id}")
+                else:
+                    await self.发送配置响应(request_id, False, None, result.get("error", "更新配置失败"))
+                    self.logger.error(f"配置更新失败: {request_id}")
+                    
+        except Exception as e:
+            self.logger.error(f"处理配置更新请求时出错: {e}", exc_info=True)
+            await self.发送配置响应(request_id, False, None, str(e))
 
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
         """ 处理文本响应消息 """

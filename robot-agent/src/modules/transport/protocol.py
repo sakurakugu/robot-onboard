@@ -143,3 +143,45 @@ def 构建拍照响应消息(
             "error": error,
         },
     }
+
+
+def 构建音量响应消息(
+    robot_uuid: str,        # 机器人 UUID
+    request_id: str,        # 请求ID
+    success: bool,          # 是否成功
+    data: dict | None = None,  # 响应数据
+    error: str | None = None,  # 错误信息（失败时）
+) -> Dict[str, Any]:
+    """ build_volume_response """
+    return {
+        "type": "volume_response",
+        "robotId": robot_uuid,
+        "timestamp": int(time.time() * 1000),
+        "data": {
+            "requestId": request_id,
+            "success": success,
+            "data": data,
+            "error": error,
+        },
+    }
+
+
+def 构建配置响应消息(
+    robot_uuid: str,        # 机器人 UUID
+    request_id: str,        # 请求ID
+    success: bool,          # 是否成功
+    data: dict | None = None,  # 响应数据
+    error: str | None = None,  # 错误信息（失败时）
+) -> Dict[str, Any]:
+    """ build_config_response """
+    return {
+        "type": "config_response",
+        "robotId": robot_uuid,
+        "timestamp": int(time.time() * 1000),
+        "data": {
+            "requestId": request_id,
+            "success": success,
+            "data": data,
+            "error": error,
+        },
+    }
