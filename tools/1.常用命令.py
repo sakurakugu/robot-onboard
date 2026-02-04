@@ -17,7 +17,7 @@ PROJECT_ROOT = TOOLS_DIR.parent
 BACKUPS_DIR = PROJECT_ROOT.parent / "backups"
 
 # --- 动态配置区域 (脚本会自动修改这里) ---
-ROBOT_IP = "192.168.0.85"
+ROBOT_IP = "192.168.1.106"
 ROBOT_USER = "firefly"
 # ---------------------------------------
 

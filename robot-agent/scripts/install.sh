@@ -33,7 +33,7 @@ echo -e "${BLUE}工作目录: $BASE_DIR${NC}"
 # 1. 赋予相关脚本执行权限
 echo -e "${BLUE}正在设置文件权限...${NC}"
 chmod +x "$SCRIPT_DIR/start.sh"
-chmod +x "$BASE_DIR/src/main.py"
+chmod +x "$BASE_DIR/main.py"
 
 # 2. 生成 systemd 服务文件
 # 使用当前路径动态生成，确保路径正确
@@ -47,7 +47,7 @@ After=network.target
 Type=simple
 User=firefly
 WorkingDirectory=$BASE_DIR
-ExecStart=/usr/bin/python3 $BASE_DIR/src/main.py
+ExecStart=/usr/bin/python3 $BASE_DIR/main.py
 Restart=always
 RestartSec=10
 

@@ -67,7 +67,7 @@ echo -e "${BLUE}配置文件位置: $WORKSPACE_DIR/config/config.toml${NC}"
 echo -e "${BLUE}日志文件位置: $LOG_DIR${NC}"
 
 # 运行Python客户端
-exec -a "$PROCESS_NAME" python3 src/main.py &
+exec -a "$PROCESS_NAME" python3 ./main.py &
 echo $! > "$PID_FILE"
 
 echo -e "${BLUE}${PROCESS_NAME} 启动成功 (PID: $(cat $PID_FILE))${NC}"

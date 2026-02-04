@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 
 from sparkrobot_common import get_logger
 
+logger = get_logger("robot-agent")
 
 class JoystickController:
     """手柄控制器"""
@@ -15,7 +16,6 @@ class JoystickController:
             process_controller: 进程控制器实例
         """
         self.process_controller = process_controller
-        self.logger = get_logger("robot-agent")
 
     def 处理命令(self, data: Dict[str, Any]) -> None:
         """
@@ -31,7 +31,7 @@ class JoystickController:
         y = float(data.get("y", 0) or 0)
         speed = float(data.get("speed", 5) or 5)
 
-        self.logger.debug(
+        logger.debug(
             f"收到控制指令: command={command}, mode={mode}, channel={channel}, x={x}, y={y}, speed={speed}"
         )
 
@@ -39,7 +39,7 @@ class JoystickController:
             return
 
         if command == "estop":
-            self.logger.info("发送紧急停止指令")
+            logger.info("发送紧急停止指令")
             self.process_controller.发送命令(json.dumps({"type": "estop"}))
             return
 

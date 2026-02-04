@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
 """
 机器狗客户端
-功能：
+功能:
 - 配置管理（~/sparkrobot/config/config.toml）
 - 配置热更新（watchdog 监听）
 - WebSocket 通信
 - 心跳保持
 - 接收音频回复（opus）
 - 执行动作指令
+- HTTP API服务（拍照等功能）
 - 日志记录
 """
 
@@ -18,11 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from sparkrobot_common import (
-    WORKSPACE_DIR,
-    configure_logger,
-    检测机器人运控版本,
-)
+from sparkrobot_common import WORKSPACE_DIR, configure_logger, 检测机器人运控版本
 
 from core.config import Config
 from modules.actions.mapping import 处理动作指令, 处理文本响应
@@ -39,8 +35,10 @@ from modules.transport.protocol import (
     构建音频帧消息,
     构建音频开始消息,
     构建音频结束消息,
+    构建拍照响应消息,
 )
 from modules.transport.ws_manager import WebSocketManager
+from modules.vision.camera import capture_photo
 
 APP_NAME = "robot-agent"
 
@@ -82,6 +80,8 @@ class RobotClient:
         self.joystick_controller = JoystickController(self.process_controller)
         self._action_executor = ThreadPoolExecutor(max_workers=1)
         self.audio_task: Optional[asyncio.Task] = None
+        self._ipc_status_task: Optional[asyncio.Task] = None
+        self._ipc_status_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
 
         """ 初始化音频捕获 """
         self.audio_capture = AudioCapture(
@@ -95,7 +95,7 @@ class RobotClient:
         )
 
         """ 初始化 IPC 服务器 """
-        self.ipc_server = IpcServer(self.project_name, self.发送状态)
+        self.ipc_server = IpcServer(self.project_name, self._处理IPC状态)
 
         """ 初始化消息处理函数 """
         self.message_handlers: Dict[str, Callable] = {
@@ -109,6 +109,7 @@ class RobotClient:
             "audio_stream_start": self._处理音频流开始,
             "audio_stream_chunk": self._处理音频流数据块,
             "audio_stream_end": self._处理音频流结束,
+            "camera_capture": self._处理相机拍照,
         }
 
         """ 初始化动作执行函数 """
@@ -150,7 +151,7 @@ class RobotClient:
             log_file_prefix="application",
         )
 
-    async def connect(self) -> bool:
+    async def 连接到服务器(self) -> bool:
         """连接到服务器"""
         robot_uuid = self.config["robot"]["uuid"]
         success = await self.ws_manager.连接(robot_uuid)
@@ -161,7 +162,7 @@ class RobotClient:
                 return False
         return success
 
-    async def disconnect(self, shutdown_resources: bool = False) -> None:
+    async def 断开连接到服务器(self, shutdown_resources: bool = False) -> None:
         """断开连接"""
         await self.ws_manager.断开连接()
         if shutdown_resources:
@@ -231,19 +232,65 @@ class RobotClient:
         )
         await self.发送消息(message, channel="control")
 
+    async def 发送拍照响应(
+        self, request_id: str, success: bool, image: Optional[str] = None, error: Optional[str] = None
+    ) -> None:
+        """发送拍照响应消息"""
+        message = 构建拍照响应消息(
+            self.config["robot"]["uuid"], request_id, success, image, error
+        )
+        await self.发送消息(message, channel="business")
+
+    async def _处理IPC状态(self, status_msg: Dict[str, Any]) -> None:
+        await self._ipc_status_queue.put(status_msg)
+
+    async def _发送IPC状态循环(self) -> None:
+        while True:
+            status_msg = await self._ipc_status_queue.get()
+            if not self.ws_manager.connected and not self.ws_manager.connected_control:
+                continue
+            await self.发送状态(status_msg)
+
+    async def _处理相机拍照(self, data: Dict[str, Any]) -> None:
+        """处理相机拍照消息"""
+        request_id = data.get("requestId", "")
+        self.logger.info(f"收到拍照请求: {request_id}")
+        
+        try:
+            # 在线程池中执行拍照，避免阻塞
+            loop = asyncio.get_event_loop()
+            rtsp_url = "rtsp://127.0.0.1:8554/test"
+            image_base64 = await loop.run_in_executor(
+                None, capture_photo, rtsp_url, 5
+            )
+            
+            if image_base64:
+                # 发送拍照成功响应
+                await self.发送拍照响应(request_id, True, image_base64)
+                self.logger.info(f"拍照成功: {request_id}")
+            else:
+                # 发送拍照失败响应
+                await self.发送拍照响应(request_id, False, None, "拍照失败")
+                self.logger.error(f"拍照失败: {request_id}")
+                
+        except Exception as e:
+            self.logger.error(f"处理拍照请求时出错: {e}", exc_info=True)
+            await self.发送拍照响应(request_id, False, None, str(e))
+
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
         """ 处理文本响应消息 """
         await 处理文本响应(data, self.action_executor, self._确保动作执行器())
 
     async def _处理音频控制(self, data: Dict[str, Any]) -> None:
         """ 处理音频控制消息 """
-        enabled = bool(data.get("enabled", True))
-        self.audio_capture.audio_streaming_enabled = enabled
-        self.logger.info(f"麦克风采集{'开启' if enabled else '关闭'}")
+        if "enabled" in data:
+            enabled = bool(data.get("enabled", True))
+            self.audio_capture.audio_streaming_enabled = enabled
+            self.logger.info(f"麦克风采集{'开启' if enabled else '关闭'}")
 
     async def _处理音频响应并播放(self, data: Dict[str, Any]) -> None:
         """ 处理音频响应消息 """
-        处理音频响应并播放(data, self.log_dir / "media")
+        处理音频响应并播放(data)
 
     async def _处理停止音频播放(self, data: Dict[str, Any]) -> None:
         """ 处理停止音频播放消息 """
@@ -349,11 +396,11 @@ class RobotClient:
                     self.ws_manager.connected = False
                 finally:
                     if self._是否有活跃的WebSocket连接():
-                        await self.disconnect(shutdown_resources=False)
+                        await self.断开连接到服务器(shutdown_resources=False)
         except asyncio.CancelledError:
             self.logger.info("收到中断信号，正在退出...")
         finally:
-            await self.disconnect(shutdown_resources=True)
+            await self.断开连接到服务器(shutdown_resources=True)
             await self.ipc_server.关闭()
             try:
                 await self.取消初始化()
@@ -368,7 +415,7 @@ class RobotClient:
             self.current_reconnect_interval = self.initial_reconnect_interval
             return True
 
-        success = await self.connect()
+        success = await self.连接到服务器()
         if success:
             self.current_reconnect_interval = self.initial_reconnect_interval
             return True
@@ -409,6 +456,9 @@ class RobotClient:
         if not self.audio_task or self.audio_task.done():
             self.audio_task = asyncio.create_task(self.audio_capture.开始采集())
         tasks.append(self.audio_task)
+        if not self._ipc_status_task or self._ipc_status_task.done():
+            self._ipc_status_task = asyncio.create_task(self._发送IPC状态循环())
+        tasks.append(self._ipc_status_task)
         tasks.append(
             asyncio.create_task(self.ws_manager.发送心跳消息循环(self.config["robot"]["uuid"], 构建心跳消息))
         )
@@ -453,32 +503,9 @@ class RobotClient:
         except Exception:
             pass
 
-def _构建动作映射() -> Dict[str, str]:
-    """ 构建动作映射 """
-    return {
-        "stand_up": "stand_up",
-        "sit_down": "sit_down",
-        "walk_forward": "walk_forward",
-        "walk_backward": "walk_backward",
-        "turn_left": "turn_left",
-        "turn_right": "turn_right",
-        "dance": "dance",
-        "jump": "jump",
-        "front_jump": "front_jump",
-        "backflip": "backflip",
-        "shake_hand": "shake_hand",
-        "nod": "nod",
-        "wave": "wave",
-        "two_leg_stand": "two_leg_stand",
-        "cancel_two_leg_stand": "cancel_two_leg_stand",
-        "move": "move",  # move动作需要特殊处理
-    }
-
-
-class ActionRunner:
-    def __init__(self, client: "RobotClient", action_map: Dict[str, str]) -> None:
+class 动作执行器:
+    def __init__(self, client: "RobotClient") -> None:
         self.client = client
-        self.action_map = action_map
         self._current_token = 0
 
     def _下一个_token(self) -> int:
@@ -502,7 +529,7 @@ class ActionRunner:
         """ 解析动作等待时间 """
         if action in ["walk_forward", "walk_backward", "turn_left", "turn_right"]:
             return 2.5
-        if action in ["shake_hand", "nod", "wave"]:
+        if action in ["shake_hand", "nod"]:
             return 4.5
         if action == "dance":
             return 5.0
@@ -518,40 +545,26 @@ class ActionRunner:
         return True
 
     def 执行动作(self, action: str, parameters: dict) -> bool:
-        """ 执行动作 """
+        """ 执行动作(操作机器人行动的动作) """
         try:
             token = self._下一个_token()
             self.client.logger.debug(f"开始执行动作: {action}, 参数: {parameters}")
             self._停止当前动作()
-            
             # 特殊处理move动作
             if action == "move":
                 # 将参数编码为JSON并发送
-                move_params = {
+                command = json.dumps({
+                    "type": "ai_move", # 使用type，通过控制指令执行，而不是使用action
                     "vx": parameters.get("vx", 0),
                     "vy": parameters.get("vy", 0),
                     "yaw_rate": parameters.get("yaw_rate", 0),
                     "duration": parameters.get("duration", 2),
-                }
-                command = json.dumps({
-                    "action": "move",
-                    "parameters": move_params
                 })
-                self.client.logger.info(f"发送move命令: {command}")
-                success = self.client.发送命令到交互式进程(command)
-                if not success:
-                    self.client.logger.error(f"发送move命令失败")
-                    return False
-                wait_time = float(move_params.get("duration", 2)) + 0.5  # 多等0.5秒确保完成
-                completed = self._可中断的睡眠(token, wait_time)
-                if not completed:
-                    self.client.logger.info(f"move动作被打断")
-                    return False
-                self.client.logger.debug(f"move动作执行完成")
-                return True
-            
-            # 其他动作的处理
-            command = self.action_map.get(action)
+                wait_time = float(parameters.get("duration", 2)) #  + 0.5  # 多等0.5秒确保完成
+            else:
+                # 其他动作的处理
+                command = action
+                wait_time = self._解析等待时间(action)
             if not command:
                 self.client.logger.warning(f"不支持的动作: {action}")
                 return False
@@ -559,7 +572,6 @@ class ActionRunner:
             if not success:
                 self.client.logger.error(f"发送命令 {command} 失败")
                 return False
-            wait_time = self._解析等待时间(action)
             completed = self._可中断的睡眠(token, wait_time)
             if not completed:
                 self.client.logger.info(f"动作 {action} 被打断")
@@ -569,13 +581,6 @@ class ActionRunner:
         except Exception as e:
             self.client.logger.error(f"执行动作 {action} 时出错: {e}", exc_info=True)
             return False
-
-
-def _构建动作执行器(client: "RobotClient", action_map: Dict[str, str]) -> Callable[[str, dict], bool]:
-    """ 构建动作执行器 """
-    runner = ActionRunner(client, action_map)
-    return runner.执行动作
-
 
 async def main():
     """主函数"""
@@ -594,7 +599,7 @@ async def main():
         client.logger.error("无法启动交互式子进程")
         return
 
-    client.设置动作执行器(_构建动作执行器(client, _构建动作映射()))
+    client.设置动作执行器(动作执行器(client).执行动作)
 
     # 运行客户端
     try:

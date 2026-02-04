@@ -8,6 +8,7 @@ from .服务.config_service import 获取配置管理器单例
 from .服务.mdns_service import 初始化并启动_mDNS_服务
 from .路由 import config as config_router
 from .路由 import system as system_router
+from .路由 import volume as volume_router
 from .路由 import wifi as wifi_router
 
 PORT = 8080
@@ -21,6 +22,7 @@ atexit.register(mdns_service.停止)
 app.include_router(config_router.router)
 app.include_router(wifi_router.router)
 app.include_router(system_router.router)
+app.include_router(volume_router.router)
 
 static_dir = Path(__file__).resolve().parent.parent / "static"
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

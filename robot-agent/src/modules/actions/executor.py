@@ -12,6 +12,13 @@ from core.dog import sdk
 APP_NAME = "robot-agent"
 logger = get_logger(APP_NAME)
 
+class 机器人控制模式:
+    设备趴下_电机阻尼 = 0          # 设备趴下，电机进入阻尼状态
+    站立_打招呼 = 1               # 站立状态/打招呼状态
+    设备趴下_短时间后电机自由 = 10 # 设备趴下，短时间后电机进入自由状态
+    移动 = 18                     # 移动状态
+    动作_姿态_跳跃_双腿站立 = 21   # 动作状态(姿态模式、跳跃模式、双腿站立等)
+    趴下 = 51                     # 趴下状态
 
 def _收集机器人状态(app):
     return {
@@ -72,46 +79,53 @@ def _处理控制指令(app, payload: dict) -> None:
             float(payload.get("yaw_rate", 0) or 0),   # 偏航角速度
             float(payload.get("height_vel", 0) or 0), # 垂直高度速度
         )
-    elif cmd_type == "estop":
-        app.passive() # 进入紧急趴下模式
+    elif cmd_type == "estop": # 进入紧急趴下模式
+        app.passive()
+    elif cmd_type == "ai_move": # ai控制移动
+        vx = float(payload.get("vx", 0) or 0)
+        vy = float(payload.get("vy", 0) or 0)
+        yaw_rate = float(payload.get("yaw_rate", 0) or 0)
+        app.move(vx, vy, yaw_rate)
+        duration = float(payload.get("duration", 2) or 2)
+        if duration > 0:
+            logger.info(f"执行中: 移动控制 (vx={vx}, vy={vy}, yaw_rate={yaw_rate}, {duration}秒)")
+            time.sleep(duration)
+            app.move(0, 0, 0)
 
-# 执行站立动作
 def _执行站立动作(app) -> None:
+    current_mode = app.getCurrentCtrlmode()
+    if current_mode == 机器人控制模式.设备趴下_电机阻尼:
+        _执行趴下动作(app)
+
     logger.info("执行中: 站立")
     app.standUp()
     time.sleep(3)
 
-# 执行趴下动作
 def _执行趴下动作(app) -> None:
     logger.info("执行中: 趴下")
     app.lieDown()
     time.sleep(3)
 
-# 执行跳跃动作
 def _执行跳跃动作(app) -> None:
     logger.info("执行中: 跳跃")
     app.jump()
     time.sleep(4)
 
-# 执行向前跳跃动作
 def _执行向前跳跃动作(app) -> None:
     logger.info("执行中: 向前跳跃")
     app.frontJump()
     time.sleep(4)
 
-# 执行后空翻动作
 def _执行后空翻动作(app) -> None:
     logger.info("执行中: 后空翻")
     app.backflip()
     time.sleep(4)
 
-# 执行握手动作
 def _执行握手动作(app) -> None:
     logger.info("执行中: 握手")
     app.shakeHand()
     time.sleep(4)
 
-# 执行姿态控制动作
 def _执行姿态控制动作(app) -> None:
     logger.info("执行中: 姿态控制 (4秒)")
     app.attitudeControl(0.1, 0.1, 0.1, 0.1)
@@ -139,36 +153,24 @@ def _执行退出双腿站立动作(app) -> None:
     time.sleep(1)
 
 # 执行退出动作（趴下）
-def _执行退出趴下动作(app) -> None:
+def _执行退出_趴下动作(app) -> None:
     logger.info("退出演示。机器人将趴下。")
     app.lieDown()
     time.sleep(3)
 
 # 执行退出动作（站立）
-def _执行退出站立动作(app) -> None:
+def _执行退出_站立动作(app) -> None:
     logger.info("退出演示。机器人将站立。")
     app.standUp()
     time.sleep(3)
 
 # 执行退出动作（先趴下后急停）
-def _执行退出停止动作(app) -> None:
+def _执行退出_停止动作(app) -> None:
     logger.info("退出演示。机器人将先趴下再急停。")
     app.lieDown()
     time.sleep(2)
     app.passive()
     time.sleep(1)
-
-# 执行move动作（带参数的移动控制）
-def _执行move动作(app, params: dict) -> None:
-    vx = float(params.get("vx", 0) or 0)
-    vy = float(params.get("vy", 0) or 0)
-    yaw_rate = float(params.get("yaw_rate", 0) or 0)
-    duration = float(params.get("duration", 2) or 2)
-    
-    logger.info(f"执行中: 移动控制 (vx={vx}, vy={vy}, yaw_rate={yaw_rate}, {duration}秒)")
-    app.move(vx, vy, yaw_rate)
-    time.sleep(duration)
-    app.move(0, 0, 0)
 
 # 动作处理映射
 ACTION_HANDLERS = {
@@ -177,16 +179,16 @@ ACTION_HANDLERS = {
     "jump": _执行跳跃动作,
     "front_jump": _执行向前跳跃动作,
     "backflip": _执行后空翻动作,
-    "shake_hand": _执行握手动作,
-    "nod": _执行姿态控制动作,
-    "wave": _执行姿态控制动作,
+    "shake_hand": _执行握手动作, # 握手
+    "wave": _执行握手动作, # 挥手
+    "nod": _执行姿态控制动作, # 点头
     "dance": _执行姿态控制动作, # 跳舞（TODO: 暂时用姿态控制代替）
-    "two_leg_once": _执行双腿站立动作_一次性,
+    "two_leg_once": _执行双腿站立动作_一次性, # ai专用
     "two_leg_stand": _执行双腿站立动作,
     "cancel_two_leg_stand": _执行退出双腿站立动作,
-    "exit_lie_down": _执行退出趴下动作,
-    "exit_stand_up": _执行退出站立动作,
-    "exit_stop": _执行退出停止动作,
+    "exit_lie_down": _执行退出_趴下动作,
+    "exit_stand_up": _执行退出_站立动作,
+    "exit_stop": _执行退出_停止动作,
     "move": None,  # move动作需要特殊处理，带参数
 }
 
@@ -204,15 +206,7 @@ def _解析退出命令(config: dict) -> str:
     return "exit_lie_down"
 
 # 执行用户选择的动作
-def _执行选择的动作(app, choice: str, params: dict = None) -> bool:
-    # 特殊处理move动作
-    if choice == "move":
-        if params:
-            _执行move动作(app, params)
-        else:
-            logger.warning("move动作需要参数（vx, vy, yaw_rate, duration）")
-        return False
-    
+def _执行选择的动作(app, choice: str) -> bool:
     handler = ACTION_HANDLERS.get(choice)
     if not handler:
         logger.warning("无效的选择。请重试。")
@@ -230,13 +224,7 @@ def _循环处理用户输入(app, config: dict) -> None:
         if raw.startswith("{"):
             try:
                 payload = json.loads(raw)
-                # 检查是否是move动作
-                if payload.get("action") == "move":
-                    params = payload.get("parameters", {})
-                    _执行move动作(app, params)
-                else:
-                    # 普通控制指令
-                    _处理控制指令(app, payload)
+                _处理控制指令(app, payload)
                 continue
             except Exception as e:
                 logger.error(f"解析命令失败: {e}")

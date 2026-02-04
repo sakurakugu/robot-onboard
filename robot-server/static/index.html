@@ -1,598 +1,949 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>机器狗配置中心</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 30px;
-        }
-        .tabs {
-            display: flex;
-            background: #fff;
-            border-radius: 8px 8px 0 0;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .tab {
-            flex: 1;
-            padding: 15px;
-            text-align: center;
-            cursor: pointer;
-            background: #f0f0f0;
-            border: none;
-            font-size: 16px;
-            transition: background 0.3s;
-        }
-        .tab.active {
-            background: #fff;
-            font-weight: bold;
-            color: #4CAF50;
-        }
-        .tab:hover:not(.active) {
-            background: #e0e0e0;
-        }
-        .tab-content {
-            display: none;
-            background: #fff;
-            padding: 20px;
-            border-radius: 0 0 8px 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .tab-content.active {
-            display: block;
-        }
-        .card {
-            background: #fff;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        .card-title {
-            font-size: 18px;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #555;
-        }
-        .label-desc {
-            font-size: 12px;
-            color: #888;
-            font-weight: normal;
-        }
-        input[type="text"], input[type="password"], input[type="number"], select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        input:focus, select:focus {
-            outline: none;
-            border-color: #4CAF50;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background 0.3s;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        button.secondary {
-            background-color: #666;
-        }
-        button.secondary:hover {
-            background-color: #555;
-        }
-        button.danger {
-            background-color: #f44336;
-        }
-        button.danger:hover {
-            background-color: #d32f2f;
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .message {
-            padding: 12px;
-            border-radius: 4px;
-            margin-top: 15px;
-            display: none;
-        }
-        .message.success {
-            display: block;
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .message.error {
-            display: block;
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .wifi-list {
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        .wifi-item {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: background 0.2s;
-        }
-        .wifi-item:last-child {
-            border-bottom: none;
-        }
-        .wifi-item:hover {
-            background-color: #f5f5f5;
-        }
-        .wifi-item.selected {
-            background-color: #e8f5e9;
-            border-left: 3px solid #4CAF50;
-        }
-        .wifi-item.connected {
-            border-left: 3px solid #4CAF50;
-        }
-        .badge {
-            font-size: 11px;
-            padding: 2px 6px;
-            border-radius: 3px;
-            margin-left: 5px;
-        }
-        .badge.connected {
-            background: #4CAF50;
-            color: white;
-        }
-        .config-section {
-            margin-bottom: 25px;
-        }
-        .config-section-title {
-            font-size: 16px;
-            font-weight: bold;
-            color: #4CAF50;
-            margin-bottom: 15px;
-            padding: 5px 0;
-            border-bottom: 2px solid #4CAF50;
-        }
-        .config-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 15px;
-        }
-        .config-item {
-            background: #fafafa;
-            padding: 12px;
-            border-radius: 4px;
-            border: 1px solid #eee;
-        }
-        .config-item input {
-            margin-top: 5px;
-        }
-        .config-item .key-name {
-            font-family: monospace;
-            font-size: 13px;
-            color: #666;
-        }
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: #888;
-        }
-        .refresh-btn {
-            padding: 5px 10px;
-            font-size: 12px;
-        }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      h1 {
+        text-align: center;
+        color: #333;
+        margin-bottom: 30px;
+      }
+      .tabs {
+        display: flex;
+        background: #fff;
+        border-radius: 8px 8px 0 0;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .tab {
+        flex: 1;
+        padding: 15px;
+        text-align: center;
+        cursor: pointer;
+        background: #f0f0f0;
+        border: none;
+        font-size: 16px;
+        transition: background 0.3s;
+      }
+      .tab.active {
+        background: #fff;
+        font-weight: bold;
+        color: #4caf50;
+      }
+      .tab:hover:not(.active) {
+        background: #e0e0e0;
+      }
+      .tab-content {
+        display: none;
+        background: #fff;
+        padding: 20px;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .tab-content.active {
+        display: block;
+      }
+      .card {
+        background: #fff;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+      .card-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #555;
+      }
+      .label-desc {
+        font-size: 12px;
+        color: #888;
+        font-weight: normal;
+      }
+      input[type="text"],
+      input[type="password"],
+      input[type="number"],
+      select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #4caf50;
+      }
+      button {
+        padding: 10px 20px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background 0.3s;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      button.secondary {
+        background-color: #666;
+      }
+      button.secondary:hover {
+        background-color: #555;
+      }
+      button.danger {
+        background-color: #f44336;
+      }
+      button.danger:hover {
+        background-color: #d32f2f;
+      }
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+      .btn-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+      }
+      .message {
+        padding: 12px;
+        border-radius: 4px;
+        margin-top: 15px;
+        display: none;
+      }
+      .message.success {
+        display: block;
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .message.error {
+        display: block;
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .wifi-list {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .wifi-item {
+        padding: 12px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background 0.2s;
+      }
+      .wifi-item:last-child {
+        border-bottom: none;
+      }
+      .wifi-item:hover {
+        background-color: #f5f5f5;
+      }
+      .wifi-item.selected {
+        background-color: #e8f5e9;
+        border-left: 3px solid #4caf50;
+      }
+      .wifi-item.connected {
+        border-left: 3px solid #4caf50;
+      }
+      .badge {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin-left: 5px;
+      }
+      .badge.connected {
+        background: #4caf50;
+        color: white;
+      }
+      .config-section {
+        margin-bottom: 25px;
+      }
+      .config-section-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #4caf50;
+        margin-bottom: 15px;
+        padding: 5px 0;
+        border-bottom: 2px solid #4caf50;
+      }
+      .config-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 15px;
+      }
+      .config-item {
+        background: #fafafa;
+        padding: 12px;
+        border-radius: 4px;
+        border: 1px solid #eee;
+      }
+      .config-item input {
+        margin-top: 5px;
+      }
+      .config-item .key-name {
+        font-family: monospace;
+        font-size: 13px;
+        color: #666;
+      }
+      .loading {
+        text-align: center;
+        padding: 20px;
+        color: #888;
+      }
+      .refresh-btn {
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+      .collapse-section {
+        margin-bottom: 15px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .collapse-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 20px;
+        background: #f9f9f9;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .collapse-header:hover {
+        background: #f0f0f0;
+      }
+      .collapse-header h3 {
+        margin: 0;
+        font-size: 16px;
+        color: #333;
+      }
+      .collapse-icon {
+        font-size: 20px;
+        transition: transform 0.3s;
+      }
+      .collapse-icon.expanded {
+        transform: rotate(180deg);
+      }
+      .collapse-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+        background: #fff;
+      }
+      .collapse-content.expanded {
+        max-height: 2000px;
+        transition: max-height 0.5s ease-in;
+      }
+      .collapse-body {
+        padding: 20px;
+      }
+      .volume-control {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+      .volume-slider {
+        flex: 1;
+        height: 6px;
+        border-radius: 3px;
+        background: #ddd;
+        outline: none;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      .volume-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #4caf50;
+        cursor: pointer;
+      }
+      .volume-slider::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #4caf50;
+        cursor: pointer;
+        border: none;
+      }
+      .volume-value {
+        min-width: 45px;
+        text-align: center;
+        font-weight: bold;
+        color: #4caf50;
+      }
+      .mute-btn {
+        padding: 8px 15px;
+        font-size: 13px;
+      }
+      .wifi-connect-form {
+        margin-top: 20px;
+      }
+      .config-actions {
+        margin-bottom: 20px;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <h1>机器狗配置中心</h1>
-        
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('wifi')">WiFi设置</button>
-            <button class="tab" onclick="switchTab('config')">系统配置</button>
+      <h1>机器狗配置中心</h1>
+
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('system')">
+          系统设置
+        </button>
+        <button class="tab" onclick="switchTab('config')">高级配置</button>
+      </div>
+
+      <!-- 系统设置页面 -->
+      <div id="system-tab" class="tab-content active">
+        <!-- 音量控制 -->
+        <div class="collapse-section">
+          <div class="collapse-header" onclick="toggleCollapse('volume')">
+            <h3>音量控制</h3>
+            <span class="collapse-icon expanded" id="volume-icon">▼</span>
+          </div>
+          <div class="collapse-content expanded" id="volume-content">
+            <div class="collapse-body">
+              <div class="form-group">
+                <label>系统音量</label>
+                <div class="volume-control">
+                  <input
+                    type="range"
+                    class="volume-slider"
+                    id="volumeSlider"
+                    min="0"
+                    max="100"
+                    value="50"
+                    aria-label="系统音量"
+                    oninput="updateVolumeDisplay(this.value)"
+                  />
+                  <span class="volume-value" id="volumeValue">50%</span>
+                  <button class="mute-btn" id="muteBtn" onclick="toggleMute()">
+                    🔇 静音
+                  </button>
+                </div>
+              </div>
+              <div class="btn-group">
+                <button onclick="loadVolume()">刷新</button>
+                <button onclick="setVolume()">应用</button>
+              </div>
+              <div id="volumeMessage" class="message"></div>
+            </div>
+          </div>
         </div>
 
-        <!-- WiFi设置页面 -->
-        <div id="wifi-tab" class="tab-content active">
-            <div class="card">
-                <div class="card-title">
-                    可用WiFi网络
-                    <button class="refresh-btn secondary" id="refreshWifi" onclick="scanWifi()">刷新</button>
-                </div>
-                <div id="wifiList" class="wifi-list">
-                    <div class="loading">正在扫描WiFi...</div>
-                </div>
-            </div>
-            
-            <div class="card">
+        <!-- WiFi设置 -->
+        <div class="collapse-section">
+          <div class="collapse-header" onclick="toggleCollapse('wifi')">
+            <h3>WiFi设置</h3>
+            <span class="collapse-icon expanded" id="wifi-icon">▼</span>
+          </div>
+          <div class="collapse-content expanded" id="wifi-content">
+            <div class="collapse-body">
+              <div class="card-title">
+                可用WiFi网络
+                <button
+                  class="refresh-btn secondary"
+                  id="refreshWifi"
+                  onclick="scanWifi()"
+                >
+                  刷新
+                </button>
+              </div>
+              <div id="wifiList" class="wifi-list">
+                <div class="loading">正在扫描WiFi...</div>
+              </div>
+
+              <div class="wifi-connect-form">
                 <div class="card-title">连接WiFi</div>
                 <form id="wifiForm" onsubmit="connectWifi(event)">
-                    <div class="form-group">
-                        <label for="ssid">WiFi名称</label>
-                        <input type="text" id="ssid" name="ssid" required placeholder="请选择或输入WiFi名称">
-                    </div>
-                    <div class="form-group">
-                        <label for="password">WiFi密码</label>
-                        <input type="password" id="password" name="password" required placeholder="请输入WiFi密码">
-                    </div>
-                    <button type="submit">连接WiFi</button>
+                  <div class="form-group">
+                    <label for="ssid">WiFi名称</label>
+                    <input
+                      type="text"
+                      id="ssid"
+                      name="ssid"
+                      required
+                      placeholder="请选择或输入WiFi名称"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="password">WiFi密码</label>
+                    <input
+                      type="password"
+                      id="password"
+                      name="password"
+                      required
+                      placeholder="请输入WiFi密码"
+                    />
+                  </div>
+                  <button type="submit">连接WiFi</button>
                 </form>
                 <div id="wifiMessage" class="message"></div>
+              </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 系统配置页面 -->
+      <div id="config-tab" class="tab-content">
+        <div class="btn-group config-actions">
+          <button onclick="loadConfig()">刷新配置</button>
+          <button class="secondary" onclick="saveConfig()">保存配置</button>
+          <button class="danger" onclick="resetConfig()">重置为默认</button>
         </div>
 
-        <!-- 系统配置页面 -->
-        <div id="config-tab" class="tab-content">
-            <div class="btn-group" style="margin-bottom: 20px;">
-                <button onclick="loadConfig()">刷新配置</button>
-                <button class="secondary" onclick="saveConfig()">保存配置</button>
-                <button class="danger" onclick="resetConfig()">重置为默认</button>
-            </div>
-            
-            <div id="configContainer">
-                <div class="loading">正在加载配置...</div>
-            </div>
-            
-            <div id="configMessage" class="message"></div>
+        <div id="configContainer">
+          <div class="loading">正在加载配置...</div>
         </div>
+
+        <div id="configMessage" class="message"></div>
+      </div>
     </div>
 
     <script>
-        // 配置字段分组（使用section.key格式）
-        const CONFIG_SECTIONS = {
-            'robot': { title: '机器人信息', keys: ['uuid', 'name', 'model', 'version'] },
-            'server': { title: '服务器配置', keys: ['control_url', 'business_url', 'audio_upload_url', 'audio_download_url', 'reconnect_interval', 'heartbeat_interval'] },
-            'sdk': { title: 'SDK配置', keys: ['robot_ip', 'local_port'] },
-            'audio': { title: '音频配置', keys: ['sample_rate', 'channels', 'frame_duration_ms', 'vad_threshold', 'vad_silence_ms', 'max_segment_ms', 'enable_streaming', 'input_device'] },
-            'actions': { title: '动作配置', keys: ['exit_behavior'] },
-            'logging': { title: '日志配置', keys: ['level', 'max_file_size_mb'] }
-        };
+      // 配置字段分组（使用section.key格式）
+      const CONFIG_SECTIONS = {
+        robot: {
+          title: "机器人信息",
+          keys: ["uuid", "name", "model", "version"],
+        },
+        server: {
+          title: "服务器配置",
+          keys: [
+            "control_url",
+            "business_url",
+            "audio_upload_url",
+            "audio_download_url",
+            "reconnect_interval",
+            "heartbeat_interval",
+          ],
+        },
+        sdk: { title: "SDK配置", keys: ["robot_ip", "local_port"] },
+        audio: {
+          title: "音频配置",
+          keys: [
+            "sample_rate",
+            "channels",
+            "frame_duration_ms",
+            "vad_threshold",
+            "vad_silence_ms",
+            "max_segment_ms",
+            "enable_streaming",
+            "input_device",
+          ],
+        },
+        actions: { title: "动作配置", keys: ["exit_behavior"] },
+        logging: { title: "日志配置", keys: ["level", "max_file_size_mb"] },
+      };
 
-        let currentConfig = {};  // 嵌套格式: {section: {key: value}}
-        let configFields = {};   // full_key -> field信息
+      let currentConfig = {}; // 嵌套格式: {section: {key: value}}
+      let configFields = {}; // full_key -> field信息
 
-        // 切换标签页
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
-            document.querySelector(`.tab:nth-child(${tabName === 'wifi' ? 1 : 2})`).classList.add('active');
-            document.getElementById(`${tabName}-tab`).classList.add('active');
-            
-            if (tabName === 'config') {
-                loadConfig();
-            }
+      // 切换标签页
+      function switchTab(tabName) {
+        document
+          .querySelectorAll(".tab")
+          .forEach((t) => t.classList.remove("active"));
+        document
+          .querySelectorAll(".tab-content")
+          .forEach((c) => c.classList.remove("active"));
+
+        document
+          .querySelector(`.tab:nth-child(${tabName === "system" ? 1 : 2})`)
+          .classList.add("active");
+        document.getElementById(`${tabName}-tab`).classList.add("active");
+
+        if (tabName === "config") {
+          loadConfig();
+        } else if (tabName === "system") {
+          scanWifi();
+          loadVolume();
         }
+      }
 
-        // ==================== WiFi功能 ====================
-        
-        function scanWifi() {
-            const wifiListDiv = document.getElementById('wifiList');
-            const refreshBtn = document.getElementById('refreshWifi');
-            
-            wifiListDiv.innerHTML = '<div class="loading">正在扫描WiFi...</div>';
-            refreshBtn.disabled = true;
-            refreshBtn.textContent = '扫描中...';
-            
-            return fetch('/api/v1/wifi/scan')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && data.networks.length > 0) {
-                        wifiListDiv.innerHTML = '';
-                        data.networks.forEach(network => {
-                            const item = document.createElement('div');
-                            item.className = 'wifi-item' + (network.in_use ? ' connected' : '');
-                            item.onclick = () => selectWifi(network.ssid, item);
-                            
-                            const badge = network.in_use ? '<span class="badge connected">已连接</span>' : '';
-                            item.innerHTML = `
+      // 折叠/展开功能
+      function toggleCollapse(section) {
+        const content = document.getElementById(`${section}-content`);
+        const icon = document.getElementById(`${section}-icon`);
+
+        if (content.classList.contains("expanded")) {
+          content.classList.remove("expanded");
+          icon.classList.remove("expanded");
+        } else {
+          content.classList.add("expanded");
+          icon.classList.add("expanded");
+        }
+      }
+
+      // ==================== 音量控制功能 ====================
+
+      let currentVolume = 50;
+      let isMuted = false;
+
+      function updateVolumeDisplay(value) {
+        currentVolume = parseInt(value);
+        document.getElementById("volumeValue").textContent =
+          `${currentVolume}%`;
+      }
+
+      async function loadVolume() {
+        const messageDiv = document.getElementById("volumeMessage");
+        messageDiv.style.display = "none";
+
+        try {
+          const response = await fetch("/api/v1/volume");
+          const data = await response.json();
+
+          if (data.success && data.data) {
+            currentVolume = data.data.volume || 50;
+            isMuted = data.data.muted || false;
+
+            document.getElementById("volumeSlider").value = currentVolume;
+            document.getElementById("volumeValue").textContent =
+              `${currentVolume}%`;
+            updateMuteButton();
+          } else {
+            showVolumeMessage(
+              "获取音量失败: " + (data.error || "未知错误"),
+              "error",
+            );
+          }
+        } catch (error) {
+          showVolumeMessage("获取音量失败: " + error.message, "error");
+        }
+      }
+
+      async function setVolume() {
+        const messageDiv = document.getElementById("volumeMessage");
+        messageDiv.style.display = "none";
+
+        try {
+          const response = await fetch("/api/v1/volume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ volume: currentVolume }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showVolumeMessage(`音量已设置为 ${currentVolume}%`, "success");
+          } else {
+            showVolumeMessage(
+              "设置音量失败: " + (data.error || "未知错误"),
+              "error",
+            );
+          }
+        } catch (error) {
+          showVolumeMessage("设置音量失败: " + error.message, "error");
+        }
+      }
+
+      async function toggleMute() {
+        const messageDiv = document.getElementById("volumeMessage");
+        messageDiv.style.display = "none";
+
+        isMuted = !isMuted;
+
+        try {
+          const response = await fetch("/api/v1/volume/mute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mute: isMuted }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            updateMuteButton();
+            showVolumeMessage(isMuted ? "已静音" : "已取消静音", "success");
+          } else {
+            isMuted = !isMuted; // 回滚
+            showVolumeMessage(
+              "设置静音失败: " + (data.error || "未知错误"),
+              "error",
+            );
+          }
+        } catch (error) {
+          isMuted = !isMuted; // 回滚
+          showVolumeMessage("设置静音失败: " + error.message, "error");
+        }
+      }
+
+      function updateMuteButton() {
+        const btn = document.getElementById("muteBtn");
+        if (isMuted) {
+          btn.textContent = "🔇";
+          btn.classList.add("secondary");
+        } else {
+          btn.textContent = "🔊";
+          btn.classList.remove("secondary");
+        }
+      }
+
+      function showVolumeMessage(text, type) {
+        const messageDiv = document.getElementById("volumeMessage");
+        messageDiv.className = `message ${type}`;
+        messageDiv.textContent = text;
+        messageDiv.style.display = "block";
+        setTimeout(() => {
+          messageDiv.style.display = "none";
+        }, 3000);
+      }
+
+      // ==================== WiFi功能 ====================
+
+      function scanWifi() {
+        const wifiListDiv = document.getElementById("wifiList");
+        const refreshBtn = document.getElementById("refreshWifi");
+
+        wifiListDiv.innerHTML = '<div class="loading">正在扫描WiFi...</div>';
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "扫描中...";
+
+        return fetch("/api/v1/wifi/scan")
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success && data.networks.length > 0) {
+              wifiListDiv.innerHTML = "";
+              data.networks.forEach((network) => {
+                const item = document.createElement("div");
+                item.className =
+                  "wifi-item" + (network.in_use ? " connected" : "");
+                item.onclick = () => selectWifi(network.ssid, item);
+
+                const badge = network.in_use
+                  ? '<span class="badge connected">已连接</span>'
+                  : "";
+                item.innerHTML = `
                                 <div>
                                     <strong>${network.ssid}</strong>${badge}
                                     <br><small style="color: #888;">信号: ${network.signal}% | 频道: ${network.channel} | ${network.security}</small>
                                 </div>
                             `;
-                            wifiListDiv.appendChild(item);
-                        });
-                    } else {
-                        wifiListDiv.innerHTML = '<div class="loading">未找到可用WiFi网络</div>';
-                    }
-                })
-                .catch(error => {
-                    wifiListDiv.innerHTML = `<div class="loading" style="color: #f44336;">扫描失败: ${error.message}</div>`;
-                })
-                .finally(() => {
-                    refreshBtn.disabled = false;
-                    refreshBtn.textContent = '刷新';
-                });
-        }
-
-        function selectWifi(ssid, element) {
-            document.getElementById('ssid').value = ssid;
-            document.querySelectorAll('.wifi-item').forEach(item => item.classList.remove('selected'));
-            element.classList.add('selected');
-        }
-
-        function connectWifi(e) {
-            e.preventDefault();
-            const ssid = document.getElementById('ssid').value;
-            const password = document.getElementById('password').value;
-            const messageDiv = document.getElementById('wifiMessage');
-            
-            messageDiv.className = 'message';
-            messageDiv.style.display = 'block';
-            messageDiv.textContent = '正在连接WiFi...';
-            
-            fetch('/api/v1/wifi/connect', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ssid, password })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    messageDiv.className = 'message success';
-                    messageDiv.textContent = 'WiFi连接成功！';
-                    setTimeout(() => scanWifi(), 2000);
-                } else {
-                    messageDiv.className = 'message error';
-                    messageDiv.textContent = 'WiFi连接失败：' + (data.error || '未知错误');
-                }
-            })
-            .catch(error => {
-                messageDiv.className = 'message error';
-                messageDiv.textContent = '请求失败：' + error.message;
-            });
-        }
-
-        // ==================== 配置功能 ====================
-
-        async function loadConfig() {
-            const container = document.getElementById('configContainer');
-            container.innerHTML = '<div class="loading">正在加载配置...</div>';
-            
-            try {
-                // 并行加载配置和字段信息
-                const [configRes, fieldsRes] = await Promise.all([
-                    fetch('/api/v1/config'),
-                    fetch('/api/v1/config/fields')
-                ]);
-                
-                const configData = await configRes.json();
-                const fieldsData = await fieldsRes.json();
-                
-                if (configData.success && fieldsData.success) {
-                    currentConfig = configData.config;  // 嵌套格式
-                    configFields = {};
-                    fieldsData.fields.forEach(f => configFields[f.full_key] = f);
-                    renderConfig();
-                } else {
-                    container.innerHTML = '<div class="loading" style="color: #f44336;">加载配置失败</div>';
-                }
-            } catch (error) {
-                container.innerHTML = `<div class="loading" style="color: #f44336;">加载失败: ${error.message}</div>`;
+                wifiListDiv.appendChild(item);
+              });
+            } else {
+              wifiListDiv.innerHTML =
+                '<div class="loading">未找到可用WiFi网络</div>';
             }
-        }
+          })
+          .catch((error) => {
+            wifiListDiv.innerHTML = `<div class="loading" style="color: #f44336;">扫描失败: ${error.message}</div>`;
+          })
+          .finally(() => {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = "刷新";
+          });
+      }
 
-        function renderConfig() {
-            const container = document.getElementById('configContainer');
-            let html = '';
-            
-            for (const [section, group] of Object.entries(CONFIG_SECTIONS)) {
-                html += `<div class="config-section">
+      function selectWifi(ssid, element) {
+        document.getElementById("ssid").value = ssid;
+        document
+          .querySelectorAll(".wifi-item")
+          .forEach((item) => item.classList.remove("selected"));
+        element.classList.add("selected");
+      }
+
+      function connectWifi(e) {
+        e.preventDefault();
+        const ssid = document.getElementById("ssid").value;
+        const password = document.getElementById("password").value;
+        const messageDiv = document.getElementById("wifiMessage");
+
+        messageDiv.className = "message";
+        messageDiv.style.display = "block";
+        messageDiv.textContent = "正在连接WiFi...";
+
+        fetch("/api/v1/wifi/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ssid, password }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              messageDiv.className = "message success";
+              messageDiv.textContent = "WiFi连接成功！";
+              setTimeout(() => scanWifi(), 2000);
+            } else {
+              messageDiv.className = "message error";
+              messageDiv.textContent =
+                "WiFi连接失败：" + (data.error || "未知错误");
+            }
+          })
+          .catch((error) => {
+            messageDiv.className = "message error";
+            messageDiv.textContent = "请求失败：" + error.message;
+          });
+      }
+
+      // ==================== 配置功能 ====================
+
+      async function loadConfig() {
+        const container = document.getElementById("configContainer");
+        container.innerHTML = '<div class="loading">正在加载配置...</div>';
+
+        try {
+          // 并行加载配置和字段信息
+          const [configRes, fieldsRes] = await Promise.all([
+            fetch("/api/v1/config"),
+            fetch("/api/v1/config/fields"),
+          ]);
+
+          const configData = await configRes.json();
+          const fieldsData = await fieldsRes.json();
+
+          if (configData.success && fieldsData.success) {
+            currentConfig = configData.config; // 嵌套格式
+            configFields = {};
+            fieldsData.fields.forEach((f) => (configFields[f.full_key] = f));
+            renderConfig();
+          } else {
+            container.innerHTML =
+              '<div class="loading" style="color: #f44336;">加载配置失败</div>';
+          }
+        } catch (error) {
+          container.innerHTML = `<div class="loading" style="color: #f44336;">加载失败: ${error.message}</div>`;
+        }
+      }
+
+      function renderConfig() {
+        const container = document.getElementById("configContainer");
+        let html = "";
+
+        for (const [section, group] of Object.entries(CONFIG_SECTIONS)) {
+          html += `<div class="config-section">
                     <div class="config-section-title">${group.title} [${section}]</div>
                     <div class="config-grid">`;
-                
-                for (const key of group.keys) {
-                    const fullKey = `${section}.${key}`;
-                    const field = configFields[fullKey] || { description: key, type: 'string', readonly: false };
-                    const sectionConfig = currentConfig[section] || {};
-                    const value = sectionConfig[key] ?? '';
-                    
-                    const readonlyBadge = field.readonly ? '<span style="color:#ff9800;font-size:11px;margin-left:6px;">[只读]</span>' : '';
-                    
-                    html += `<div class="config-item">
+
+          for (const key of group.keys) {
+            const fullKey = `${section}.${key}`;
+            const field = configFields[fullKey] || {
+              description: key,
+              type: "string",
+              readonly: false,
+            };
+            const sectionConfig = currentConfig[section] || {};
+            const value = sectionConfig[key] ?? "";
+
+            const readonlyBadge = field.readonly
+              ? '<span style="color:#ff9800;font-size:11px;margin-left:6px;">[只读]</span>'
+              : "";
+
+            html += `<div class="config-item">
                         <label>
                             ${field.description}${readonlyBadge}
                             <span class="key-name">${key}</span>
                         </label>
                         ${renderInput(section, key, value, field)}
                     </div>`;
-                }
-                
-                html += '</div></div>';
-            }
-            
-            container.innerHTML = html;
+          }
+
+          html += "</div></div>";
         }
 
-        function getInputType(type) {
-            switch (type) {
-                case 'int':
-                case 'float':
-                    return 'number';
-                case 'bool':
-                    return 'checkbox';
-                default:
-                    return 'text';
-            }
+        container.innerHTML = html;
+      }
+
+      function getInputType(type) {
+        switch (type) {
+          case "int":
+          case "float":
+            return "number";
+          case "bool":
+            return "checkbox";
+          default:
+            return "text";
+        }
+      }
+
+      function renderInput(section, key, value, field) {
+        const type = field.type;
+        const fullKey = `${section}.${key}`;
+        const isReadonly = field.readonly;
+        const disabledAttr = isReadonly ? "disabled" : "";
+        const readonlyStyle = isReadonly
+          ? "background-color: #f5f5f5; color: #888; cursor: not-allowed;"
+          : "";
+
+        if (type === "bool") {
+          const checked = value ? "checked" : "";
+          return `<input type="checkbox" id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" ${checked} ${disabledAttr} style="width: auto; margin-top: 10px; ${readonlyStyle}">`;
         }
 
-        function renderInput(section, key, value, field) {
-            const type = field.type;
-            const fullKey = `${section}.${key}`;
-            const isReadonly = field.readonly;
-            const disabledAttr = isReadonly ? 'disabled' : '';
-            const readonlyStyle = isReadonly ? 'background-color: #f5f5f5; color: #888; cursor: not-allowed;' : '';
-            
-            if (type === 'bool') {
-                const checked = value ? 'checked' : '';
-                return `<input type="checkbox" id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" ${checked} ${disabledAttr} style="width: auto; margin-top: 10px; ${readonlyStyle}">`;
-            }
-            
-            if (key === 'level' && section === 'logging') {
-                const options = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
-                let html = `<select id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" ${disabledAttr} style="${readonlyStyle}">`;
-                options.forEach(opt => {
-                    const selected = value === opt ? 'selected' : '';
-                    html += `<option value="${opt}" ${selected}>${opt}</option>`;
-                });
-                html += '</select>';
-                return html;
-            }
-            
-            if (key === 'exit_behavior' && section === 'actions') {
-                const options = ['lie_down', 'stand_up', 'stop'];
-                let html = `<select id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" ${disabledAttr} style="${readonlyStyle}">`;
-                options.forEach(opt => {
-                    const selected = value === opt ? 'selected' : '';
-                    html += `<option value="${opt}" ${selected}>${opt}</option>`;
-                });
-                html += '</select>';
-                return html;
-            }
-            
-            const inputType = type === 'int' || type === 'float' ? 'number' : 'text';
-            const step = type === 'float' ? 'step="0.001"' : '';
-            return `<input type="${inputType}" id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" value="${value}" ${step} ${disabledAttr} style="${readonlyStyle}">`;
+        if (key === "level" && section === "logging") {
+          const options = ["DEBUG", "INFO", "WARNING", "ERROR"];
+          let html = `<select id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" ${disabledAttr} style="${readonlyStyle}">`;
+          options.forEach((opt) => {
+            const selected = value === opt ? "selected" : "";
+            html += `<option value="${opt}" ${selected}>${opt}</option>`;
+          });
+          html += "</select>";
+          return html;
         }
 
-        async function saveConfig() {
-            const messageDiv = document.getElementById('configMessage');
-            const updates = {};
-            
-            // 只收集非只读字段
-            document.querySelectorAll('[data-section][data-key]:not([disabled])').forEach(input => {
-                const section = input.dataset.section;
-                const key = input.dataset.key;
-                const type = input.dataset.type;
-                let value;
-                
-                if (type === 'bool') {
-                    value = input.checked;
-                } else if (type === 'int') {
-                    value = parseInt(input.value) || 0;
-                } else if (type === 'float') {
-                    value = parseFloat(input.value) || 0;
-                } else {
-                    value = input.value;
-                }
-                
-                // 构建嵌套结构
-                if (!updates[section]) {
-                    updates[section] = {};
-                }
-                updates[section][key] = value;
-            });
-            
-            try {
-                const response = await fetch('/api/v1/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updates)
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    messageDiv.className = 'message success';
-                    messageDiv.textContent = '配置保存成功！';
-                    messageDiv.style.display = 'block';
-                } else {
-                    messageDiv.className = 'message error';
-                    messageDiv.textContent = '保存失败: ' + (data.message || '未知错误');
-                    messageDiv.style.display = 'block';
-                }
-            } catch (error) {
-                messageDiv.className = 'message error';
-                messageDiv.textContent = '请求失败: ' + error.message;
-                messageDiv.style.display = 'block';
-            }
-            
-            setTimeout(() => { messageDiv.style.display = 'none'; }, 3000);
+        if (key === "exit_behavior" && section === "actions") {
+          const options = ["lie_down", "stand_up", "stop"];
+          let html = `<select id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" ${disabledAttr} style="${readonlyStyle}">`;
+          options.forEach((opt) => {
+            const selected = value === opt ? "selected" : "";
+            html += `<option value="${opt}" ${selected}>${opt}</option>`;
+          });
+          html += "</select>";
+          return html;
         }
 
-        async function resetConfig() {
-            if (!confirm('确定要重置所有配置为默认值吗？\n（UUID将保持不变）')) {
-                return;
+        const inputType =
+          type === "int" || type === "float" ? "number" : "text";
+        const step = type === "float" ? 'step="0.001"' : "";
+        return `<input type="${inputType}" id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" value="${value}" ${step} ${disabledAttr} style="${readonlyStyle}">`;
+      }
+
+      async function saveConfig() {
+        const messageDiv = document.getElementById("configMessage");
+        const updates = {};
+
+        // 只收集非只读字段
+        document
+          .querySelectorAll("[data-section][data-key]:not([disabled])")
+          .forEach((input) => {
+            const section = input.dataset.section;
+            const key = input.dataset.key;
+            const type = input.dataset.type;
+            let value;
+
+            if (type === "bool") {
+              value = input.checked;
+            } else if (type === "int") {
+              value = parseInt(input.value) || 0;
+            } else if (type === "float") {
+              value = parseFloat(input.value) || 0;
+            } else {
+              value = input.value;
             }
-            
-            const messageDiv = document.getElementById('configMessage');
-            
-            try {
-                const response = await fetch('/api/v1/config/reset', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    messageDiv.className = 'message success';
-                    messageDiv.textContent = '配置已重置为默认值！';
-                    await loadConfig();
-                } else {
-                    messageDiv.className = 'message error';
-                    messageDiv.textContent = '重置失败: ' + (data.message || '未知错误');
-                }
-            } catch (error) {
-                messageDiv.className = 'message error';
-                messageDiv.textContent = '请求失败: ' + error.message;
+
+            // 构建嵌套结构
+            if (!updates[section]) {
+              updates[section] = {};
             }
-            
-            setTimeout(() => { messageDiv.style.display = 'none'; }, 3000);
+            updates[section][key] = value;
+          });
+
+        try {
+          const response = await fetch("/api/v1/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updates),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            messageDiv.className = "message success";
+            messageDiv.textContent = "配置保存成功！";
+            messageDiv.style.display = "block";
+          } else {
+            messageDiv.className = "message error";
+            messageDiv.textContent =
+              "保存失败: " + (data.message || "未知错误");
+            messageDiv.style.display = "block";
+          }
+        } catch (error) {
+          messageDiv.className = "message error";
+          messageDiv.textContent = "请求失败: " + error.message;
+          messageDiv.style.display = "block";
         }
 
-        // 页面加载时扫描WiFi
-        window.onload = function() {
-            scanWifi();
-        };
+        setTimeout(() => {
+          messageDiv.style.display = "none";
+        }, 3000);
+      }
+
+      async function resetConfig() {
+        if (!confirm("确定要重置所有配置为默认值吗？\n（UUID将保持不变）")) {
+          return;
+        }
+
+        const messageDiv = document.getElementById("configMessage");
+
+        try {
+          const response = await fetch("/api/v1/config/reset", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            messageDiv.className = "message success";
+            messageDiv.textContent = "配置已重置为默认值！";
+            await loadConfig();
+          } else {
+            messageDiv.className = "message error";
+            messageDiv.textContent =
+              "重置失败: " + (data.message || "未知错误");
+          }
+        } catch (error) {
+          messageDiv.className = "message error";
+          messageDiv.textContent = "请求失败: " + error.message;
+        }
+
+        setTimeout(() => {
+          messageDiv.style.display = "none";
+        }, 3000);
+      }
+
+      // 页面加载时扫描WiFi和加载音量
+      window.onload = function () {
+        scanWifi();
+        loadVolume();
+      };
     </script>
-</body>
+  </body>
 </html>
