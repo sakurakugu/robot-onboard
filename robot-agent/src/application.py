@@ -38,6 +38,7 @@ from modules.transport.protocol import (
     构建拍照响应消息,
     构建音量响应消息,
     构建配置响应消息,
+    构建SDK模式响应消息,
 )
 from modules.transport.ws_manager import WebSocketManager
 from modules.vision.camera import capture_photo
@@ -117,10 +118,16 @@ class RobotClient:
             "volume_mute": self._处理设置静音,
             "config_get": self._处理配置获取,
             "config_update": self._处理配置更新,
+            "sdk_mode_set": self._处理SDK模式设置,
+            "sdk_mode_get": self._处理SDK模式获取,
         }
 
         """ 初始化动作执行函数 """
         self.action_executor: Optional[Callable] = None
+
+        """ 初始化SDK模式状态 """
+        self.sdk_mode_enabled = True  # 默认开启SDK模式
+        self.last_action_before_disable: Optional[str] = None  # 关闭SDK时的最后动作
 
         """ 初始化机器人版本 """
         version = 检测机器人运控版本()
@@ -263,6 +270,15 @@ class RobotClient:
         """发送配置响应消息"""
         message = 构建配置响应消息(
             self.config["robot"]["uuid"], request_id, success, data, error
+        )
+        await self.发送消息(message, channel="business")
+
+    async def 发送SDK模式响应(
+        self, request_id: str, success: bool, sdk_mode: Optional[bool] = None, error: Optional[str] = None
+    ) -> None:
+        """发送SDK模式响应消息"""
+        message = 构建SDK模式响应消息(
+            self.config["robot"]["uuid"], request_id, success, sdk_mode, error
         )
         await self.发送消息(message, channel="business")
 
@@ -436,6 +452,87 @@ class RobotClient:
         except Exception as e:
             self.logger.error(f"处理配置更新请求时出错: {e}", exc_info=True)
             await self.发送配置响应(request_id, False, None, str(e))
+
+    async def _处理SDK模式设置(self, data: Dict[str, Any]) -> None:
+        """处理SDK模式设置消息"""
+        request_id = data.get("requestId", "")
+        sdk_mode = data.get("sdkMode")
+        self.logger.info(f"收到SDK模式设置请求: {request_id}, SDK模式: {sdk_mode}")
+        
+        try:
+            if sdk_mode is None:
+                await self.发送SDK模式响应(request_id, False, None, "sdkMode 参数不能为空")
+                return
+            
+            sdk_mode = bool(sdk_mode)
+            
+            # 如果状态没有变化，直接返回成功
+            if self.sdk_mode_enabled == sdk_mode:
+                self.logger.info(f"SDK模式已经是 {'SDK' if sdk_mode else '遥控'} 模式")
+                await self.发送SDK模式响应(request_id, True, sdk_mode)
+                return
+            
+            if sdk_mode:
+                # 开启SDK模式：启动子程序
+                self.logger.info("开启SDK模式，启动子程序...")
+                script_dir = Path(__file__).parent
+                interactive_script = script_dir / "modules" / "actions" / "executor.py"
+                
+                if not interactive_script.exists():
+                    error_msg = f"找不到交互式脚本: {interactive_script}"
+                    self.logger.error(error_msg)
+                    await self.发送SDK模式响应(request_id, False, None, error_msg)
+                    return
+                
+                if not self.启动交互式进程(str(interactive_script)):
+                    error_msg = "无法启动交互式子进程"
+                    self.logger.error(error_msg)
+                    await self.发送SDK模式响应(request_id, False, None, error_msg)
+                    return
+                
+                self.sdk_mode_enabled = True
+                self.logger.info("SDK模式开启成功")
+                await self.发送SDK模式响应(request_id, True, True)
+            else:
+                # 关闭SDK模式：关闭子程序
+                self.logger.info("关闭SDK模式，关闭子程序...")
+                
+                # 获取当前状态：检查是否是急停或趴下状态
+                # 这里假设我们能通过IPC或其他方式获取到当前的动作状态
+                # 如果没有跟踪机制，我们需要先执行站立动作
+                # 根据需求：急停保持急停，趴下保持趴下，其他改为站立
+                
+                # TODO: 这里需要实现获取当前机器狗状态的逻辑
+                # 目前简化处理：关闭前先站立
+                try:
+                    # 关闭前尝试让机器狗站立
+                    if self.process_controller.process and self.process_controller.process.poll() is None:
+                        self.logger.info("关闭子程序前，先让机器狗站立")
+                        self.发送命令到交互式进程("stand_up")
+                        await asyncio.sleep(2)  # 等待站立完成
+                except Exception as e:
+                    self.logger.warning(f"关闭前执行站立动作失败: {e}")
+                
+                self.process_controller.关闭()
+                self.sdk_mode_enabled = False
+                self.logger.info("SDK模式关闭成功")
+                await self.发送SDK模式响应(request_id, True, False)
+                
+        except Exception as e:
+            self.logger.error(f"处理SDK模式设置请求时出错: {e}", exc_info=True)
+            await self.发送SDK模式响应(request_id, False, None, str(e))
+
+    async def _处理SDK模式获取(self, data: Dict[str, Any]) -> None:
+        """处理SDK模式获取消息"""
+        request_id = data.get("requestId", "")
+        self.logger.info(f"收到SDK模式获取请求: {request_id}")
+        
+        try:
+            await self.发送SDK模式响应(request_id, True, self.sdk_mode_enabled)
+            self.logger.info(f"SDK模式获取成功: {request_id}, 当前模式: {'SDK' if self.sdk_mode_enabled else '遥控'}")
+        except Exception as e:
+            self.logger.error(f"处理SDK模式获取请求时出错: {e}", exc_info=True)
+            await self.发送SDK模式响应(request_id, False, None, str(e))
 
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
         """ 处理文本响应消息 """

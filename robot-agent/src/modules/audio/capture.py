@@ -1,5 +1,7 @@
 import asyncio
-from typing import Any, Awaitable, Callable, Dict
+import threading
+from collections import deque
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 from sparkrobot_common import 生成UUID
 
@@ -8,11 +10,90 @@ try:
     import opuslib as opus_module
     import sounddevice as sd_module
 except ImportError as e:
-    raise ImportError(f"缺少音频依赖，请安装: pip installnumpy sounddevice opuslib (导入错误: {e})") from e
+    raise ImportError(f"缺少音频依赖，请安装: pip install numpy sounddevice opuslib (导入错误: {e})") from e
 
 from sparkrobot_common import get_logger
 
 logger = get_logger("robot-agent")
+
+
+class ThreadSafeAudioBuffer:
+    """线程安全的音频缓冲区，使用固定大小的环形缓冲区避免队列满的问题"""
+
+    def __init__(self, maxsize: int = 100):
+        self._buffer: deque = deque(maxlen=maxsize)
+        self._lock = threading.Lock()
+        self._event = asyncio.Event()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._closed = False
+
+    def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """设置事件循环"""
+        self._loop = loop
+
+    def put(self, data) -> bool:
+        """线程安全地放入数据（从音频回调线程调用）
+        
+        使用环形缓冲区，当缓冲区满时会自动丢弃最旧的数据，不会抛出异常
+        """
+        if self._closed:
+            return False
+        with self._lock:
+            if self._closed:
+                return False
+            self._buffer.append(data)
+        # 安全地通知事件循环有新数据
+        if self._loop and not self._loop.is_closed():
+            try:
+                self._loop.call_soon_threadsafe(self._set_event)
+            except RuntimeError:
+                # 事件循环已关闭
+                pass
+        return True
+
+    def _set_event(self) -> None:
+        """在事件循环中设置事件"""
+        if not self._closed:
+            self._event.set()
+
+    async def get(self) -> Optional[Any]:
+        """异步获取数据（从事件循环调用）"""
+        while not self._closed:
+            with self._lock:
+                if self._buffer:
+                    return self._buffer.popleft()
+            # 清除事件并等待新数据
+            self._event.clear()
+            try:
+                await asyncio.wait_for(self._event.wait(), timeout=0.1)
+            except asyncio.TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                return None
+        return None
+
+    def close(self) -> None:
+        """关闭缓冲区"""
+        self._closed = True
+        with self._lock:
+            self._buffer.clear()
+        if self._loop and not self._loop.is_closed():
+            try:
+                self._loop.call_soon_threadsafe(self._set_event)
+            except RuntimeError:
+                pass
+
+    def clear(self) -> None:
+        """清空缓冲区"""
+        with self._lock:
+            self._buffer.clear()
+
+    @property
+    def qsize(self) -> int:
+        """获取当前缓冲区大小"""
+        with self._lock:
+            return len(self._buffer)
+
 
 class AudioCapture:
     def __init__(
@@ -31,6 +112,7 @@ class AudioCapture:
         self.发送音频数据块 = send_audio_chunk
         self.发送音频结束 = send_audio_end
         self.audio_streaming_enabled = bool(config.get("audio", {}).get("enable_streaming", True))
+        self._audio_buffer: Optional[ThreadSafeAudioBuffer] = None
 
     async def 开始采集(self) -> None:
         """ 运行音频捕获循环 """
@@ -62,16 +144,16 @@ class AudioCapture:
         """ 音频捕获循环 """
         encoder = opus_module.Encoder(settings["sample_rate"], settings["channels"], opus_module.APPLICATION_VOIP)
         loop = asyncio.get_running_loop()
-        queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+        
+        # 使用线程安全的音频缓冲区替代 asyncio.Queue
+        self._audio_buffer = ThreadSafeAudioBuffer(maxsize=100)
+        self._audio_buffer.set_loop(loop)
 
         def callback(indata, frames, time_info, status):
             if status:
                 logger.debug(f"音频采集状态: {status}")
-            data = indata.copy()
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, data)
-            except Exception:
-                pass
+            # 使用线程安全的缓冲区，不会抛出异常
+            self._audio_buffer.put(indata.copy())
 
         stream = None
         state = {"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0}
@@ -83,7 +165,7 @@ class AudioCapture:
                     continue
 
                 stream = self._确保音频流已启动(stream, settings, callback)
-                pcm_block = await self._读取音频块(queue)
+                pcm_block = await self._读取音频块()
                 if pcm_block is None:
                     break
                 await self._处理音频块(pcm_block, settings, state, encoder)
@@ -100,6 +182,9 @@ class AudioCapture:
         if session_id is not None:
             await self.发送音频结束(session_id, "manual")
             state.update({"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0})
+        # 清空缓冲区中的旧数据
+        if self._audio_buffer:
+            self._audio_buffer.clear()
         return self._停止音频流(stream)
 
     def _确保音频流已启动(self, stream, settings: Dict[str, Any], callback):
@@ -118,10 +203,12 @@ class AudioCapture:
         logger.info("麦克风采集已启动")
         return stream
 
-    async def _读取音频块(self, queue: asyncio.Queue):
-        """ 从队列读取音频块 """
+    async def _读取音频块(self) -> Optional[Any]:
+        """ 从缓冲区读取音频块 """
+        if self._audio_buffer is None:
+            return None
         try:
-            return await queue.get()
+            return await self._audio_buffer.get()
         except asyncio.CancelledError:
             return None
 
@@ -186,4 +273,8 @@ class AudioCapture:
         if session_id is not None:
             await self.发送音频结束(session_id, "manual")
         self._停止音频流(stream)
+        # 关闭音频缓冲区
+        if self._audio_buffer:
+            self._audio_buffer.close()
+            self._audio_buffer = None
         logger.info("麦克风采集已停止")

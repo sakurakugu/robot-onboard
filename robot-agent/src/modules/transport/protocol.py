@@ -185,3 +185,24 @@ def 构建配置响应消息(
             "error": error,
         },
     }
+
+
+def 构建SDK模式响应消息(
+    robot_uuid: str,        # 机器人 UUID
+    request_id: str,        # 请求ID
+    success: bool,          # 是否成功
+    sdk_mode: bool | None = None,  # SDK模式状态
+    error: str | None = None,  # 错误信息（失败时）
+) -> Dict[str, Any]:
+    """ build_sdk_mode_response """
+    return {
+        "type": "sdk_mode_response",
+        "robotId": robot_uuid,
+        "timestamp": int(time.time() * 1000),
+        "data": {
+            "requestId": request_id,
+            "success": success,
+            "sdkMode": sdk_mode,
+            "error": error,
+        },
+    }
