@@ -512,11 +512,11 @@ class RobotClient:
                         await asyncio.sleep(1)
                         continue
 
-                    # 使用 ALL_COMPLETED 模式，只有所有任务都完成才会返回
-                    # 单个次要通道断开不会影响其他任务，它们会在后台自动重连
-                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+                    # 使用 FIRST_COMPLETED 模式,任何任务完成(包括连接断开)都会快速响应
+                    # 这样可以更快检测到断连并触发重连
+                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
-                    # 检查是否有任务因异常退出
+                    # 检查是否有任务因异常退出或主连接断开
                     should_reconnect = False
                     for task in done:
                         try:
@@ -545,8 +545,13 @@ class RobotClient:
 
                         self.logger.info("任务组结束，准备重连...")
                     else:
-                        # 所有任务正常结束，继续运行
-                        self.logger.debug("所有任务正常结束")
+                        # 某个任务正常结束(非异常),可能是次要通道断开
+                        # 取消其他任务后重新构建任务组
+                        for task in pending:
+                            task.cancel()
+                        if pending:
+                            await asyncio.gather(*pending, return_exceptions=True)
+                        self.logger.debug("部分任务结束，重建任务组")
 
                 except KeyboardInterrupt:
                     self.logger.info("收到中断信号，正在退出...")
@@ -575,19 +580,24 @@ class RobotClient:
             self.current_reconnect_interval = self.initial_reconnect_interval
             return True
 
+        self.logger.info(f"尝试连接到服务器 (重连间隔: {self.current_reconnect_interval}秒)...")
         success = await self.连接到服务器()
         if success:
             self.current_reconnect_interval = self.initial_reconnect_interval
+            self.logger.info("✓ 连接成功，重连间隔已重置")
             return True
 
-        self.logger.info(f"{self.current_reconnect_interval} 秒后重试连接...")
+        self.logger.warning(f"✗ 连接失败，{self.current_reconnect_interval} 秒后重试...")
         await asyncio.sleep(self.current_reconnect_interval)
 
         # 指数退避，最大不超过 max_reconnect_interval
+        old_interval = self.current_reconnect_interval
         self.current_reconnect_interval = min(
             self.current_reconnect_interval * 2,
             self.max_reconnect_interval
         )
+        if self.current_reconnect_interval != old_interval:
+            self.logger.info(f"重连间隔已调整: {old_interval}秒 → {self.current_reconnect_interval}秒")
         return False
 
     def _构建异步任务(self) -> list[asyncio.Task]:

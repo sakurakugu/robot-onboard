@@ -92,6 +92,7 @@ class WebSocketManager:
             self.logger.info(f"正在连接业务通道: {business_full}")
             self.ws_business = await websockets.connect(business_full)
             self.connected = True
+            self.logger.info("✓ 业务通道连接成功")
 
             control_url = urls.get("control")
             if control_url:
@@ -100,8 +101,9 @@ class WebSocketManager:
                     self.logger.info(f"正在连接控制通道: {control_full}")
                     self.ws_control = await websockets.connect(control_full)
                     self.connected_control = True
+                    self.logger.info("✓ 控制通道连接成功")
                 except Exception as e:
-                    self.logger.warning(f"控制通道连接失败: {e}")
+                    self.logger.warning(f"✗ 控制通道连接失败: {e}")
 
             audio_upload_url = urls.get("audio_upload")
             if audio_upload_url:
@@ -110,8 +112,9 @@ class WebSocketManager:
                     self.logger.info(f"正在连接音频上传通道: {audio_upload_full}")
                     self.ws_audio_upload = await websockets.connect(audio_upload_full)
                     self.connected_audio_upload = True
+                    self.logger.info("✓ 音频上传通道连接成功")
                 except Exception as e:
-                    self.logger.warning(f"音频上传通道连接失败: {e}")
+                    self.logger.warning(f"✗ 音频上传通道连接失败: {e}")
 
             audio_download_url = urls.get("audio_download")
             if audio_download_url:
@@ -120,10 +123,17 @@ class WebSocketManager:
                     self.logger.info(f"正在连接音频下载通道: {audio_download_full}")
                     self.ws_audio_download = await websockets.connect(audio_download_full)
                     self.connected_audio_download = True
+                    self.logger.info("✓ 音频下载通道连接成功")
                 except Exception as e:
-                    self.logger.warning(f"音频下载通道连接失败: {e}")
+                    self.logger.warning(f"✗ 音频下载通道连接失败: {e}")
 
-            self.logger.info(f"已连接到服务器，机器狗UUID: {robot_uuid}")
+            connected_count = sum([
+                self.connected,
+                self.connected_control,
+                self.connected_audio_upload,
+                self.connected_audio_download
+            ])
+            self.logger.info(f"已连接到服务器，机器狗UUID: {robot_uuid}，成功通道: {connected_count}/4")
             return True
         except Exception as e:
             self.logger.error(f"连接失败: {e}")
@@ -223,6 +233,7 @@ class WebSocketManager:
                 self.logger.warning(f"连接已关闭: {channel}, code={e.code}, reason={e.reason}")
                 if channel == "business":
                     self.connected = False
+                    self.logger.info("业务通道断开，主连接将触发重连")
                 elif channel == "control":
                     self.connected_control = False
                 elif channel == "audio_upload":
@@ -243,22 +254,56 @@ class WebSocketManager:
     async def 发送心跳消息循环(self, robot_uuid: str, 构建心跳消息: Callable[[str], Dict[str, Any]]) -> None:
         """ 发送心跳消息循环 """
         interval = self.config.get("server", {}).get("heartbeat_interval", 30)
+        self.logger.info(f"心跳循环已启动，间隔: {interval}秒")
+        
+        # 连接建立后立即发送首次心跳，避免等待
+        if self.connected:
+            message = 构建心跳消息(robot_uuid)
+            await self._发送心跳到所有通道(message)
+        
         while self.connected:
             await asyncio.sleep(interval)
             if self.connected:
                 message = 构建心跳消息(robot_uuid)
-                if self.connected_control:
-                    await self.发送消息(message, channel="control")
-                else:
-                    await self.发送消息(message, channel="business")
+                await self._发送心跳到所有通道(message)
 
-                # 为 audio_upload 通道也发送心跳
-                if self.connected_audio_upload:
-                    await self.发送消息(message, channel="audio_upload")
+    async def _发送心跳到所有通道(self, message: Dict[str, Any]) -> None:
+        """ 发送心跳到所有已连接的通道 """
+        sent_channels = []
+        
+        # 优先使用 control 通道发送心跳
+        if self.connected_control:
+            try:
+                await self.发送消息(message, channel="control")
+                sent_channels.append("control")
+            except Exception as e:
+                self.logger.warning(f"发送心跳到 control 通道失败: {e}")
+        elif self.connected:
+            # 如果 control 通道不可用，使用 business 通道
+            try:
+                await self.发送消息(message, channel="business")
+                sent_channels.append("business")
+            except Exception as e:
+                self.logger.warning(f"发送心跳到 business 通道失败: {e}")
 
-                # 为 audio_download 通道也发送心跳
-                if self.connected_audio_download:
-                    await self.发送消息(message, channel="audio_download")
+        # 为 audio_upload 通道也发送心跳
+        if self.connected_audio_upload:
+            try:
+                await self.发送消息(message, channel="audio_upload")
+                sent_channels.append("audio_upload")
+            except Exception as e:
+                self.logger.warning(f"发送心跳到 audio_upload 通道失败: {e}")
+
+        # 为 audio_download 通道也发送心跳
+        if self.connected_audio_download:
+            try:
+                await self.发送消息(message, channel="audio_download")
+                sent_channels.append("audio_download")
+            except Exception as e:
+                self.logger.warning(f"发送心跳到 audio_download 通道失败: {e}")
+        
+        if sent_channels:
+            self.logger.debug(f"已发送心跳到通道: {', '.join(sent_channels)}")
 
     async def _重连单个通道(self, channel: str) -> bool:
         """ 重连单个通道 """
@@ -355,7 +400,7 @@ class WebSocketManager:
                     self.logger.info(f"主连接已断开，停止重连 {channel}")
                     return
 
-                self.logger.info(f"尝试重连 {channel} (第 {attempt}/{max_retries} 次)")
+                self.logger.info(f"尝试重连 {channel} (第 {attempt}/{max_retries} 次，间隔: {retry_delay}秒)")
 
                 # 等待一段时间再重连，避免立即重连导致的循环
                 if attempt > 1:
@@ -378,14 +423,14 @@ class WebSocketManager:
                     }
                     ws = ws_map.get(channel)
                     if ws:
-                        self.logger.info(f"重启 {channel} 接收循环")
+                        self.logger.info(f"✓ 通道 {channel} 重连成功，重启接收循环")
                         # 创建新的接收循环任务
                         asyncio.create_task(self.接受消息循环(channel, ws, on_message))
                     return
 
                 if attempt < max_retries:
-                    self.logger.warning(f"重连 {channel} 失败，{retry_delay} 秒后重试...")
+                    self.logger.warning(f"✗ 重连 {channel} 失败，{retry_delay} 秒后重试...")
 
-            self.logger.error(f"重连 {channel} 失败，已达到最大重试次数")
+            self.logger.error(f"✗ 重连 {channel} 失败，已达到最大重试次数 ({max_retries})")
         finally:
             self._reconnecting_channels.discard(channel)
