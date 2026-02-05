@@ -7,19 +7,18 @@ import re
 import shutil
 import subprocess
 import time
+import configparser
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Optional, Tuple
 
 # 配置
 TOOLS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = TOOLS_DIR.parent
 BACKUPS_DIR = PROJECT_ROOT.parent / "backups"
+CONFIG_FILE = TOOLS_DIR / "scripts" / "config" / "config.ini"
 
-# --- 动态配置区域 (脚本会自动修改这里) ---
-ROBOT_IP = "192.168.1.106"
 ROBOT_USER = "firefly"
-# ---------------------------------------
 
 # 颜色代码 (Windows 10+ 终端支持 ANSI 转义序列)
 class Colors:
@@ -41,64 +40,118 @@ def print_error(msg: str):
 def print_warn(msg: str):
     print(f"{Colors.YELLOW}[警告]{Colors.NC} {msg}")
 
-# --- 配置管理 ---
+# --- 配置文件管理 ---
 
-def update_script_config(key: str, value: str):
-    """直接修改当前脚本文件中的配置变量"""
-    script_path = Path(__file__)
-    try:
-        content = script_path.read_text(encoding='utf-8')
-        
-        # 使用正则替换变量值，保留引号
-        # 匹配模式: key = "..." 或 key = '...'
-        pattern = f'({key}\\s*=\\s*)["\'].*?["\']'
-        replacement = f'\\1"{value}"'
-        
-        new_content = re.sub(pattern, replacement, content)
-        
-        if new_content != content:
-            script_path.write_text(new_content, encoding='utf-8')
-            return True
-        return False
-    except Exception as e:
-        print_error(f"更新脚本配置失败: {e}")
-        return False
+def ensure_config_exists():
+    """确保配置文件存在"""
+    if not CONFIG_FILE.exists():
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config = configparser.ConfigParser()
+        config['robots'] = {'robot1': '192.168.1.106'}
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            config.write(f)
+        print_info(f"已创建配置文件: {CONFIG_FILE}")
+
+def load_robots() -> Dict[str, str]:
+    """从配置文件加载机器狗列表"""
+    ensure_config_exists()
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE, encoding='utf-8')
+    
+    if 'robots' not in config:
+        return {}
+    
+    return dict(config['robots'])
+
+def save_robots(robots: Dict[str, str]):
+    """保存机器狗列表到配置文件"""
+    ensure_config_exists()
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE, encoding='utf-8')
+    
+    config['robots'] = robots
+    
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        config.write(f)
 
 # --- 功能函数 ---
 
-def change_robot_ip():
-    global ROBOT_IP
+def robot_menu():
+    """机器狗列表菜单"""
+    while True:
+        robots = load_robots()
+        
+        print("\n------------------------------------------")
+        print("    机器狗列表")
+        print("------------------------------------------")
+        
+        if not robots:
+            print("  (暂无机器狗，请先添加)")
+        else:
+            for idx, (name, ip) in enumerate(robots.items(), 1):
+                print(f"  {idx}) {name} ({ip})")
+        
+        print("------------------------------------------")
+        print("  a) 添加机器狗")
+        print("  0) 返回主菜单")
+        print("------------------------------------------")
+        
+        choice = input("请选择要连接的机器狗 (输入编号) 或操作: ").strip().lower()
+        
+        if choice == "0":
+            return
+        elif choice == "a":
+            add_robot()
+        elif choice.isdigit():
+            idx = int(choice)
+            robot_list = list(robots.items())
+            if 1 <= idx <= len(robot_list):
+                name, ip = robot_list[idx - 1]
+                connect_robot(name, ip)
+            else:
+                print_error("无效的编号")
+        else:
+            print_error("无效选项")
+
+def add_robot():
+    """添加新机器狗"""
+    robots = load_robots()
     
     print("\n------------------------------------------")
-    print(f"当前机器狗 IP: {ROBOT_IP}")
+    print("添加新机器狗")
     print("------------------------------------------")
     
-    new_ip = input("请输入新的机器狗 IP 地址: ").strip()
-    if not new_ip:
+    name = input("请输入机器狗名称 (如 robot1): ").strip()
+    if not name:
+        print_error("名称不能为空")
         return
-
-    # 简单验证 IP 格式
-    if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", new_ip):
-        if update_script_config("ROBOT_IP", new_ip):
-            ROBOT_IP = new_ip # 更新内存中的值
-            print_success(f"机器狗 IP 已更新为: {new_ip}")
-            print_info("配置已写入脚本文件")
-        else:
-            print_error("更新配置文件失败")
-    else:
+    
+    if name in robots:
+        print_error(f"名称 '{name}' 已存在")
+        return
+    
+    ip = input("请输入机器狗 IP 地址: ").strip()
+    if not ip:
+        print_error("IP 地址不能为空")
+        return
+    
+    if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
         print_error("无效的 IP 地址格式")
-        time.sleep(1)
-        change_robot_ip()
+        return
+    
+    robots[name] = ip
+    save_robots(robots)
+    print_success(f"已添加机器狗: {name} ({ip})")
 
 def run_ssh_command(command: List[str], use_sshpass: bool):
     if use_sshpass:
         return subprocess.run(["sshpass", "-p", "firefly"] + command)
     return subprocess.run(command)
 
-def connect_robot():
-    print_info(f"正在连接机器狗 ({ROBOT_USER}@{ROBOT_IP})...")
+def connect_robot(name: str, ip: str):
+    print_info(f"正在连接机器狗 {name} ({ROBOT_USER}@{ip})...")
     use_sshpass = sys.platform != "win32" and shutil.which("sshpass")
-    ssh_cmd = ["ssh", f"{ROBOT_USER}@{ROBOT_IP}"]
+    ssh_cmd = ["ssh", f"{ROBOT_USER}@{ip}"]
     try:
         run_ssh_command(ssh_cmd, use_sshpass)
     except FileNotFoundError:
@@ -257,14 +310,184 @@ def fix_common_errors():
     else:
         print_error("无效选项")
 
+def settings_menu():
+    """设置菜单 - 管理机器狗配置"""
+    while True:
+        robots = load_robots()
+        
+        print("\n------------------------------------------")
+        print("    设置 - 机器狗管理")
+        print("------------------------------------------")
+        
+        if not robots:
+            print("  (暂无机器狗)")
+        else:
+            for idx, (name, ip) in enumerate(robots.items(), 1):
+                print(f"  {idx}) {name} = {ip}")
+        
+        print("------------------------------------------")
+        print("  a) 添加机器狗")
+        print("  e) 编辑机器狗 (修改名称或IP)")
+        print("  d) 删除机器狗")
+        print("  0) 返回主菜单")
+        print("------------------------------------------")
+        
+        choice = input("请选择操作: ").strip().lower()
+        
+        if choice == "0":
+            return
+        elif choice == "a":
+            add_robot()
+        elif choice == "e":
+            edit_robot()
+        elif choice == "d":
+            delete_robot()
+        else:
+            print_error("无效选项")
+
+def edit_robot():
+    """编辑机器狗配置"""
+    robots = load_robots()
+    
+    if not robots:
+        print_error("暂无机器狗可编辑")
+        return
+    
+    print("\n------------------------------------------")
+    print("选择要编辑的机器狗:")
+    print("------------------------------------------")
+    
+    for idx, (name, ip) in enumerate(robots.items(), 1):
+        print(f"  {idx}) {name} = {ip}")
+    
+    print("------------------------------------------")
+    
+    choice = input("请输入编号: ").strip()
+    
+    if not choice.isdigit():
+        print_error("无效输入")
+        return
+    
+    idx = int(choice)
+    robot_list = list(robots.items())
+    
+    if not (1 <= idx <= len(robot_list)):
+        print_error("无效的编号")
+        return
+    
+    old_name, old_ip = robot_list[idx - 1]
+    
+    print(f"\n当前: {old_name} = {old_ip}")
+    print("------------------------------------------")
+    print("  1) 修改名称")
+    print("  2) 修改 IP")
+    print("  3) 同时修改名称和 IP")
+    print("  0) 取消")
+    print("------------------------------------------")
+    
+    edit_choice = input("请选择: ").strip()
+    
+    if edit_choice == "0":
+        return
+    elif edit_choice == "1":
+        new_name = input(f"请输入新名称 (当前: {old_name}): ").strip()
+        if not new_name:
+            print_error("名称不能为空")
+            return
+        if new_name != old_name and new_name in robots:
+            print_error(f"名称 '{new_name}' 已存在")
+            return
+        # 删除旧键，添加新键
+        del robots[old_name]
+        robots[new_name] = old_ip
+        save_robots(robots)
+        print_success(f"已将 '{old_name}' 改名为 '{new_name}'")
+        
+    elif edit_choice == "2":
+        new_ip = input(f"请输入新 IP (当前: {old_ip}): ").strip()
+        if not new_ip:
+            print_error("IP 不能为空")
+            return
+        if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", new_ip):
+            print_error("无效的 IP 地址格式")
+            return
+        robots[old_name] = new_ip
+        save_robots(robots)
+        print_success(f"已将 '{old_name}' 的 IP 修改为 '{new_ip}'")
+        
+    elif edit_choice == "3":
+        new_name = input(f"请输入新名称 (当前: {old_name}): ").strip()
+        if not new_name:
+            print_error("名称不能为空")
+            return
+        if new_name != old_name and new_name in robots:
+            print_error(f"名称 '{new_name}' 已存在")
+            return
+        
+        new_ip = input(f"请输入新 IP (当前: {old_ip}): ").strip()
+        if not new_ip:
+            print_error("IP 不能为空")
+            return
+        if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", new_ip):
+            print_error("无效的 IP 地址格式")
+            return
+        
+        del robots[old_name]
+        robots[new_name] = new_ip
+        save_robots(robots)
+        print_success(f"已将 '{old_name}' ({old_ip}) 修改为 '{new_name}' ({new_ip})")
+    else:
+        print_error("无效选项")
+
+def delete_robot():
+    """删除机器狗"""
+    robots = load_robots()
+    
+    if not robots:
+        print_error("暂无机器狗可删除")
+        return
+    
+    print("\n------------------------------------------")
+    print("选择要删除的机器狗:")
+    print("------------------------------------------")
+    
+    for idx, (name, ip) in enumerate(robots.items(), 1):
+        print(f"  {idx}) {name} = {ip}")
+    
+    print("------------------------------------------")
+    
+    choice = input("请输入编号: ").strip()
+    
+    if not choice.isdigit():
+        print_error("无效输入")
+        return
+    
+    idx = int(choice)
+    robot_list = list(robots.items())
+    
+    if not (1 <= idx <= len(robot_list)):
+        print_error("无效的编号")
+        return
+    
+    name, ip = robot_list[idx - 1]
+    
+    confirm = input(f"确认删除 '{name}' ({ip})? (y/N): ").strip().lower()
+    if confirm == "y":
+        del robots[name]
+        save_robots(robots)
+        print_success(f"已删除机器狗: {name}")
+
 def show_menu():
+    robots = load_robots()
+    robot_count = len(robots)
+    
     print("\n==========================================")
     print("    机器狗项目 - 常用命令 (Python版)")
     print("==========================================")
-    print(f"  1) SSH 连接机器狗 ({ROBOT_USER}@{ROBOT_IP})")
+    print(f"  1) SSH 连接机器狗 (已保存 {robot_count} 个)")
     print("  2) 备份当前项目文件夹")
     print("  3) 修复常见错误")
-    print("  4) 设置 (修改 IP)")
+    print("  4) 设置 (管理机器狗)")
     print("  0) 退出")
     print("")
     print("==========================================")
@@ -273,19 +496,22 @@ def main():
     # 确保能够显示颜色
     os.system("") 
     
+    # 确保配置文件存在
+    ensure_config_exists()
+    
     while True:
         try:
             show_menu()
             choice = input("请输入选项编号: ").strip()
             
             if choice == "1":
-                connect_robot()
+                robot_menu()
             elif choice == "2":
                 backup_menu()
             elif choice == "3":
                 fix_common_errors()
             elif choice == "4":
-                change_robot_ip()
+                settings_menu()
             elif choice == "0":
                 print_success("退出脚本")
                 sys.exit(0)

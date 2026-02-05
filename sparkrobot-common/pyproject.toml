@@ -9,11 +9,7 @@ description = "SparkRobot 通用库 - 配置、日志、工具函数"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "uuid6>=2025.0.1; python_version < \"3.11\"",
-]
-
-[project.optional-dependencies]
-watchdog = [
+    "uuid6>=2025.0.1; python_version < \"3.14\"",
     "watchdog>=6.0.0; python_version < \"3.14\""
 ]
 

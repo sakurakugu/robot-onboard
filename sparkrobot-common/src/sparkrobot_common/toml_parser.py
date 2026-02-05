@@ -37,8 +37,11 @@ class TomlParser:
             section_match = re.match(r"^\[([a-zA-Z_][a-zA-Z0-9_]*)\]$", line)
             if section_match:
                 current_section = section_match.group(1)
-                if current_section not in config:
-                    config[current_section] = {}
+                if current_section is not None:
+                    if current_section not in config:
+                        config[current_section] = {}
+                else:
+                    print(f"警告：无效的节名称: {line}")
                 continue
 
             # 解析 key = value

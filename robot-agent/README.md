@@ -22,6 +22,9 @@ application.py 应用入口
 - ✅ 自动重连：断线后自动重连
 - ✅ 后台运行：支持以守护进程方式运行
 
+sudo apt update
+sudo apt install -y portaudio19-dev libportaudio2
+
 ## 快速开始
 
 ### 1. 安装依赖
@@ -36,12 +39,14 @@ application.py 应用入口
 首次运行时会自动创建配置文件：
 
 **全局配置** (`~/sparkrobot/config/config.toml`)：
+
 ```toml
 # 全局配置 - 所有应用共享
 uuid = "自动生成的UUIDv7"
 ```
 
 **机器人对话配置** (`~/sparkrobot/config/robot-agent.toml`)：
+
 ```toml
 [robot]
 name = "robot-dog-1"
@@ -157,7 +162,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 │       │   │   ├── const.py
 │       │   │   └── __init__.py
 │       │   ├── dog
-│       │   │   ├── lib      # 智元官方的sdk库   
+│       │   │   ├── lib      # 智元官方的sdk库
 │       │   │   └── sdk.py
 │       │   ├── __init__.py
 │       │   ├── logger
@@ -194,11 +199,13 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 // TODO: 修改以下内容
+
 ## 消息格式
 
 ### 客户端发送
 
 #### 客户端注册
+
 ```json
 {
   "type": "robot_register",
@@ -214,6 +221,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 #### 文本输入
+
 ```json
 {
   "type": "text_input",
@@ -226,6 +234,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 #### 音频输入（会话开始）
+
 ```json
 {
   "type": "audio_start",
@@ -242,6 +251,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 #### 音频输入（数据块）
+
 ```json
 {
   "type": "audio_chunk",
@@ -260,6 +270,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 #### 音频输入（会话结束）
+
 ```json
 {
   "type": "audio_end",
@@ -273,6 +284,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 #### 心跳包
+
 ```json
 {
   "type": "heartbeat",
@@ -283,6 +295,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 #### 状态更新
+
 ```json
 {
   "type": "status",
@@ -299,6 +312,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ### 服务端发送
 
 #### 文本响应
+
 ```json
 {
   "type": "text_response",
@@ -311,6 +325,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 #### 音频响应
+
 ```json
 {
   "type": "audio_response",
@@ -325,6 +340,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 #### 动作指令
+
 ```json
 {
   "type": "action_command",
@@ -339,6 +355,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 ```
 
 #### 错误消息
+
 ```json
 {
   "type": "error",
