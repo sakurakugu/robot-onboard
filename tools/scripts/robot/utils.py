@@ -1,6 +1,8 @@
 import socket
 import sys
 import subprocess
+import configparser
+from pathlib import Path
 
 # 禁止输入的 IP 列表/前缀
 BANNED_IPS = {"127.0.0.1", "192.168.234.1", "192.168.168.168"}
@@ -41,3 +43,37 @@ def 获取本地IP():
     finally:
         s.close()
     return ip
+
+CONFIG_FILE = Path(__file__).resolve().parent.parent / "config" / "config.ini"
+
+
+def 确保配置文件存在():
+    if not CONFIG_FILE.exists():
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config = configparser.ConfigParser()
+        config["config_robot"] = {"robot_ip": "", "robot_port": ""}
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            config.write(f)
+
+
+def 读取机器狗配置():
+    确保配置文件存在()
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE, encoding="utf-8")
+    section = config["config_robot"] if "config_robot" in config else {}
+    robot_ip = section.get("robot_ip", "").strip() if section else ""
+    robot_port_raw = section.get("robot_port", "").strip() if section else ""
+    robot_port = int(robot_port_raw) if robot_port_raw.isdigit() else None
+    return robot_ip or None, robot_port
+
+
+def 写入机器狗配置(robot_ip: str, robot_port: int):
+    确保配置文件存在()
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE, encoding="utf-8")
+    if "config_robot" not in config:
+        config["config_robot"] = {}
+    config["config_robot"]["robot_ip"] = robot_ip
+    config["config_robot"]["robot_port"] = str(robot_port)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        config.write(f)

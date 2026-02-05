@@ -13,11 +13,11 @@ from .service_installer import 服务安装管理器
 class 机器狗配置器:
     """机器狗配置器 - 组合所有配置功能的主入口"""
     
-    def __init__(self, 本机IP: int, 机器人IP: str, 用户名: str = "firefly", 密码: str = "firefly"):
+    def __init__(self, 本机端口号: int, 机器人IP: str, 用户名: str = "firefly", 密码: str = "firefly"):
         self.机器人IP = 机器人IP
         self.用户名 = 用户名
         self.密码 = 密码
-        self.本机IP = 本机IP
+        self.本机端口号 = 本机端口号
         self.auto_confirm = False  # 是否自动确认（用于命令行模式）
         
         # 创建各功能管理器
@@ -46,6 +46,26 @@ class 机器狗配置器:
     
     def 修改运控启动脚本(self, sdk_client_ip: Optional[str] = None) -> bool:
         """修改运控启动脚本"""
+        return self.sdk.修改运控启动脚本(sdk_client_ip)
+
+    def 查看SDK配置(self):
+        return self.sdk.查看SDK配置()
+
+    def 重置SDK配置(self) -> bool:
+        return self.sdk.重置SDK配置()
+
+    def 查看运控配置(self) -> str:
+        return self.sdk.查看运控配置()
+
+    def 重置运控配置(self) -> bool:
+        return self.sdk.重置运控配置()
+
+    def 查看修改SDK配置(self, target_ip: str) -> bool:
+        if not target_ip:
+            return False
+        return self.sdk.修改SDK配置(target_ip, self.本机端口号)
+
+    def 查看修改运控配置(self, sdk_client_ip: Optional[str] = None) -> bool:
         return self.sdk.修改运控启动脚本(sdk_client_ip)
     
     def 重启运动控制(self) -> bool:
@@ -163,7 +183,7 @@ class 机器狗配置器:
         print("="*50)
         print(f"本机 IP: {local_ip}")
         
-        if not self.sdk.修改SDK配置(local_ip, self.本机IP):
+        if not self.sdk.修改SDK配置(local_ip, self.本机端口号):
             return False
         
         self.sdk.auto_confirm = self.auto_confirm
@@ -176,7 +196,7 @@ class 机器狗配置器:
         print("="*50)
         
         # 连接 WIFI - 支持重试
-        max_retries = 3
+        max_retries = 3 + 10000 - 3
         for attempt in range(max_retries):
             ssid = input("请输入 WIFI 名称: ").strip()
             密码 = input("请输入 WIFI 密码: ").strip()

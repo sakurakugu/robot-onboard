@@ -61,6 +61,35 @@ class SDK配置管理器:
         
         print(f"✓ SDK 配置文件已更新 (target_ip: {target_ip}, target_port: {target_port})")
         return True
+
+    def 查看SDK配置(self) -> Optional[tuple[str, int]]:
+        print("正在读取 SDK 配置文件...")
+        config_path = "/opt/export/config/sdk_config.yaml"
+        success, content, error = self.ssh.执行命令(f"cat {config_path}", use_sudo=True)
+        if not success:
+            print(f"✗ 读取配置文件失败: {error}")
+            return None
+
+        try:
+            yaml = YAML()
+            data_stream = io.StringIO(content)
+            data = yaml.load(data_stream) or {}
+            target_ip = str(data.get("target_ip", "")).strip()
+            target_port_raw = data.get("target_port", "")
+            target_port = int(target_port_raw) if str(target_port_raw).isdigit() else None
+        except Exception as e:
+            print(f"✗ YAML 解析失败: {e}")
+            return None
+
+        if target_port is None:
+            print(f"当前 SDK 配置: target_ip={target_ip}, target_port=")
+            return None
+
+        print(f"当前 SDK 配置: target_ip={target_ip}, target_port={target_port}")
+        return target_ip, target_port
+
+    def 重置SDK配置(self) -> bool:
+        return self.修改SDK配置("127.0.0.1", 43988)
     
     def 修改运控启动脚本(self, sdk_client_ip: Optional[str] = None) -> bool:
         """修改运控启动脚本
@@ -101,6 +130,25 @@ class SDK配置管理器:
         
         print("✓ 运控启动脚本已更新")
         return True
+
+    def 查看运控配置(self) -> str:
+        print("正在读取运控启动脚本...")
+        script_path = "/opt/app_launch/start_motion_control.sh"
+        success, content, error = self.ssh.执行命令(f"cat {script_path}", use_sudo=True)
+        if not success:
+            print(f"✗ 读取脚本失败: {error}")
+            return ""
+
+        match = re.search(r"export SDK_CLIENT_IP=['\"]?([^'\n\"]+)['\"]?", content)
+        sdk_client_ip = match.group(1) if match else ""
+        if sdk_client_ip:
+            print(f"当前 SDK_CLIENT_IP: {sdk_client_ip}")
+        else:
+            print("当前 SDK_CLIENT_IP: 未设置")
+        return sdk_client_ip
+
+    def 重置运控配置(self) -> bool:
+        return self.修改运控启动脚本(None)
     
     def 重启运动控制(self) -> bool:
         """重启运控服务
