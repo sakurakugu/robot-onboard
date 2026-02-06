@@ -5,9 +5,6 @@
 
 import re
 import sys
-import os
-import platform
-import subprocess
 import traceback
 from scripts.robot.utils import (
     确保存在包,
@@ -21,58 +18,12 @@ from scripts.robot.utils import (
 try:
     确保存在包("paramiko")
     确保存在包("ruamel.yaml")
+    确保存在包("zeroconf")
 except ImportError:
     sys.exit(1)
 
 from scripts.robot.config import 机器狗配置器
-
-
-def ssh_login(robot_ip: str):
-    """SSH 登录到机器狗"""
-    print("\n" + "="*50)
-    print(f"正在 SSH 连接到机器狗 ({robot_ip})...")
-    print("="*50)
-    
-    username = "firefly"
-    password = "firefly"
-    
-    system = platform.system().lower()
-    
-    try:
-        if system == "windows":
-            # Windows 下直接调用 ssh，需用户手动输入密码
-            # -o StrictHostKeyChecking=no 自动接受 key
-            cmd = f"ssh -o StrictHostKeyChecking=no {username}@{robot_ip}"
-            print("提示: Windows 环境下请手动输入密码 (firefly)")
-            subprocess.run(cmd, shell=True)
-            
-        else:
-            # Linux/macOS 下尝试使用 sshpass 自动输入密码
-            # 检查是否安装了 sshpass
-            check_sshpass = subprocess.run(["which", "sshpass"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            
-            if check_sshpass.returncode == 0:
-                print("检测到 sshpass，尝试自动登录...")
-                cmd = [
-                    "sshpass", "-p", password,
-                    "ssh", "-o", "StrictHostKeyChecking=no",
-                    f"{username}@{robot_ip}"
-                ]
-                subprocess.run(cmd)
-            else:
-                print("未检测到 sshpass，请手动输入密码 (firefly)")
-                print("提示: 安装 sshpass 可实现自动登录 (sudo apt install sshpass)")
-                cmd = [
-                    "ssh", "-o", "StrictHostKeyChecking=no",
-                    f"{username}@{robot_ip}"
-                ]
-                subprocess.run(cmd)
-                
-    except Exception as e:
-        print(f"SSH 连接发生错误: {e}")
-    
-    input("\nSSH 会话已结束，按回车键返回主菜单...")
-
+from scripts.robot.robot_listener import 扫描设备
 
 def execute_task(choice: str, robot_ip: str, robot_port: int) -> bool:
     """执行配置任务"""
@@ -132,6 +83,9 @@ def execute_task(choice: str, robot_ip: str, robot_port: int) -> bool:
         elif choice == "config_4":
             # 重启运控
             success = configurator.重启运动控制()
+        elif choice == "main_4":
+            # SSH 登录
+            success = configurator.SSH登录(robot_ip)
         else:
             print(f"✗ 未知的选项: {choice}")
             success = False
@@ -177,10 +131,11 @@ def main():
             print(f"1. 修改配置{current_config_str}")
             print("2. 安装软件")
             print("3. 群控配置")
-            print("4. ssh登录")
+            print("4. SSH登录")
+            print("5. 设备扫描")
             print("0. 退出脚本")
             
-            main_choice = input("\n请输入选项 (0/1/2/3/4): ").strip()
+            main_choice = input("\n请输入选项 (0/1/2/3/4/5): ").strip()
             
             if main_choice == "0":
                 print("再见！")
@@ -336,13 +291,10 @@ def main():
                         print("✗ 无效的选项，请重新输入")
 
             elif main_choice == "4":
-                # SSH 登录
-                # 同样需要先读取配置
-                robot_ip, _ = 读取机器狗配置()
-                if not robot_ip:
-                    print("✗ 请先在主菜单中配置机器狗 IP (选项 1)")
-                    continue
-                ssh_login(robot_ip)
+                execute_task("main_4", robot_ip, robot_port)
+            
+            elif main_choice == "5":
+                扫描设备()
                     
             else:
                 print("✗ 无效的选项，请重新输入")

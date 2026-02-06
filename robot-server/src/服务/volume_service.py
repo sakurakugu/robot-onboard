@@ -14,18 +14,18 @@ class VolumeService:
     def _获取环境变量(self) -> dict:
         """
         获取 pactl 命令需要的环境变量
-        
+
         Returns:
             dict: 包含必要环境变量的字典
         """
         env = os.environ.copy()
-        
+
         # 如果 XDG_RUNTIME_DIR 不存在，尝试设置默认值
-        if 'XDG_RUNTIME_DIR' not in env:
+        if "XDG_RUNTIME_DIR" not in env:
             # 通常是 /run/user/UID
-            uid = os.getuid() if hasattr(os, 'getuid') else 1000
-            env['XDG_RUNTIME_DIR'] = f'/run/user/{uid}'
-        
+            uid = os.getuid() if hasattr(os, "getuid") else 1000
+            env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
+
         return env
 
     def 获取音量(self) -> int:

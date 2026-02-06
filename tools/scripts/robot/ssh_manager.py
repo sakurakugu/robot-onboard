@@ -157,3 +157,49 @@ class SSH管理器:
             return False
         finally:
             sftp.close()
+            
+    def SSH登录(robot_ip: str):
+        """SSH 登录到机器狗"""
+        print("\n" + "="*50)
+        print(f"正在 SSH 连接到机器狗 ({robot_ip})...")
+        print("="*50)
+        
+        username = "firefly"
+        password = "firefly"
+        
+        system = platform.system().lower()
+        
+        try:
+            if system == "windows":
+                # Windows 下直接调用 ssh，需用户手动输入密码
+                # -o StrictHostKeyChecking=no 自动接受 key
+                cmd = f"ssh -o StrictHostKeyChecking=no {username}@{robot_ip}"
+                print("提示: Windows 环境下请手动输入密码 (firefly)")
+                subprocess.run(cmd, shell=True)
+                
+            else:
+                # Linux/macOS 下尝试使用 sshpass 自动输入密码
+                # 检查是否安装了 sshpass
+                check_sshpass = subprocess.run(["which", "sshpass"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                
+                if check_sshpass.returncode == 0:
+                    print("检测到 sshpass，尝试自动登录...")
+                    cmd = [
+                        "sshpass", "-p", password,
+                        "ssh", "-o", "StrictHostKeyChecking=no",
+                        f"{username}@{robot_ip}"
+                    ]
+                    subprocess.run(cmd)
+                else:
+                    print("未检测到 sshpass，请手动输入密码 (firefly)")
+                    print("提示: 安装 sshpass 可实现自动登录 (sudo apt install sshpass)")
+                    cmd = [
+                        "ssh", "-o", "StrictHostKeyChecking=no",
+                        f"{username}@{robot_ip}"
+                    ]
+                    subprocess.run(cmd)
+                    
+        except Exception as e:
+            print(f"SSH 连接发生错误: {e}")
+        
+        input("\nSSH 会话已结束，按回车键返回主菜单...")

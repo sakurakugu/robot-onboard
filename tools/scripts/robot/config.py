@@ -8,7 +8,7 @@ from .ssh_manager import SSH管理器
 from .network_config import 网络配置管理器
 from .sdk_config import SDK配置管理器
 from .service_installer import 服务安装管理器
-
+from .robot_listener import 监听管理器
 
 class 机器狗配置器:
     """机器狗配置器 - 组合所有配置功能的主入口"""
@@ -38,6 +38,10 @@ class 机器狗配置器:
     def 执行命令(self, command: str, use_sudo: bool = False) -> Tuple[bool, str, str]:
         """执行远程命令"""
         return self.ssh.执行命令(command, use_sudo)
+    
+    def SSH登录(self) -> bool:
+        """SSH 登录到机器狗"""
+        return self.ssh.SSH登录()
     
     # ========== SDK 相关方法（委托给 sdk 管理器）==========
     def 修改SDK配置(self, target_ip: str, target_port: int) -> bool:
