@@ -353,9 +353,97 @@
       .current-value strong {
         color: #333;
       }
+      /* 登录相关样式 */
+      .login-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+      }
+      .login-box {
+        background: white;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        width: 90%;
+        max-width: 400px;
+      }
+      .login-box h2 {
+        margin: 0 0 30px 0;
+        text-align: center;
+        color: #333;
+      }
+      .user-info {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: white;
+        padding: 10px 15px;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        z-index: 1000;
+      }
+      .user-info .username {
+        color: #4caf50;
+        font-weight: bold;
+      }
+      .user-info button {
+        padding: 5px 12px;
+        font-size: 13px;
+      }
+      .hidden {
+        display: none !important;
+      }
     </style>
   </head>
   <body>
+    <!-- 登录界面 -->
+    <div id="loginOverlay" class="login-overlay">
+      <div class="login-box">
+        <h2>🔐 登录</h2>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label for="loginUsername">用户名</label>
+            <input
+              type="text"
+              id="loginUsername"
+              required
+              autocomplete="username"
+              placeholder="请输入用户名"
+            />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">密码</label>
+            <input
+              type="password"
+              id="loginPassword"
+              required
+              autocomplete="current-password"
+              placeholder="请输入密码"
+            />
+          </div>
+          <button type="submit" style="width: 100%">登录</button>
+        </form>
+        <div id="loginMessage" class="message"></div>
+      </div>
+    </div>
+
+    <!-- 用户信息 -->
+    <div id="userInfo" class="user-info hidden">
+      <span>👤</span>
+      <span class="username" id="displayUsername"></span>
+      <button class="secondary" onclick="handleLogout()">登出</button>
+    </div>
+
     <div class="container">
       <h1>机器狗配置中心</h1>
 
@@ -594,6 +682,136 @@
     </div>
 
     <script>
+      // ==================== 认证相关 ====================
+      let isLoggedIn = false;
+      let currentUsername = "";
+
+      // 检查登录状态
+      async function checkLoginStatus() {
+        try {
+          const response = await fetch("/api/v1/auth/status", {
+            credentials: "include",
+          });
+          const data = await response.json();
+
+          if (data.success && data.logged_in) {
+            isLoggedIn = true;
+            currentUsername = data.username;
+            showUserInfo();
+            hideLoginOverlay();
+          } else {
+            isLoggedIn = false;
+            showLoginOverlay();
+            hideUserInfo();
+          }
+        } catch (error) {
+          console.error("检查登录状态失败:", error);
+          showLoginOverlay();
+          hideUserInfo();
+        }
+      }
+
+      // 处理登录
+      async function handleLogin(event) {
+        event.preventDefault();
+        const username = document.getElementById("loginUsername").value;
+        const password = document.getElementById("loginPassword").value;
+
+        try {
+          const response = await fetch("/api/v1/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ username, password }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showLoginMessage("登录成功！", true);
+            setTimeout(() => {
+              checkLoginStatus();
+            }, 500);
+          } else {
+            showLoginMessage(data.error || "登录失败", false);
+          }
+        } catch (error) {
+          showLoginMessage("登录失败: " + error.message, false);
+        }
+      }
+
+      // 处理登出
+      async function handleLogout() {
+        if (!confirm("确定要登出吗？")) {
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/v1/auth/logout", {
+            method: "POST",
+            credentials: "include",
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            isLoggedIn = false;
+            currentUsername = "";
+            showLoginOverlay();
+            hideUserInfo();
+          }
+        } catch (error) {
+          console.error("登出失败:", error);
+        }
+      }
+
+      // 显示登录消息
+      function showLoginMessage(message, isSuccess) {
+        const el = document.getElementById("loginMessage");
+        el.textContent = message;
+        el.className = "message " + (isSuccess ? "success" : "error");
+        el.style.display = "block";
+
+        setTimeout(() => {
+          el.style.display = "none";
+        }, 3000);
+      }
+
+      // 显示/隐藏登录界面
+      function showLoginOverlay() {
+        document.getElementById("loginOverlay").classList.remove("hidden");
+      }
+
+      function hideLoginOverlay() {
+        document.getElementById("loginOverlay").classList.add("hidden");
+      }
+
+      // 显示/隐藏用户信息
+      function showUserInfo() {
+        const userInfoEl = document.getElementById("userInfo");
+        const usernameEl = document.getElementById("displayUsername");
+        usernameEl.textContent = currentUsername;
+        userInfoEl.classList.remove("hidden");
+      }
+
+      function hideUserInfo() {
+        document.getElementById("userInfo").classList.add("hidden");
+      }
+
+      // 处理API错误（401未授权）
+      function handleApiError(response, data) {
+        if (response.status === 401) {
+          alert("会话已过期，请重新登录");
+          isLoggedIn = false;
+          showLoginOverlay();
+          hideUserInfo();
+          return true;
+        }
+        return false;
+      }
+
+      // ==================== 配置相关 ====================
+
       // 配置字段分组（使用section.key格式）
       const CONFIG_SECTIONS = {
         robot: {
@@ -627,6 +845,10 @@
         },
         actions: { title: "动作配置", keys: ["exit_behavior"] },
         logging: { title: "日志配置", keys: ["level", "max_file_size_mb"] },
+        auth: {
+          title: "认证配置",
+          keys: ["username", "password", "session_timeout"],
+        },
       };
 
       let currentConfig = {}; // 嵌套格式: {section: {key: value}}
@@ -719,10 +941,13 @@
           const response = await fetch("/api/v1/volume", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ volume: currentVolume }),
           });
 
           const data = await response.json();
+
+          if (handleApiError(response, data)) return;
 
           if (data.success) {
             showVolumeMessage(`音量已设置为 ${currentVolume}%`, "success");
@@ -747,10 +972,16 @@
           const response = await fetch("/api/v1/volume/mute", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ mute: isMuted }),
           });
 
           const data = await response.json();
+
+          if (handleApiError(response, data)) {
+            isMuted = !isMuted; // 回滚
+            return;
+          }
 
           if (data.success) {
             updateMuteButton();
@@ -856,9 +1087,19 @@
         fetch("/api/v1/wifi/connect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ ssid, password }),
         })
-          .then((response) => response.json())
+          .then((response) => {
+            if (response.status === 401) {
+              alert("会话已过期，请重新登录");
+              isLoggedIn = false;
+              showLoginOverlay();
+              hideUserInfo();
+              return Promise.reject("未授权");
+            }
+            return response.json();
+          })
           .then((data) => {
             if (data.success) {
               messageDiv.className = "message success";
@@ -1032,10 +1273,13 @@
           const response = await fetch("/api/v1/config", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify(updates),
           });
 
           const data = await response.json();
+
+          if (handleApiError(response, data)) return;
 
           if (data.success) {
             messageDiv.className = "message success";
@@ -1069,10 +1313,13 @@
           const response = await fetch("/api/v1/config/reset", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({}),
           });
 
           const data = await response.json();
+
+          if (handleApiError(response, data)) return;
 
           if (data.success) {
             messageDiv.className = "message success";
@@ -1150,6 +1397,7 @@
           const response = await fetch(`${SDK_API_BASE}/config`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({
               target_ip: targetIp,
               target_port: targetPort,
@@ -1157,6 +1405,9 @@
           });
 
           const data = await response.json();
+
+          if (handleApiError(response, data)) return;
+
           showSdkMessage(
             "sdkMessage",
             data.message || data.error,
@@ -1180,9 +1431,13 @@
         try {
           const response = await fetch(`${SDK_API_BASE}/config/reset`, {
             method: "POST",
+            credentials: "include",
           });
 
           const data = await response.json();
+
+          if (handleApiError(response, data)) return;
+
           showSdkMessage(
             "sdkMessage",
             data.message || data.error,
@@ -1228,10 +1483,14 @@
           const response = await fetch(`${SDK_API_BASE}/motion`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ sdk_client_ip: sdkClientIp }),
           });
 
           const data = await response.json();
+
+          if (handleApiError(response, data)) return;
+
           showSdkMessage(
             "motionMessage",
             data.message || data.error,
@@ -1255,9 +1514,13 @@
         try {
           const response = await fetch(`${SDK_API_BASE}/motion/reset`, {
             method: "POST",
+            credentials: "include",
           });
 
           const data = await response.json();
+
+          if (handleApiError(response, data)) return;
+
           showSdkMessage(
             "motionMessage",
             data.message || data.error,
@@ -1287,9 +1550,13 @@
 
           const response = await fetch(`${SDK_API_BASE}/motion/restart`, {
             method: "POST",
+            credentials: "include",
           });
 
           const data = await response.json();
+
+          if (handleApiError(response, data)) return;
+
           showSdkMessage(
             "restartMessage",
             data.message || data.error,
@@ -1300,8 +1567,9 @@
         }
       }
 
-      // 页面加载时扫描WiFi和加载音量
+      // 页面加载时检查登录状态
       window.onload = function () {
+        checkLoginStatus();
         scanWifi();
         loadVolume();
       };

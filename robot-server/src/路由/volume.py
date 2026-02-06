@@ -1,9 +1,10 @@
 """
 音量控制路由 - 提供音量获取和设置的 API
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from ..依赖 import 需要认证
 from ..服务.volume_service import 获取音量服务单例
 
 router = APIRouter()
@@ -45,7 +46,7 @@ async def 获取音量() -> dict:
 
 
 @router.post("/api/v1/volume")
-async def 设置音量(request: VolumeSetRequest) -> dict:
+async def 设置音量(request: VolumeSetRequest, _token: str = Depends(需要认证)) -> dict:
     """
     设置系统音量
 
@@ -77,7 +78,7 @@ async def 设置音量(request: VolumeSetRequest) -> dict:
 
 
 @router.post("/api/v1/volume/mute")
-async def 设置静音(request: MuteSetRequest) -> dict:
+async def 设置静音(request: MuteSetRequest, _token: str = Depends(需要认证)) -> dict:
     """
     设置静音状态
 

@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .服务.config_service import 获取配置管理器单例
 from .服务.mdns_service import 初始化并启动_mDNS_服务
+from .路由 import auth as auth_router
 from .路由 import config as config_router
 from .路由 import sdk as sdk_router
 from .路由 import system as system_router
@@ -20,6 +21,7 @@ config_manager = 获取配置管理器单例()
 mdns_service = 初始化并启动_mDNS_服务(config_manager, PORT)
 atexit.register(mdns_service.停止)
 
+app.include_router(auth_router.router)
 app.include_router(config_router.router)
 app.include_router(sdk_router.router)
 app.include_router(wifi_router.router)

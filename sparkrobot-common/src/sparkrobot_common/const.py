@@ -87,6 +87,11 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     # 日志配置 [logging]
     配置字段("logging", "level", "INFO", "日志级别：DEBUG|INFO|WARNING|ERROR", "string"),
     配置字段("logging", "max_file_size_mb", 10, "日志文件最大大小（MB）", "int"),
+
+    # 认证配置 [auth]
+    配置字段("auth", "username", "sparkrobot", "登录用户名", "string"),
+    配置字段("auth", "password", "Admin-114514", "登录密码", "string"),
+    配置字段("auth", "session_timeout", 3600, "会话超时时间（秒）", "int"),
 ]
 
 # 只读字段集合

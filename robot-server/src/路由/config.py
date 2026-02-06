@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sparkrobot_common import 获取配置项字段信息
 
+from ..依赖 import 需要认证
 from ..服务.config_service import 获取配置管理器单例
 
 router = APIRouter()
@@ -38,7 +39,7 @@ async def 获取配置文件路径() -> dict:
 
 
 @router.post("/api/v1/config/reset")
-async def 重置配置(request: Request) -> dict:
+async def 重置配置(request: Request, _token: str = Depends(需要认证)) -> dict:
     try:
         data = await request.json() if request.headers.get("content-length", "0") != "0" else {}
         key = data.get("key")
@@ -55,7 +56,7 @@ async def 重置配置(request: Request) -> dict:
 
 
 @router.post("/api/v1/config/reload")
-async def 重新加载配置() -> dict:
+async def 重新加载配置(_token: str = Depends(需要认证)) -> dict:
     try:
         config_manager.重新加载()
         return {"success": True, "message": "配置已重新加载"}
@@ -77,7 +78,7 @@ async def 获取单项配置(key: str) -> dict:
 
 
 @router.post("/api/v1/config")
-async def 更新配置(request: Request) -> dict:
+async def 更新配置(request: Request, _token: str = Depends(需要认证)) -> dict:
     try:
         data = await request.json()
 

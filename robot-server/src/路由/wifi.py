@@ -1,14 +1,15 @@
 import subprocess
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ..依赖 import 需要认证
 from ..服务.wifi_service import 扫描WiFi, 连接WiFi
 
 router = APIRouter()
 
 
 @router.post("/api/v1/wifi/connect")
-async def 连接WIFI(request: Request):
+async def 连接WIFI(request: Request, _token: str = Depends(需要认证)):
     try:
         data = await request.json()
         ssid = data.get("ssid")
