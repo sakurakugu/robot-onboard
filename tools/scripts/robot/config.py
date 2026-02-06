@@ -124,79 +124,31 @@ class 机器狗配置器:
                 print(f"✗ 未提供{prompt_prefix}IP")
                 return None
     
-    # ========== 配置模式方法 ==========
-    def 配置AP_有线直连模式(self) -> bool:
-        """配置 AP/有线直连模式（交互式）"""
+    # ========== 配置模式方法 ==========    
+    def 查看WIFI信息(self) -> bool:
+        """查看当前 WIFI 信息"""
         print("\n" + "="*50)
-        print("AP/有线直连模式配置")
+        print("查看 WIFI 信息")
         print("="*50)
         
-        local_ip = self.获取用户输入的IP("本机", show_network_info=True)
-        if not local_ip:
-            return False
+        ssid, ip = self.网络.获取当前连接的WIFI信息()
         
-        if not self.sdk.修改SDK配置(local_ip, 43988):
-            return False
-        
-        if not self.sdk.修改运控启动脚本(None):
-            return False
-        
-        self.sdk.auto_confirm = self.auto_confirm
-        return self.sdk.重启运动控制()
+        if ssid:
+            print(f"\n当前连接的 WIFI: {ssid}")
+            print(f"IP 地址: {ip}")
+            return True
+        else:
+            print("\n未连接到 WIFI")
+            return True
 
-    def 配置AP_有线直连模式_自动(self, local_ip: str) -> bool:
-        """配置 AP/有线直连模式（命令行自动模式）"""
+    def 仅配置WIFI(self) -> bool:
+        """仅配置 WIFI 连接"""
         print("\n" + "="*50)
-        print("AP/有线直连模式配置（自动）")
-        print("="*50)
-        print(f"本机 IP: {local_ip}")
-        
-        if not self.sdk.修改SDK配置(local_ip, 43988):
-            return False
-        
-        if not self.sdk.修改运控启动脚本(None):
-            return False
-        
-        self.sdk.auto_confirm = self.auto_confirm
-        return self.sdk.重启运动控制()
-    
-    def 仅修改SDK配置并重启(self) -> bool:
-        """仅修改 SDK 配置并重启运控（交互式）"""
-        print("\n" + "="*50)
-        print("修改 SDK 配置并重启运控")
-        print("="*50)
-        
-        local_ip = self.获取用户输入的IP("本机", show_network_info=True)
-        if not local_ip:
-            return False
-        
-        if not self.sdk.修改SDK配置(local_ip, 43988):
-            return False
-        
-        self.sdk.auto_confirm = self.auto_confirm
-        return self.sdk.重启运动控制()
-    
-    def 仅修改SDK配置并重启_自动(self, local_ip: str) -> bool:
-        """仅修改 SDK 配置并重启运控（命令行自动模式）"""
-        print("\n" + "="*50)
-        print("修改 SDK 配置并重启运控（自动）")
-        print("="*50)
-        print(f"本机 IP: {local_ip}")
-        
-        if not self.sdk.修改SDK配置(local_ip, self.本机端口号):
-            return False
-        
-        self.sdk.auto_confirm = self.auto_confirm
-        return self.sdk.重启运动控制()
-    
-    def 配置WIFI局域网模式(self) -> bool:
-        """配置 WIFI 局域网模式（交互式）"""
-        print("\n" + "="*50)
-        print("WIFI 局域网模式配置")
+        print("配置 WIFI 连接")
         print("="*50)
         
         # 连接 WIFI - 支持重试
-        max_retries = 3 + 10000 - 3
+        max_retries = 3
         for attempt in range(max_retries):
             ssid = input("请输入 WIFI 名称: ").strip()
             密码 = input("请输入 WIFI 密码: ").strip()
@@ -223,67 +175,6 @@ class 机器狗配置器:
                     print("\n✗ 已达到最大重试次数")
                     return False
         
-        # 获取机器狗在 WIFI 网络中的 IP 和 MAC 地址
-        robot_ip, robot_mac = self.网络.获取机器人WIFI_IP()
-        if not robot_ip:
-            print("\n未能自动获取机器狗 WIFI IP")
-            if robot_mac:
-                print(f"提示: 可以在路由器中通过 MAC 地址 {robot_mac} 查找对应的 IP")
-            robot_ip = input("请手动输入机器狗 WIFI IP: ").strip()
-            if not robot_ip:
-                print("✗ 未提供机器狗 WIFI IP")
-                return False
-        
-        print("\n重要信息：")
-        print(f"机器狗 WIFI IP: {robot_ip}")
-        if robot_mac:
-            print(f"机器狗 MAC 地址: {robot_mac}")
-        print("后续请使用此 IP 通过 SSH 连接机器狗")
-        
-        # 获取本机 IP（用于 SDK 配置）
-        print()
-        local_ip = self.获取用户输入的IP("本机在 WIFI 网络中的", show_network_info=False)
-        if not local_ip:
-            return False
-        
-        if not self.sdk.修改SDK配置(local_ip, 43988):
-            return False
-        
-        if not self.sdk.修改运控启动脚本(robot_ip):
-            return False
-        
-        self.sdk.auto_confirm = self.auto_confirm
-        return self.sdk.重启运动控制()
-    
-    def 配置WIFI局域网模式_自动(self, ssid: str, 密码: str, local_ip: str) -> bool:
-        """配置 WIFI 局域网模式（命令行自动模式）"""
-        print("\n" + "="*50)
-        print("WIFI 局域网模式配置（自动）")
-        print("="*50)
-        print(f"WIFI 名称: {ssid}")
-        print(f"本机 IP: {local_ip}")
-        
-        if not self.网络.连接Wifi(ssid, 密码):
-            return False
-        
-        robot_ip, robot_mac = self.网络.获取机器人WIFI_IP()
-        if not robot_ip:
-            print("\n✗ 未能自动获取机器狗 WIFI IP")
-            if robot_mac:
-                print(f"提示: 可以在路由器中通过 MAC 地址 {robot_mac} 查找对应的 IP")
-            return False
-        
-        print("\n重要信息：")
-        print(f"机器狗 WIFI IP: {robot_ip}")
-        if robot_mac:
-            print(f"机器狗 MAC 地址: {robot_mac}")
-        print("后续请使用此 IP 通过 SSH 连接机器狗")
-        
-        if not self.sdk.修改SDK配置(local_ip, 43988):
-            return False
-        
-        if not self.sdk.修改运控启动脚本(robot_ip):
-            return False
-        
-        self.sdk.auto_confirm = self.auto_confirm
-        return self.sdk.重启运动控制()
+        # 获取机器狗在 WIFI 网络中的 IP
+        self.网络.获取当前连接的WIFI信息()
+        return True

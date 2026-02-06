@@ -93,12 +93,13 @@ class SSH管理器:
         
         return True
     
-    def 上传目录(self, local_path: str, remote_path: str) -> bool:
+    def 上传目录(self, local_path: str, remote_path: str, ignore_patterns: list = None) -> bool:
         """递归上传目录到远程机器狗
         
         Args:
             local_path: 本地目录路径
             remote_path: 远程目录路径
+            ignore_patterns: 忽略的文件模式列表，支持 fnmatch 语法
             
         Returns:
             成功返回True，失败返回False
@@ -106,6 +107,15 @@ class SSH管理器:
         if not self.SSH客户端:
             print("未连接到机器狗")
             return False
+
+        if ignore_patterns is None:
+            ignore_patterns = [
+                "__pycache__", "*.pyc", "*.pyo", "*.pyd", 
+                "*.egg-info", ".git", ".idea", ".vscode", 
+                ".DS_Store", "node_modules", "dist", "build"
+            ]
+        
+        import fnmatch
 
         sftp = self.SSH客户端.open_sftp()
         
@@ -117,6 +127,9 @@ class SSH管理器:
                 self.执行命令(f"mkdir -p {remote_path}")
             
             for root, dirs, files in os.walk(local_path):
+                # 过滤目录
+                dirs[:] = [d for d in dirs if not any(fnmatch.fnmatch(d, pattern) for pattern in ignore_patterns)]
+                
                 relative_path = os.path.relpath(root, local_path)
                 remote_root = os.path.join(remote_path, relative_path).replace("\\", "/")
                 if relative_path == ".":
@@ -129,6 +142,10 @@ class SSH管理器:
                     self.执行命令(f"mkdir -p {remote_root}")
                 
                 for file in files:
+                    # 过滤文件
+                    if any(fnmatch.fnmatch(file, pattern) for pattern in ignore_patterns):
+                        continue
+                        
                     local_file = os.path.join(root, file)
                     remote_file = os.path.join(remote_root, file).replace("\\", "/")
                     print(f"正在上传: {file} ...")

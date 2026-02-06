@@ -29,6 +29,10 @@ class 服务安装管理器:
             
         remote_path = "/home/firefly/sparkrobot/sparkrobot-common"
         
+        # 0. 确保远程目录权限正确 (防止之前用 sudo 运行导致权限归 root)
+        self.ssh.执行命令(f"mkdir -p {remote_path}")
+        self.ssh.执行命令(f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_path}", use_sudo=True)
+        
         # 1. 上传文件
         print(f"正在将 {local_common_path} 上传到 {remote_path}...")
         if not self.ssh.上传目录(local_common_path, remote_path):
@@ -45,7 +49,7 @@ class 服务安装管理器:
             
         print("正在安装 sparkrobot-common...")
         # 使用 -e 安装
-        cmd_install = f"cd {remote_path} && python3 -m pip install -e ."
+        cmd_install = f"python3 -m pip install -e {remote_path}"
         success, output, error = self.ssh.执行命令(cmd_install, use_sudo=True)
         
         if success:
@@ -79,6 +83,10 @@ class 服务安装管理器:
             
         remote_path = "/home/firefly/sparkrobot/robot-server"
         
+        # 0. 确保远程目录权限正确
+        self.ssh.执行命令(f"mkdir -p {remote_path}")
+        self.ssh.执行命令(f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_path}", use_sudo=True)
+        
         # 1. 上传文件
         print(f"正在将 {local_robot_server_path} 上传到 {remote_path}...")
         if not self.ssh.上传目录(local_robot_server_path, remote_path):
@@ -86,7 +94,7 @@ class 服务安装管理器:
         
         # 2. 安装 robot-server 依赖
         print("正在安装 robot-server 依赖...")
-        cmd_install_deps = f"cd {remote_path} && python3 -m pip install ."
+        cmd_install_deps = f"python3 -m pip install {remote_path}"
         success, output, error = self.ssh.执行命令(cmd_install_deps, use_sudo=True)
         if not success:
              print(f"✗ robot-server 依赖安装失败: {error}")
@@ -103,13 +111,6 @@ class 服务安装管理器:
         # 确保脚本有执行权限
         self.ssh.执行命令(f"chmod +x {install_script}")
         success, output, error = self.ssh.执行命令(f"bash {install_script}", use_sudo=True)
-        
-        # 如果 scripts/install.sh 失败，尝试根目录 install.sh (兼容旧结构)
-        if not success and "No such file" in error:
-            print("尝试根目录 install.sh...")
-            install_script = f"{remote_path}/install.sh"
-            self.ssh.执行命令(f"chmod +x {install_script}")
-            success, output, error = self.ssh.执行命令(f"bash {install_script}", use_sudo=True)
 
         if success:
             print("✓ Robot Server 安装并启动成功")

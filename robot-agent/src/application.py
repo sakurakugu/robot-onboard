@@ -328,7 +328,7 @@ class RobotClient:
             
             # 调用 robot-server API
             async with httpx.AsyncClient() as client:
-                response = await client.get("http://127.0.0.1:8000/api/v1/volume", timeout=10.0)
+                response = await client.get("http://127.0.0.1:8080/api/v1/volume", timeout=10.0)
                 result = response.json()
                 
                 if result.get("success"):
@@ -354,7 +354,7 @@ class RobotClient:
             # 调用 robot-server API
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    "http://127.0.0.1:8000/api/v1/volume",
+                    "http://127.0.0.1:8080/api/v1/volume",
                     json={"volume": volume},
                     timeout=10.0
                 )
@@ -383,7 +383,7 @@ class RobotClient:
             # 调用 robot-server API
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    "http://127.0.0.1:8000/api/v1/volume/mute",
+                    "http://127.0.0.1:8080/api/v1/volume/mute",
                     json={"mute": mute},
                     timeout=10.0
                 )
@@ -410,7 +410,7 @@ class RobotClient:
             
             # 调用 robot-server API
             async with httpx.AsyncClient() as client:
-                response = await client.get("http://127.0.0.1:8000/api/v1/config", timeout=10.0)
+                response = await client.get("http://127.0.0.1:8080/api/v1/config", timeout=10.0)
                 result = response.json()
                 
                 if result.get("success"):
@@ -436,7 +436,7 @@ class RobotClient:
             # 调用 robot-server API
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    "http://127.0.0.1:8000/api/v1/config",
+                    "http://127.0.0.1:8080/api/v1/config",
                     json=config_data,
                     timeout=10.0
                 )

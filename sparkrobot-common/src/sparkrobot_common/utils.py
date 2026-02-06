@@ -64,6 +64,12 @@ def 检测机器人运控版本() -> str | None:
     except Exception:
         return None
 
+def 获取AP的Wifi名称():
+    with open("/etc/hostapd/hostapd.conf", "r") as f:
+        for line in f:
+            if line.startswith("ssid="):
+                return line.strip().split("=", 1)[1]
+
 
 __all__ = [
     "生成UUID",
@@ -71,4 +77,5 @@ __all__ = [
     "获取IPC路径",
     "获取本机IP",
     "检测机器人运控版本",
+    "获取AP的Wifi名称",
 ]

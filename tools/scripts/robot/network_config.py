@@ -79,6 +79,29 @@ class 网络配置管理器:
         
         return ip, mac
     
+    def 获取当前连接的WIFI信息(self) -> Tuple[Optional[str], Optional[str]]:
+        """获取当前连接的 WIFI SSID 和 IP
+        
+        Returns:
+            (SSID, IP) 元组
+        """
+        print("正在获取当前 WIFI 信息...")
+        
+        # 获取 SSID
+        cmd_ssid = "nmcli -t -f active,ssid dev wifi | grep '^yes' | cut -d: -f2"
+        success_ssid, output_ssid, _ = self.ssh.执行命令(cmd_ssid)
+        ssid = output_ssid.strip() if success_ssid and output_ssid.strip() else None
+        
+        # 获取 IP
+        ip, _ = self.获取机器人WIFI_IP()
+        
+        if ssid:
+            print(f"✓ 当前连接 WIFI: {ssid}")
+        else:
+            print("✗ 未连接到任何 WIFI")
+            
+        return ssid, ip
+
     def 连接Wifi(self, ssid: str, 密码: str) -> bool:
         """连接到指定的 WIFI 网络
         
