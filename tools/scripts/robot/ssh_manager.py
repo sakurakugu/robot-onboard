@@ -3,6 +3,7 @@
 import os
 from typing import Optional, Tuple
 import paramiko
+import subprocess
 
 
 class SSH管理器:

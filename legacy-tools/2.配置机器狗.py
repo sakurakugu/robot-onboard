@@ -85,7 +85,7 @@ def execute_task(choice: str, robot_ip: str, robot_port: int) -> bool:
             success = configurator.重启运动控制()
         elif choice == "main_4":
             # SSH 登录
-            success = configurator.SSH登录(robot_ip)
+            success = configurator.SSH登录()
         else:
             print(f"✗ 未知的选项: {choice}")
             success = False
@@ -131,7 +131,7 @@ def main():
             print(f"1. 修改配置{current_config_str}")
             print("2. 安装软件")
             print("3. 群控配置")
-            print("4. SSH登录")
+            print("4. SSH 登录")
             print("5. 设备扫描")
             print("0. 退出脚本")
             
