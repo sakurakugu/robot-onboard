@@ -12,42 +12,42 @@ from .robot_listener import 监听管理器
 
 class 机器狗配置器:
     """机器狗配置器 - 组合所有配置功能的主入口"""
-    
+
     def __init__(self, 本机端口号: int, 机器人IP: str, 用户名: str = "firefly", 密码: str = "firefly"):
         self.机器人IP = 机器人IP
         self.用户名 = 用户名
         self.密码 = 密码
         self.本机端口号 = 本机端口号
         self.auto_confirm = False  # 是否自动确认（用于命令行模式）
-        
+
         # 创建各功能管理器
         self.ssh = SSH管理器(机器人IP, 用户名, 密码)
         self.网络 = 网络配置管理器(self.ssh)
         self.sdk = SDK配置管理器(self.ssh)
         self.服务 = 服务安装管理器(self.ssh)
-    
+
     # ========== SSH 相关方法（委托给 ssh 管理器）==========
     def 连接(self) -> bool:
         """连接到机器狗"""
         return self.ssh.连接()
-    
+
     def 断开连接(self):
         """断开连接"""
         self.ssh.断开连接()
-    
+
     def 执行命令(self, command: str, use_sudo: bool = False) -> Tuple[bool, str, str]:
         """执行远程命令"""
         return self.ssh.执行命令(command, use_sudo)
-    
+
     def SSH登录(self) -> bool:
         """SSH 登录到机器狗"""
         return self.ssh.SSH登录(self.机器人IP)
-    
+
     # ========== SDK 相关方法（委托给 sdk 管理器）==========
     def 修改SDK配置(self, target_ip: str, target_port: int) -> bool:
         """修改 SDK 配置"""
         return self.sdk.修改SDK配置(target_ip, target_port)
-    
+
     def 修改运控启动脚本(self, sdk_client_ip: Optional[str] = None) -> bool:
         """修改运控启动脚本"""
         return self.sdk.修改运控启动脚本(sdk_client_ip)
@@ -71,26 +71,26 @@ class 机器狗配置器:
 
     def 查看修改运控配置(self, sdk_client_ip: Optional[str] = None) -> bool:
         return self.sdk.修改运控启动脚本(sdk_client_ip)
-    
+
     def 重启运动控制(self) -> bool:
         """重启运控"""
         self.sdk.auto_confirm = self.auto_confirm
         return self.sdk.重启运动控制()
-    
+
     # ========== 服务安装相关方法（委托给服务管理器）==========
     def 安装SparkRobotCommon(self) -> bool:
         """安装 SparkRobot Common"""
         return self.服务.安装SparkRobotCommon()
-    
+
     def 安装RobotServer(self) -> bool:
         """安装 Robot Server"""
         return self.服务.安装RobotServer()
-    
+
     # ========== 用户交互方法 ==========
     def 获取用户输入的IP(self, prompt_prefix: str = "本机", show_network_info: bool = True) -> Optional[str]:
         """获取用户输入的IP地址，支持自动检测和查看网络信息"""
         current_ip = 获取本地IP()
-        
+
         while True:
             if current_ip:
                 print(f"检测到当前 IP: {current_ip}")
@@ -104,7 +104,7 @@ class 机器狗配置器:
                     ip = input(f"请输入{prompt_prefix}IP，或输入'ip'查看网络信息: ").strip()
                 else:
                     ip = input(f"请输入{prompt_prefix}IP: ").strip()
-            
+
             if show_network_info and ip.lower() == 'ip':
                 print("\n" + "-"*50)
                 success, output, _ = self.ssh.执行命令("ip addr")
@@ -127,16 +127,16 @@ class 机器狗配置器:
             else:
                 print(f"✗ 未提供{prompt_prefix}IP")
                 return None
-    
-    # ========== 配置模式方法 ==========    
+
+    # ========== 配置模式方法 ==========
     def 查看WIFI信息(self) -> bool:
         """查看当前 WIFI 信息"""
         print("\n" + "="*50)
         print("查看 WIFI 信息")
         print("="*50)
-        
+
         ssid, ip = self.网络.获取当前连接的WIFI信息()
-        
+
         if ssid:
             print(f"\n当前连接的 WIFI: {ssid}")
             print(f"IP 地址: {ip}")
@@ -150,13 +150,13 @@ class 机器狗配置器:
         print("\n" + "="*50)
         print("配置 WIFI 连接")
         print("="*50)
-        
+
         # 连接 WIFI - 支持重试
         max_retries = 3
         for attempt in range(max_retries):
             ssid = input("请输入 WIFI 名称: ").strip()
             密码 = input("请输入 WIFI 密码: ").strip()
-            
+
             if not ssid or not 密码:
                 print("✗ WIFI 信息不完整")
                 if attempt < max_retries - 1:
@@ -166,7 +166,7 @@ class 机器狗配置器:
                     continue
                 else:
                     return False
-            
+
             if self.网络.连接Wifi(ssid, 密码):
                 break
             else:
@@ -178,7 +178,7 @@ class 机器狗配置器:
                 else:
                     print("\n✗ 已达到最大重试次数")
                     return False
-        
+
         # 获取机器狗在 WIFI 网络中的 IP
         self.网络.获取当前连接的WIFI信息()
         return True

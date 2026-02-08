@@ -27,7 +27,7 @@ def 确保存在包(package_name, import_name=None):
         __import__(import_name)
     except ImportError:
         print(f"📦 未检测到 {package_name}，正在自动安装...")
-        
+
         def _install_pip():
             print("⚠️ 检测到 pip 未安装，正在尝试自动安装 pip...")
             try:
@@ -49,13 +49,13 @@ def 确保存在包(package_name, import_name=None):
                 sys.executable, "-m", "pip", "install", package_name
             ])
             print(f"✅ {package_name} 安装完成")
-            
+
             # 刷新环境并验证导入
             importlib.invalidate_caches()
-            
+
             # 尝试重新加载 site-packages (特别是 ~/.local)
             importlib.reload(site)
-            
+
             # 显式检查并添加用户 site-packages
             try:
                 user_site = site.getusersitepackages()
@@ -79,7 +79,7 @@ def 确保存在包(package_name, import_name=None):
                 subprocess.check_call([sys.executable, "-m", "pip", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except subprocess.CalledProcessError:
                 is_pip_missing = True
-            
+
             if is_pip_missing:
                 if _install_pip():
                     # 如果 pip 安装成功，重试安装包
@@ -88,14 +88,14 @@ def 确保存在包(package_name, import_name=None):
                             sys.executable, "-m", "pip", "install", package_name
                         ])
                         print(f"✅ {package_name} 安装完成")
-                        
+
                         # 安装成功后重启脚本
                         print(f"🔄 环境已更新，正在重启脚本...")
                         sys.stdout.flush()
                         os.execv(sys.executable, [sys.executable] + sys.argv)
                     except subprocess.CalledProcessError:
                         pass # 继续执行下方的错误提示
-            
+
             # 如果重试失败或不是因为 pip 缺失，显示手动安装提示
             print(f"\n❌ 自动安装 {package_name} 失败。")
             print(f"可能是因为环境中没有安装 pip，或者网络问题。")
