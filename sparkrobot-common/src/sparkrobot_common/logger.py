@@ -198,7 +198,7 @@ def configure_logger(
     if console_stream is not None:
         console_handler = logging.StreamHandler(console_stream)
         console_formatter = CNLevelFormatter(
-            "[%(asctime)s] [%(levelname)s] [%(name)s] [%(filename)s:%(lineno)d %(funcName)s] %(message)s",
+            "[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d %(funcName)s] %(message)s",
             time_mode="console",
             datefmt="%H:%M:%S.%f",
             enable_color=True,

@@ -24,7 +24,11 @@ from sparkrobot_common import (
     WORKSPACE_DIR,  # 工作目录
     TomlParser,
     获取默认配置,
+    get_logger,
 )
+
+APP_NAME = "robot-agent"
+logger = get_logger(APP_NAME)
 
 # 尝试导入 watchdog
 try:
@@ -207,7 +211,7 @@ class Config:
             auth_client = get_auth_client()
             auth_client.配置认证信息(username, password, session_timeout)
         except Exception as e:
-            print(f"[Config] 配置认证客户端失败: {e}")
+            logger.error(f"配置认证客户端失败: {e}")
 
     def 设置(
         self,
@@ -237,7 +241,7 @@ class Config:
             # 添加认证信息
             auth_client = get_auth_client()
             if not auth_client.添加认证到请求(req):
-                print("[Config] 警告: 无法添加认证信息")
+                logger.warning("无法添加认证信息")
 
             with urllib.request.urlopen(req, timeout=5) as response:
                 result = json.loads(response.read().decode("utf-8"))
@@ -248,7 +252,7 @@ class Config:
                 return False
 
         except Exception as e:
-            print(f"[Config] 设置配置失败: {e}")
+            logger.error(f"设置配置失败: {e}")
             return False
 
     def 批量设置(
@@ -277,7 +281,7 @@ class Config:
             # 添加认证信息
             auth_client = get_auth_client()
             if not auth_client.添加认证到请求(req):
-                print("[Config] 警告: 无法添加认证信息")
+                logger.warning("无法添加认证信息")
 
             with urllib.request.urlopen(req, timeout=5) as response:
                 result = json.loads(response.read().decode("utf-8"))
@@ -286,7 +290,7 @@ class Config:
                 return result.get("results", {})
 
         except Exception as e:
-            print(f"[Config] 批量设置配置失败: {e}")
+            logger.error(f"批量设置配置失败: {e}")
             return dict.fromkeys(updates.keys(), False)
 
     # ==================== 便捷访问属性 ====================
@@ -392,7 +396,7 @@ class Config:
             是否成功启动监听
         """
         if not HAS_WATCHDOG:
-            print("[Config] watchdog 未安装，无法启动文件监听")
+            logger.warning("watchdog 未安装，无法启动文件监听")
             return False
 
         if self._watching:
@@ -404,10 +408,10 @@ class Config:
             self._observer.schedule(handler, str(self.config_dir), recursive=False)
             self._observer.start()
             self._watching = True
-            print(f"[Config] 已启动配置文件监听: {self.config_file}")
+            logger.info(f"已启动配置文件监听: {self.config_file}")
             return True
         except Exception as e:
-            print(f"[Config] 启动文件监听失败: {e}")
+            logger.error(f"启动文件监听失败: {e}")
             return False
 
     def 停止监听(self) -> None:
@@ -416,20 +420,20 @@ class Config:
             self._observer.stop()
             self._observer.join(timeout=2)
             self._watching = False
-            print("[Config] 已停止配置文件监听")
+            logger.info("已停止配置文件监听")
 
     def _处理配置文件变更(self) -> None:
         """配置文件变更处理"""
-        print("[Config] 检测到配置文件变更，重新加载...")
+        logger.info("检测到配置文件变更，重新加载...")
         try:
             old_config = dict(self._config)
             self._load()
 
             if old_config != self._config:
                 self._通知配置变更()
-                print("[Config] 配置已更新")
+                logger.info("配置已更新")
         except Exception as e:
-            print(f"[Config] 重新加载配置失败: {e}")
+            logger.error(f"重新加载配置失败: {e}")
 
     # ==================== 配置变更回调 ====================
 
@@ -453,7 +457,7 @@ class Config:
             try:
                 callback(dict(self._config))
             except Exception as e:
-                print(f"[Config] 配置变更回调执行失败: {e}")
+                logger.error(f"配置变更回调执行失败: {e}")
 
     # ==================== HTTP 同步 ====================
 
@@ -495,17 +499,17 @@ class Config:
                                 self._config[section][key] = value
 
                     self._通知配置变更()
-                    print(f"[Config] 已从服务器同步配置: {api_url}")
+                    logger.info(f"已从服务器同步配置: {api_url}")
                     return True
                 else:
-                    print(f"[Config] 服务器返回错误: {data}")
+                    logger.error(f"服务器返回错误: {data}")
                     return False
 
         except urllib.error.URLError as e:
-            print(f"[Config] 无法连接服务器 {api_url}: {e}")
+            logger.error(f"无法连接服务器 {api_url}: {e}")
             return False
         except Exception as e:
-            print(f"[Config] 同步配置失败: {e}")
+            logger.error(f"同步配置失败: {e}")
             return False
 
     def reload(self) -> None:

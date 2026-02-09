@@ -14,8 +14,10 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
-from sparkrobot_common import ROBOT_SERVER_URL
+from sparkrobot_common import ROBOT_SERVER_URL,get_logger
 
+APP_NAME = "robot-agent"
+logger = get_logger(APP_NAME)
 
 class AuthClient:
     """认证客户端 - 单例模式"""
@@ -71,7 +73,7 @@ class AuthClient:
             是否登录成功
         """
         if not self._username or not self._password:
-            print("[AuthClient] 未配置认证信息，无法登录")
+            logger.error("未配置认证信息，无法登录")
             return False
 
         api_url = f"{self.server_url}/api/v1/auth/login"
@@ -92,18 +94,18 @@ class AuthClient:
                 if result.get("success") and "token" in result:
                     self._token = result["token"]
                     self._token_time = time.time()
-                    print(f"[AuthClient] 登录成功，用户: {self._username}")
+                    logger.info(f"登录成功，用户: {self._username}")
                     return True
                 else:
-                    print(f"[AuthClient] 登录失败: {result.get('error', '未知错误')}")
+                    logger.error(f"登录失败: {result.get('error', '未知错误')}")
                     return False
 
         except urllib.error.HTTPError as e:
             error_msg = e.read().decode("utf-8") if e.fp else str(e)
-            print(f"[AuthClient] 登录请求失败 (HTTP {e.code}): {error_msg}")
+            logger.error(f"登录请求失败 (HTTP {e.code}): {error_msg}")
             return False
         except Exception as e:
-            print(f"[AuthClient] 登录时出错: {e}")
+            logger.error(f"登录时出错: {e}")
             return False
 
     def 获取_token(self) -> Optional[str]:
@@ -156,11 +158,11 @@ class AuthClient:
                 result = json.loads(response.read().decode("utf-8"))
                 self._token = None
                 self._token_time = 0
-                print("[AuthClient] 登出成功")
+                logger.info("登出成功")
                 return result.get("success", False)
 
         except Exception as e:
-            print(f"[AuthClient] 登出时出错: {e}")
+            logger.error(f"登出时出错: {e}")
             # 即使登出失败也清除本地 token
             self._token = None
             self._token_time = 0

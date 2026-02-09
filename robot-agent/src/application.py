@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from sparkrobot_common import WORKSPACE_DIR, configure_logger, 检测机器人运控版本
+from sparkrobot_common import WORKSPACE_DIR, configure_logger, get_logger, 检测机器人运控版本
 
 from core.config import Config
 from core.auth_client import get_auth_client
@@ -45,7 +45,7 @@ from modules.transport.ws_manager import WebSocketManager
 from modules.vision.camera import capture_photo
 
 APP_NAME = "robot-agent"
-
+logger = get_logger(APP_NAME)
 
 class RobotClient:
     """机器狗客户端"""
@@ -74,10 +74,10 @@ class RobotClient:
 
         # 启动配置文件监听（热更新）
         if self.config_store.启动监听():
-            self.logger.info("配置文件监听已启动")
+            logger.info("配置文件监听已启动")
             self.config_store.注册配置变更回调(self._处理配置变化)
         else:
-            self.logger.warning("配置文件监听启动失败，热更新功能不可用")
+            logger.warning("配置文件监听启动失败，热更新功能不可用")
 
         self.ws_manager = WebSocketManager(self.config)
         self.交互式子进程控制器 = ProcessController()
@@ -144,7 +144,7 @@ class RobotClient:
 
     def _处理配置变化(self, new_config: Dict[str, Any]) -> None:
         """配置变更回调"""
-        self.logger.info("检测到配置变更，正在更新...")
+        logger.info("检测到配置变更，正在更新...")
         self.config = new_config
         # 更新相关组件的配置
         self.ws_manager.config = new_config
@@ -158,7 +158,7 @@ class RobotClient:
         logging_cfg = self.config.get("logging", {})
         level = logging_cfg.get("level", "INFO")
         max_file_size_mb = logging_cfg.get("max_file_size_mb")
-        self.logger = configure_logger(
+        logger = configure_logger(
             app_name=self.project_name,
             log_dir=self.log_dir,
             level=level,
@@ -296,7 +296,7 @@ class RobotClient:
     async def _处理相机拍照(self, data: Dict[str, Any]) -> None:
         """处理相机拍照消息"""
         request_id = data.get("requestId", "")
-        self.logger.info(f"收到拍照请求: {request_id}")
+        logger.info(f"收到拍照请求: {request_id}")
 
         try:
             # 在线程池中执行拍照，避免阻塞
@@ -309,20 +309,20 @@ class RobotClient:
             if image_base64:
                 # 发送拍照成功响应
                 await self.发送拍照响应(request_id, True, image_base64)
-                self.logger.info(f"拍照成功: {request_id}")
+                logger.info(f"拍照成功: {request_id}")
             else:
                 # 发送拍照失败响应
                 await self.发送拍照响应(request_id, False, None, "拍照失败")
-                self.logger.error(f"拍照失败: {request_id}")
+                logger.error(f"拍照失败: {request_id}")
 
         except Exception as e:
-            self.logger.error(f"处理拍照请求时出错: {e}", exc_info=True)
+            logger.error(f"处理拍照请求时出错: {e}", exc_info=True)
             await self.发送拍照响应(request_id, False, None, str(e))
 
     async def _处理音量获取(self, data: Dict[str, Any]) -> None:
         """处理音量获取消息"""
         request_id = data.get("requestId", "")
-        self.logger.info(f"收到音量获取请求: {request_id}")
+        logger.info(f"收到音量获取请求: {request_id}")
 
         try:
             import httpx
@@ -343,20 +343,20 @@ class RobotClient:
 
                 if result.get("success"):
                     await self.发送音量响应(request_id, True, result.get("data"))
-                    self.logger.info(f"音量获取成功: {request_id}")
+                    logger.info(f"音量获取成功: {request_id}")
                 else:
                     await self.发送音量响应(request_id, False, None, result.get("error", "获取音量失败"))
-                    self.logger.error(f"音量获取失败: {request_id}")
+                    logger.error(f"音量获取失败: {request_id}")
 
         except Exception as e:
-            self.logger.error(f"处理音量获取请求时出错: {e}", exc_info=True)
+            logger.error(f"处理音量获取请求时出错: {e}", exc_info=True)
             await self.发送音量响应(request_id, False, None, str(e))
 
     async def _处理音量设置(self, data: Dict[str, Any]) -> None:
         """处理音量设置消息"""
         request_id = data.get("requestId", "")
         volume = data.get("volume")
-        self.logger.info(f"收到音量设置请求: {request_id}, 音量: {volume}")
+        logger.info(f"收到音量设置请求: {request_id}, 音量: {volume}")
 
         try:
             import httpx
@@ -378,20 +378,20 @@ class RobotClient:
 
                 if result.get("success"):
                     await self.发送音量响应(request_id, True, {"message": result.get("message")})
-                    self.logger.info(f"音量设置成功: {request_id}")
+                    logger.info(f"音量设置成功: {request_id}")
                 else:
                     await self.发送音量响应(request_id, False, None, result.get("error", "设置音量失败"))
-                    self.logger.error(f"音量设置失败: {request_id}")
+                    logger.error(f"音量设置失败: {request_id}")
 
         except Exception as e:
-            self.logger.error(f"处理音量设置请求时出错: {e}", exc_info=True)
+            logger.error(f"处理音量设置请求时出错: {e}", exc_info=True)
             await self.发送音量响应(request_id, False, None, str(e))
 
     async def _处理设置静音(self, data: Dict[str, Any]) -> None:
         """处理设置静音消息"""
         request_id = data.get("requestId", "")
         mute = data.get("mute")
-        self.logger.info(f"收到设置静音请求: {request_id}, 静音: {mute}")
+        logger.info(f"收到设置静音请求: {request_id}, 静音: {mute}")
 
         try:
             import httpx
@@ -413,19 +413,19 @@ class RobotClient:
 
                 if result.get("success"):
                     await self.发送音量响应(request_id, True, {"message": result.get("message")})
-                    self.logger.info(f"设置静音成功: {request_id}")
+                    logger.info(f"设置静音成功: {request_id}")
                 else:
                     await self.发送音量响应(request_id, False, None, result.get("error", "设置静音失败"))
-                    self.logger.error(f"设置静音失败: {request_id}")
+                    logger.error(f"设置静音失败: {request_id}")
 
         except Exception as e:
-            self.logger.error(f"处理设置静音请求时出错: {e}", exc_info=True)
+            logger.error(f"处理设置静音请求时出错: {e}", exc_info=True)
             await self.发送音量响应(request_id, False, None, str(e))
 
     async def _处理配置获取(self, data: Dict[str, Any]) -> None:
         """处理配置获取消息"""
         request_id = data.get("requestId", "")
-        self.logger.info(f"收到配置获取请求: {request_id}")
+        logger.info(f"收到配置获取请求: {request_id}")
 
         try:
             import httpx
@@ -446,20 +446,20 @@ class RobotClient:
 
                 if result.get("success"):
                     await self.发送配置响应(request_id, True, result.get("config"))
-                    self.logger.info(f"配置获取成功: {request_id}")
+                    logger.info(f"配置获取成功: {request_id}")
                 else:
                     await self.发送配置响应(request_id, False, None, result.get("error", "获取配置失败"))
-                    self.logger.error(f"配置获取失败: {request_id}")
+                    logger.error(f"配置获取失败: {request_id}")
 
         except Exception as e:
-            self.logger.error(f"处理配置获取请求时出错: {e}", exc_info=True)
+            logger.error(f"处理配置获取请求时出错: {e}", exc_info=True)
             await self.发送配置响应(request_id, False, None, str(e))
 
     async def _处理配置更新(self, data: Dict[str, Any]) -> None:
         """处理配置更新消息"""
         request_id = data.get("requestId", "")
         config_data = data.get("config", {})
-        self.logger.info(f"收到配置更新请求: {request_id}")
+        logger.info(f"收到配置更新请求: {request_id}")
 
         try:
             import httpx
@@ -481,20 +481,20 @@ class RobotClient:
 
                 if result.get("success"):
                     await self.发送配置响应(request_id, True, {"message": result.get("message"), "results": result.get("results")})
-                    self.logger.info(f"配置更新成功: {request_id}")
+                    logger.info(f"配置更新成功: {request_id}")
                 else:
                     await self.发送配置响应(request_id, False, None, result.get("error", "更新配置失败"))
-                    self.logger.error(f"配置更新失败: {request_id}")
+                    logger.error(f"配置更新失败: {request_id}")
 
         except Exception as e:
-            self.logger.error(f"处理配置更新请求时出错: {e}", exc_info=True)
+            logger.error(f"处理配置更新请求时出错: {e}", exc_info=True)
             await self.发送配置响应(request_id, False, None, str(e))
 
     async def _处理SDK模式设置(self, data: Dict[str, Any]) -> None:
         """处理SDK模式设置消息"""
         request_id = data.get("requestId", "")
         sdk_mode = data.get("sdkMode")
-        self.logger.info(f"收到SDK模式设置请求: {request_id}, SDK模式: {sdk_mode}")
+        logger.info(f"收到SDK模式设置请求: {request_id}, SDK模式: {sdk_mode}")
 
         try:
             if sdk_mode is None:
@@ -505,34 +505,34 @@ class RobotClient:
 
             # 如果状态没有变化，直接返回成功
             if self.sdk_mode_enabled == sdk_mode:
-                self.logger.info(f"SDK模式已经是 {'SDK' if sdk_mode else '遥控'} 模式")
+                logger.info(f"SDK模式已经是 {'SDK' if sdk_mode else '遥控'} 模式")
                 await self.发送SDK模式响应(request_id, True, sdk_mode)
                 return
 
             if sdk_mode:
                 # 开启SDK模式：启动子程序
-                self.logger.info("开启SDK模式，启动子程序...")
+                logger.info("开启SDK模式，启动子程序...")
                 script_dir = Path(__file__).parent
                 interactive_script = script_dir / "modules" / "actions" / "executor.py"
 
                 if not interactive_script.exists():
                     error_msg = f"找不到交互式脚本: {interactive_script}"
-                    self.logger.error(error_msg)
+                    logger.error(error_msg)
                     await self.发送SDK模式响应(request_id, False, None, error_msg)
                     return
 
                 if not self.交互式子进程控制器.启动(str(interactive_script)):
                     error_msg = "无法启动交互式子进程"
-                    self.logger.error(error_msg)
+                    logger.error(error_msg)
                     await self.发送SDK模式响应(request_id, False, None, error_msg)
                     return
 
                 self.sdk_mode_enabled = True
-                self.logger.info("SDK模式开启成功")
+                logger.info("SDK模式开启成功")
                 await self.发送SDK模式响应(request_id, True, True)
             else:
                 # 关闭SDK模式：关闭子程序
-                self.logger.info("关闭SDK模式，关闭子程序...")
+                logger.info("关闭SDK模式，关闭子程序...")
 
                 # 获取当前状态：检查是否是急停或趴下状态
                 # 这里假设我们能通过IPC或其他方式获取到当前的动作状态
@@ -544,31 +544,31 @@ class RobotClient:
                 try:
                     # 关闭前尝试让机器狗站立
                     if self.交互式子进程控制器.process and self.交互式子进程控制器.process.poll() is None:
-                        self.logger.info("关闭子程序前，先让机器狗站立")
+                        logger.info("关闭子程序前，先让机器狗站立")
                         self.交互式子进程控制器.发送命令("stand_up")
                         await asyncio.sleep(2)  # 等待站立完成
                 except Exception as e:
-                    self.logger.warning(f"关闭前执行站立动作失败: {e}")
+                    logger.warning(f"关闭前执行站立动作失败: {e}")
 
                 self.交互式子进程控制器.关闭()
                 self.sdk_mode_enabled = False
-                self.logger.info("SDK模式关闭成功")
+                logger.info("SDK模式关闭成功")
                 await self.发送SDK模式响应(request_id, True, False)
 
         except Exception as e:
-            self.logger.error(f"处理SDK模式设置请求时出错: {e}", exc_info=True)
+            logger.error(f"处理SDK模式设置请求时出错: {e}", exc_info=True)
             await self.发送SDK模式响应(request_id, False, None, str(e))
 
     async def _处理SDK模式获取(self, data: Dict[str, Any]) -> None:
         """处理SDK模式获取消息"""
         request_id = data.get("requestId", "")
-        self.logger.info(f"收到SDK模式获取请求: {request_id}")
+        logger.info(f"收到SDK模式获取请求: {request_id}")
 
         try:
             await self.发送SDK模式响应(request_id, True, self.sdk_mode_enabled)
-            self.logger.info(f"SDK模式获取成功: {request_id}, 当前模式: {'SDK' if self.sdk_mode_enabled else '遥控'}")
+            logger.info(f"SDK模式获取成功: {request_id}, 当前模式: {'SDK' if self.sdk_mode_enabled else '遥控'}")
         except Exception as e:
-            self.logger.error(f"处理SDK模式获取请求时出错: {e}", exc_info=True)
+            logger.error(f"处理SDK模式获取请求时出错: {e}", exc_info=True)
             await self.发送SDK模式响应(request_id, False, None, str(e))
 
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
@@ -580,7 +580,7 @@ class RobotClient:
         if "enabled" in data:
             enabled = bool(data.get("enabled", True))
             self.audio_capture.audio_streaming_enabled = enabled
-            self.logger.info(f"麦克风采集{'开启' if enabled else '关闭'}")
+            logger.info(f"麦克风采集{'开启' if enabled else '关闭'}")
 
     async def _处理音频响应并播放(self, data: Dict[str, Any]) -> None:
         """ 处理音频响应消息 """
@@ -601,11 +601,11 @@ class RobotClient:
         """ 处理服务器错误消息 """
         code = data.get("code", "")
         message = data.get("message", "")
-        self.logger.error(f"服务器错误: {code} - {message}")
+        logger.error(f"服务器错误: {code} - {message}")
 
     async def _处理音频流开始(self, data: Dict[str, Any]) -> None:
         """ 处理音频流开始消息 """
-        self.logger.debug("音频流开始")
+        logger.debug("音频流开始")
 
     async def _处理音频流数据块(self, data: Dict[str, Any]) -> None:
         """ 处理音频流数据块消息 """
@@ -614,13 +614,13 @@ class RobotClient:
 
     async def _处理音频流结束(self, data: Dict[str, Any]) -> None:
         """ 处理音频流结束消息 """
-        self.logger.debug("音频流结束")
+        logger.debug("音频流结束")
 
     async def _处理收到的消息(self, message: Dict[str, Any]) -> None:
         """ 处理收到的消息 """
         msg_type = message.get("type")
         if not isinstance(msg_type, str):
-            self.logger.warning(f"未知的消息类型: {msg_type}")
+            logger.warning(f"未知的消息类型: {msg_type}")
             return
         data = message.get("data", {})
         if not isinstance(data, dict):
@@ -629,11 +629,11 @@ class RobotClient:
         if handler:
             await handler(data)
         else:
-            self.logger.warning(f"未知的消息类型: {msg_type}")
+            logger.warning(f"未知的消息类型: {msg_type}")
 
     async def 运行(self) -> None:
         """ 运行机器狗客户端 """
-        self.logger.info("机器狗客户端启动")
+        logger.info("机器狗客户端启动")
         await self.ipc_server.启动()
         try:
             while True:
@@ -657,16 +657,16 @@ class RobotClient:
                             if not task.cancelled():
                                 exc = task.exception()
                                 if exc:
-                                    self.logger.warning(f"子任务异常退出: {exc}")
+                                    logger.warning(f"子任务异常退出: {exc}")
                                     should_reconnect = True
                         except Exception as e:
-                            self.logger.warning(f"子任务退出: {e}")
+                            logger.warning(f"子任务退出: {e}")
                             should_reconnect = True
 
                     # 只有主连接（business）断开才需要完全重连
                     if not self.ws_manager.connected:
                         should_reconnect = True
-                        self.logger.info("主连接已断开，准备重连...")
+                        logger.info("主连接已断开，准备重连...")
 
                     if should_reconnect:
                         # 取消剩余任务
@@ -677,7 +677,7 @@ class RobotClient:
                         if pending:
                             await asyncio.gather(*pending, return_exceptions=True)
 
-                        self.logger.info("任务组结束，准备重连...")
+                        logger.info("任务组结束，准备重连...")
                     else:
                         # 某个任务正常结束(非异常),可能是次要通道断开
                         # 取消其他任务后重新构建任务组
@@ -685,19 +685,19 @@ class RobotClient:
                             task.cancel()
                         if pending:
                             await asyncio.gather(*pending, return_exceptions=True)
-                        self.logger.debug("部分任务结束，重建任务组")
+                        logger.debug("部分任务结束，重建任务组")
 
                 except KeyboardInterrupt:
-                    self.logger.info("收到中断信号，正在退出...")
+                    logger.info("收到中断信号，正在退出...")
                     break
                 except Exception as e:
-                    self.logger.error(f"运行时错误: {e}")
+                    logger.error(f"运行时错误: {e}")
                     self.ws_manager.connected = False
                 finally:
                     if self._是否有活跃的WebSocket连接():
                         await self.断开连接到服务器(shutdown_resources=False)
         except asyncio.CancelledError:
-            self.logger.info("收到中断信号，正在退出...")
+            logger.info("收到中断信号，正在退出...")
         finally:
             await self.断开连接到服务器(shutdown_resources=True)
             await self.ipc_server.关闭()
@@ -705,7 +705,7 @@ class RobotClient:
                 await self.取消初始化()
             except Exception:
                 pass
-            self.logger.info("客户端已关闭")
+            logger.info("客户端已关闭")
 
     async def _确保与服务器连接(self) -> bool:
         """ 确保与服务器连接 """
@@ -714,14 +714,14 @@ class RobotClient:
             self.current_reconnect_interval = self.initial_reconnect_interval
             return True
 
-        self.logger.info(f"尝试连接到服务器 (重连间隔: {self.current_reconnect_interval}秒)...")
+        logger.info(f"尝试连接到服务器 (重连间隔: {self.current_reconnect_interval}秒)...")
         success = await self.连接到服务器()
         if success:
             self.current_reconnect_interval = self.initial_reconnect_interval
-            self.logger.info("✓ 连接成功，重连间隔已重置")
+            logger.info("✓ 连接成功，重连间隔已重置")
             return True
 
-        self.logger.warning(f"✗ 连接失败，{self.current_reconnect_interval} 秒后重试...")
+        logger.warning(f"✗ 连接失败，{self.current_reconnect_interval} 秒后重试...")
         await asyncio.sleep(self.current_reconnect_interval)
 
         # 指数退避，最大不超过 max_reconnect_interval
@@ -731,7 +731,7 @@ class RobotClient:
             self.max_reconnect_interval
         )
         if self.current_reconnect_interval != old_interval:
-            self.logger.info(f"重连间隔已调整: {old_interval}秒 → {self.current_reconnect_interval}秒")
+            logger.info(f"重连间隔已调整: {old_interval}秒 → {self.current_reconnect_interval}秒")
         return False
 
     def _构建异步任务(self) -> list[asyncio.Task]:
@@ -791,7 +791,7 @@ class RobotClient:
         try:
             # 停止配置文件监听
             self.config_store.停止监听()
-            self.logger.info("配置文件监听已停止")
+            logger.info("配置文件监听已停止")
         except Exception:
             pass
 
@@ -840,7 +840,7 @@ class 动作执行器:
         """ 执行动作(操作机器人行动的动作) """
         try:
             token = self._下一个_token()
-            self.client.logger.debug(f"开始执行动作: {action}, 参数: {parameters}")
+            logger.debug(f"开始执行动作: {action}, 参数: {parameters}")
             self._停止当前动作()
             # 特殊处理move动作
             if action == "move":
@@ -858,20 +858,20 @@ class 动作执行器:
                 command = action
                 wait_time = self._解析等待时间(action)
             if not command:
-                self.client.logger.warning(f"不支持的动作: {action}")
+                logger.warning(f"不支持的动作: {action}")
                 return False
             success = self.client.交互式子进程控制器.发送命令(command)
             if not success:
-                self.client.logger.error(f"发送命令 {command} 失败")
+                logger.error(f"发送命令 {command} 失败")
                 return False
             completed = self._可中断的睡眠(token, wait_time)
             if not completed:
-                self.client.logger.info(f"动作 {action} 被打断")
+                logger.info(f"动作 {action} 被打断")
                 return False
-            self.client.logger.debug(f"动作 {action} 执行完成")
+            logger.debug(f"动作 {action} 执行完成")
             return True
         except Exception as e:
-            self.client.logger.error(f"执行动作 {action} 时出错: {e}", exc_info=True)
+            logger.error(f"执行动作 {action} 时出错: {e}", exc_info=True)
             return False
 
 async def main():
@@ -883,12 +883,12 @@ async def main():
     interactive_script = script_dir / "modules" / "actions" / "executor.py"
 
     if not interactive_script.exists():
-        client.logger.error(f"找不到交互式脚本: {interactive_script}")
+        logger.error(f"找不到交互式脚本: {interactive_script}")
         return
 
     # 启动交互式子进程
     if not client.交互式子进程控制器.启动(str(interactive_script)):
-        client.logger.error("无法启动交互式子进程")
+        logger.error("无法启动交互式子进程")
         return
 
     client.动作执行器 = 动作执行器(client).执行动作
@@ -897,7 +897,7 @@ async def main():
     try:
         await client.运行()
     except KeyboardInterrupt:
-        client.logger.info("客户端已停止")
+        logger.info("客户端已停止")
 
 
 if __name__ == "__main__":
