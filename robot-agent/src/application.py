@@ -836,6 +836,60 @@ class 动作执行器:
             time.sleep(0.1)
         return True
 
+    def _转换距离参数到速度(self, parameters: dict) -> tuple:
+        """
+        将距离/步数/角度参数转换为速度和持续时间
+        返回: (vx, vy, yaw_rate, duration)
+        """
+        vx = 0.0
+        vy = 0.0
+        yaw_rate = 0.0
+        duration = 0.0
+        
+        # 默认速度配置（可从config读取）
+        default_vx_speed = 0.2  # 前后移动速度 m/s
+        default_vy_speed = 0.15  # 左右移动速度 m/s
+        default_yaw_speed = 0.5  # 转向角速度 rad/s
+        default_step_distance = 0.3  # 每步距离 m
+        
+        # 处理角度转向
+        if "angle" in parameters:
+            angle_deg = float(parameters["angle"])
+            angle_rad = abs(angle_deg * 3.14159 / 180.0)  # 转换为弧度
+            yaw_rate = default_yaw_speed if angle_deg > 0 else -default_yaw_speed
+            duration = angle_rad / default_yaw_speed
+            return (0.0, 0.0, yaw_rate, duration)
+        
+        # 处理步数移动
+        if "steps" in parameters:
+            steps = float(parameters["steps"])
+            distance = steps * default_step_distance
+            parameters["distance"] = distance
+        
+        # 处理距离移动
+        if "distance" in parameters:
+            distance = float(parameters["distance"])
+            direction = parameters.get("direction", "forward")
+            
+            if direction == "forward":
+                vx = default_vx_speed
+                duration = abs(distance) / default_vx_speed
+            elif direction == "backward":
+                vx = -default_vx_speed
+                duration = abs(distance) / default_vx_speed
+            elif direction == "left":
+                vy = default_vy_speed
+                duration = abs(distance) / default_vy_speed
+            elif direction == "right":
+                vy = -default_vy_speed
+                duration = abs(distance) / default_vy_speed
+            else:
+                # 默认前后移动
+                vx = default_vx_speed if distance > 0 else -default_vx_speed
+                duration = abs(distance) / default_vx_speed
+        
+        return (vx, vy, yaw_rate, duration)
+
     def 执行动作(self, action: str, parameters: dict) -> bool:
         """ 执行动作(操作机器人行动的动作) """
         try:
@@ -844,15 +898,34 @@ class 动作执行器:
             self._停止当前动作()
             # 特殊处理move动作
             if action == "move":
-                # 将参数编码为JSON并发送
-                command = json.dumps({
-                    "type": "ai_move", # 使用type，通过控制指令执行，而不是使用action
-                    "vx": parameters.get("vx", 0),
-                    "vy": parameters.get("vy", 0),
-                    "yaw_rate": parameters.get("yaw_rate", 0),
-                    "duration": parameters.get("duration", 2),
-                })
-                wait_time = float(parameters.get("duration", 2)) #  + 0.5  # 多等0.5秒确保完成
+                # 检查是否使用距离/步数/角度参数
+                if "distance" in parameters or "steps" in parameters or "angle" in parameters:
+                    # 转换为速度+时间模式
+                    vx, vy, yaw_rate, duration = self._转换距离参数到速度(parameters)
+                    command = json.dumps({
+                        "type": "ai_move",
+                        "vx": vx,
+                        "vy": vy,
+                        "yaw_rate": yaw_rate,
+                        "duration": duration,
+                    })
+                    wait_time = duration
+                    logger.info(f"移动控制 (距离模式): vx={vx:.2f}, vy={vy:.2f}, yaw_rate={yaw_rate:.2f}, duration={duration:.2f}秒")
+                else:
+                    # 使用原有的速度模式
+                    vx = parameters.get("vx", 0)
+                    vy = parameters.get("vy", 0)
+                    yaw_rate = parameters.get("yaw_rate", 0)
+                    duration = parameters.get("duration", 2)
+                    command = json.dumps({
+                        "type": "ai_move",
+                        "vx": vx,
+                        "vy": vy,
+                        "yaw_rate": yaw_rate,
+                        "duration": duration,
+                    })
+                    wait_time = float(duration)
+                    logger.info(f"移动控制 (速度模式): vx={vx}, vy={vy}, yaw_rate={yaw_rate}, duration={duration}秒")
             else:
                 # 其他动作的处理
                 command = action
