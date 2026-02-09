@@ -841,36 +841,55 @@ class 动作执行器:
         将距离/步数/角度参数转换为速度和持续时间
         返回: (vx, vy, yaw_rate, duration)
         """
+        import math
+
         vx = 0.0
         vy = 0.0
         yaw_rate = 0.0
         duration = 0.0
-        
+
         # 默认速度配置（可从config读取）
-        default_vx_speed = 0.2  # 前后移动速度 m/s
-        default_vy_speed = 0.15  # 左右移动速度 m/s
-        default_yaw_speed = 0.5  # 转向角速度 rad/s
-        default_step_distance = 0.3  # 每步距离 m
-        
-        # 处理角度转向
-        if "angle" in parameters:
-            angle_deg = float(parameters["angle"])
-            angle_rad = abs(angle_deg * 3.14159 / 180.0)  # 转换为弧度
-            yaw_rate = default_yaw_speed if angle_deg > 0 else -default_yaw_speed
-            duration = angle_rad / default_yaw_speed
-            return (0.0, 0.0, yaw_rate, duration)
-        
-        # 处理步数移动
+        default_vx_speed = 0.2       # 前后移动速度 m/s
+        default_vy_speed = 0.15      # 左右移动速度 m/s
+        default_yaw_speed = 0.5      # 转向角速度 rad/s
+        default_step_distance = 0.3  # 每步距离 m (其实多了，但是更符合直觉，于是保留)
+        default_move_speed = 0.2     # 斜向移动的默认速度 m/s
+
+        # 处理步数移动 - 先转换为距离
         if "steps" in parameters:
             steps = float(parameters["steps"])
             distance = steps * default_step_distance
             parameters["distance"] = distance
-        
-        # 处理距离移动
+
+        # 情况1: angle + distance/steps - 斜向移动
+        if "angle" in parameters and "distance" in parameters:
+            angle_deg = float(parameters["angle"])
+            distance = float(parameters["distance"])
+            angle_rad = angle_deg * math.pi / 180.0
+
+            # 将角度和距离转换为 vx, vy
+            # angle=0 是正前方, angle=90 是左方, angle=-90 是右方
+            vx = default_move_speed * math.cos(angle_rad)
+            vy = default_move_speed * math.sin(angle_rad)
+            duration = abs(distance) / default_move_speed
+
+            logger.info(f"斜向移动: 角度={angle_deg}°, 距离={distance}m, vx={vx:.2f}, vy={vy:.2f}, 时长={duration:.2f}s")
+            return (vx, vy, 0.0, duration)
+
+        # 情况2: 只有 angle - 原地转向
+        if "angle" in parameters:
+            angle_deg = float(parameters["angle"])
+            angle_rad = abs(angle_deg * math.pi / 180.0)  # 转换为弧度
+            yaw_rate = default_yaw_speed if angle_deg > 0 else -default_yaw_speed
+            duration = angle_rad / default_yaw_speed
+            logger.info(f"原地转向: 角度={angle_deg}°, 时长={duration:.2f}s")
+            return (0.0, 0.0, yaw_rate, duration)
+
+        # 情况3: distance + direction - 指定方向移动
         if "distance" in parameters:
             distance = float(parameters["distance"])
             direction = parameters.get("direction", "forward")
-            
+
             if direction == "forward":
                 vx = default_vx_speed
                 duration = abs(distance) / default_vx_speed
@@ -887,7 +906,9 @@ class 动作执行器:
                 # 默认前后移动
                 vx = default_vx_speed if distance > 0 else -default_vx_speed
                 duration = abs(distance) / default_vx_speed
-        
+
+            logger.info(f"方向移动: {direction}, 距离={distance}m, 时长={duration:.2f}s")
+
         return (vx, vy, yaw_rate, duration)
 
     def 执行动作(self, action: str, parameters: dict) -> bool:
