@@ -80,8 +80,8 @@ class RobotClient:
             self.logger.warning("配置文件监听启动失败，热更新功能不可用")
 
         self.ws_manager = WebSocketManager(self.config)
-        self.process_controller = ProcessController()
-        self.joystick_controller = JoystickController(self.process_controller)
+        self.交互式子进程控制器 = ProcessController()
+        self.joystick_controller = JoystickController(self.交互式子进程控制器)
         self._action_executor = ThreadPoolExecutor(max_workers=1)
         self.audio_task: Optional[asyncio.Task] = None
         self._ipc_status_task: Optional[asyncio.Task] = None
@@ -124,7 +124,7 @@ class RobotClient:
         }
 
         """ 初始化动作执行函数 """
-        self.action_executor: Optional[Callable] = None
+        self.动作执行器: Optional[Callable] = None
 
         """ 初始化SDK模式状态 """
         self.sdk_mode_enabled = True  # 默认开启SDK模式
@@ -181,7 +181,7 @@ class RobotClient:
         """断开连接"""
         await self.ws_manager.断开连接()
         if shutdown_resources:
-            self.process_controller.关闭()
+            self.交互式子进程控制器.关闭()
             if self._action_executor:
                 self._action_executor.shutdown(wait=False)
 
@@ -329,7 +329,7 @@ class RobotClient:
 
             # 获取认证 token
             auth_client = get_auth_client()
-            token = auth_client.get_token()
+            token = auth_client.获取_token()
             cookies = {"session_token": token} if token else {}
 
             # 调用 robot-server API
@@ -363,7 +363,7 @@ class RobotClient:
 
             # 获取认证 token
             auth_client = get_auth_client()
-            token = auth_client.get_token()
+            token = auth_client.获取_token()
             cookies = {"session_token": token} if token else {}
 
             # 调用 robot-server API
@@ -398,7 +398,7 @@ class RobotClient:
 
             # 获取认证 token
             auth_client = get_auth_client()
-            token = auth_client.get_token()
+            token = auth_client.获取_token()
             cookies = {"session_token": token} if token else {}
 
             # 调用 robot-server API
@@ -432,7 +432,7 @@ class RobotClient:
 
             # 获取认证 token
             auth_client = get_auth_client()
-            token = auth_client.get_token()
+            token = auth_client.获取_token()
             cookies = {"session_token": token} if token else {}
 
             # 调用 robot-server API
@@ -466,7 +466,7 @@ class RobotClient:
 
             # 获取认证 token
             auth_client = get_auth_client()
-            token = auth_client.get_token()
+            token = auth_client.获取_token()
             cookies = {"session_token": token} if token else {}
 
             # 调用 robot-server API
@@ -521,7 +521,7 @@ class RobotClient:
                     await self.发送SDK模式响应(request_id, False, None, error_msg)
                     return
 
-                if not self.启动交互式进程(str(interactive_script)):
+                if not self.交互式子进程控制器.启动(str(interactive_script)):
                     error_msg = "无法启动交互式子进程"
                     self.logger.error(error_msg)
                     await self.发送SDK模式响应(request_id, False, None, error_msg)
@@ -543,14 +543,14 @@ class RobotClient:
                 # 目前简化处理：关闭前先站立
                 try:
                     # 关闭前尝试让机器狗站立
-                    if self.process_controller.process and self.process_controller.process.poll() is None:
+                    if self.交互式子进程控制器.process and self.交互式子进程控制器.process.poll() is None:
                         self.logger.info("关闭子程序前，先让机器狗站立")
-                        self.发送命令到交互式进程("stand_up")
+                        self.交互式子进程控制器.发送命令("stand_up")
                         await asyncio.sleep(2)  # 等待站立完成
                 except Exception as e:
                     self.logger.warning(f"关闭前执行站立动作失败: {e}")
 
-                self.process_controller.关闭()
+                self.交互式子进程控制器.关闭()
                 self.sdk_mode_enabled = False
                 self.logger.info("SDK模式关闭成功")
                 await self.发送SDK模式响应(request_id, True, False)
@@ -573,7 +573,7 @@ class RobotClient:
 
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
         """ 处理文本响应消息 """
-        await 处理文本响应(data, self.action_executor, self._确保动作执行器())
+        await 处理文本响应(data, self.动作执行器, self._确保动作执行器())
 
     async def _处理音频控制(self, data: Dict[str, Any]) -> None:
         """ 处理音频控制消息 """
@@ -591,7 +591,7 @@ class RobotClient:
         停止当前音频播放()
 
     async def _处理动作指令(self, data: Dict[str, Any]) -> None:
-        await 处理动作指令(data, self.action_executor, self._确保动作执行器())
+        await 处理动作指令(data, self.动作执行器, self._确保动作执行器())
 
     async def _处理控制指令(self, data: Dict[str, Any]) -> None:
         """ 处理控制指令消息 """
@@ -782,18 +782,6 @@ class RobotClient:
             or self.ws_manager.ws_audio_upload
         )
 
-    def 设置动作执行器(self, executor: Callable) -> None:
-        """ 设置动作执行器 """
-        self.action_executor = executor
-
-    def 启动交互式进程(self, script_path: str) -> bool:
-        """ 启动交互式进程 """
-        return self.process_controller.启动(script_path)
-
-    def 发送命令到交互式进程(self, command: str) -> bool:
-        """ 发送命令到交互式进程 """
-        return self.process_controller.发送命令(command)
-
     async def 取消初始化(self) -> None:
         """ 取消初始化客户端 """
         try:
@@ -820,8 +808,8 @@ class 动作执行器:
     def _停止当前动作(self) -> None:
         """ 停止当前动作 """
         try:
-            self.client.发送命令到交互式进程(json.dumps({"type": "move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0}))
-            self.client.发送命令到交互式进程(
+            self.client.交互式子进程控制器.发送命令(json.dumps({"type": "move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0}))
+            self.client.交互式子进程控制器.发送命令(
                 json.dumps({
                     "type": "attitude", "roll_rate": 0.0, "pitch_rate": 0.0, "yaw_rate": 0.0, "height_vel": 0.0
                 })
@@ -872,7 +860,7 @@ class 动作执行器:
             if not command:
                 self.client.logger.warning(f"不支持的动作: {action}")
                 return False
-            success = self.client.发送命令到交互式进程(command)
+            success = self.client.交互式子进程控制器.发送命令(command)
             if not success:
                 self.client.logger.error(f"发送命令 {command} 失败")
                 return False
@@ -899,11 +887,11 @@ async def main():
         return
 
     # 启动交互式子进程
-    if not client.启动交互式进程(str(interactive_script)):
+    if not client.交互式子进程控制器.启动(str(interactive_script)):
         client.logger.error("无法启动交互式子进程")
         return
 
-    client.设置动作执行器(动作执行器(client).执行动作)
+    client.动作执行器 = 动作执行器(client).执行动作
 
     # 运行客户端
     try:

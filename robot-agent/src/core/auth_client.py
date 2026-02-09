@@ -45,7 +45,7 @@ class AuthClient:
                     cls._instance = cls(server_url)
         return cls._instance
 
-    def configure(self, username: str, password: str, session_timeout: int = 3600) -> None:
+    def 配置认证信息(self, username: str, password: str, session_timeout: int = 3600) -> None:
         """配置认证信息
 
         Args:
@@ -57,14 +57,14 @@ class AuthClient:
         self._password = password
         self._session_timeout = session_timeout
 
-    def _is_token_expired(self) -> bool:
+    def _检查_token_是否过期(self) -> bool:
         """检查 token 是否过期"""
         if not self._token:
             return True
         # 提前 60 秒刷新，避免边界情况
         return time.time() - self._token_time > (self._session_timeout - 60)
 
-    def _login(self) -> bool:
+    def _登录(self) -> bool:
         """执行登录操作
 
         Returns:
@@ -106,7 +106,7 @@ class AuthClient:
             print(f"[AuthClient] 登录时出错: {e}")
             return False
 
-    def get_token(self) -> Optional[str]:
+    def 获取_token(self) -> Optional[str]:
         """获取有效的认证 token
 
         如果 token 不存在或已过期，会自动尝试登录
@@ -114,13 +114,13 @@ class AuthClient:
         Returns:
             认证 token，如果获取失败返回 None
         """
-        if self._is_token_expired():
-            if not self._login():
+        if self._检查_token_是否过期():
+            if not self._登录():
                 return None
 
         return self._token
 
-    def add_auth_to_request(self, req: urllib.request.Request) -> bool:
+    def 添加认证到请求(self, req: urllib.request.Request) -> bool:
         """为请求添加认证信息
 
         Args:
@@ -129,7 +129,7 @@ class AuthClient:
         Returns:
             是否成功添加认证信息
         """
-        token = self.get_token()
+        token = self.获取_token()
         if not token:
             return False
 
@@ -137,7 +137,7 @@ class AuthClient:
         req.add_header("Cookie", f"session_token={token}")
         return True
 
-    def logout(self) -> bool:
+    def 登出(self) -> bool:
         """登出，清除本地 token
 
         Returns:

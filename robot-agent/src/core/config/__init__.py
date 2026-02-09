@@ -205,7 +205,7 @@ class Config:
             session_timeout = auth_config.get("session_timeout", 3600)
 
             auth_client = get_auth_client()
-            auth_client.configure(username, password, session_timeout)
+            auth_client.配置认证信息(username, password, session_timeout)
         except Exception as e:
             print(f"[Config] 配置认证客户端失败: {e}")
 
@@ -236,7 +236,7 @@ class Config:
 
             # 添加认证信息
             auth_client = get_auth_client()
-            if not auth_client.add_auth_to_request(req):
+            if not auth_client.添加认证到请求(req):
                 print("[Config] 警告: 无法添加认证信息")
 
             with urllib.request.urlopen(req, timeout=5) as response:
@@ -276,7 +276,7 @@ class Config:
 
             # 添加认证信息
             auth_client = get_auth_client()
-            if not auth_client.add_auth_to_request(req):
+            if not auth_client.添加认证到请求(req):
                 print("[Config] 警告: 无法添加认证信息")
 
             with urllib.request.urlopen(req, timeout=5) as response:
@@ -476,7 +476,7 @@ class Config:
 
             # 添加认证信息（注意：GET /api/v1/config 可能不需要认证，但添加也无妨）
             auth_client = get_auth_client()
-            auth_client.add_auth_to_request(req)
+            auth_client.添加认证到请求(req)
 
             with urllib.request.urlopen(req, timeout=5) as response:
                 data = json.loads(response.read().decode("utf-8"))
