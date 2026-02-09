@@ -42,7 +42,7 @@ class SessionManager:
 
         session = self.sessions[token]
         timeout = self._get_session_timeout()
-        
+
         # 检查是否超时
         if time.time() - session["created_at"] > timeout:
             del self.sessions[token]
@@ -85,10 +85,10 @@ class AuthService:
         """验证用户名和密码"""
         config = self.config_manager.获取()
         auth_config = config.get("auth", {})
-        
+
         expected_username = auth_config.get("username", "sparkrobot")
-        expected_password = auth_config.get("password", "Admin-114514")
-        
+        expected_password = auth_config.get("password", "sparkrobot")
+
         return username == expected_username and password == expected_password
 
     def login(self, username: str, password: str) -> Optional[str]:

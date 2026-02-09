@@ -90,7 +90,7 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
 
     # 认证配置 [auth]
     配置字段("auth", "username", "sparkrobot", "登录用户名", "string"),
-    配置字段("auth", "password", "Admin-114514", "登录密码", "string"),
+    配置字段("auth", "password", "sparkrobot", "登录密码", "string"),
     配置字段("auth", "session_timeout", 3600, "会话超时时间（秒）", "int"),
 ]
 

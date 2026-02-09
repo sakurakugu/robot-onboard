@@ -36,6 +36,12 @@ except ImportError:
     Observer = None  # type: ignore
     FileSystemEventHandler = object  # type: ignore
 
+# 延迟导入 auth_client 以避免循环导入
+def get_auth_client():
+    """延迟导入认证客户端"""
+    from ..auth_client import get_auth_client as _get_auth_client
+    return _get_auth_client()
+
 class ConfigFileHandler(FileSystemEventHandler if HAS_WATCHDOG else object):  # type: ignore
     """配置文件变更事件处理器"""
 
@@ -110,6 +116,9 @@ class Config:
 
         # 加载配置
         self._load()
+
+        # 配置认证客户端
+        self._configure_auth_client()
 
     @classmethod
     def instance(cls, workspace: Path | None = None) -> "Config":
@@ -187,6 +196,19 @@ class Config:
         else:
             return self._config.get(key)
 
+    def _configure_auth_client(self) -> None:
+        """配置认证客户端"""
+        try:
+            auth_config = self._config.get("auth", {})
+            username = auth_config.get("username", "sparkrobot")
+            password = auth_config.get("password", "sparkrobot")
+            session_timeout = auth_config.get("session_timeout", 3600)
+
+            auth_client = get_auth_client()
+            auth_client.configure(username, password, session_timeout)
+        except Exception as e:
+            print(f"[Config] 配置认证客户端失败: {e}")
+
     def 设置(
         self,
         key: str,
@@ -211,6 +233,11 @@ class Config:
             req = urllib.request.Request(api_url, data=data, method="POST")
             req.add_header("Content-Type", "application/json")
             req.add_header("Accept", "application/json")
+
+            # 添加认证信息
+            auth_client = get_auth_client()
+            if not auth_client.add_auth_to_request(req):
+                print("[Config] 警告: 无法添加认证信息")
 
             with urllib.request.urlopen(req, timeout=5) as response:
                 result = json.loads(response.read().decode("utf-8"))
@@ -246,6 +273,11 @@ class Config:
             req = urllib.request.Request(api_url, data=data, method="POST")
             req.add_header("Content-Type", "application/json")
             req.add_header("Accept", "application/json")
+
+            # 添加认证信息
+            auth_client = get_auth_client()
+            if not auth_client.add_auth_to_request(req):
+                print("[Config] 警告: 无法添加认证信息")
 
             with urllib.request.urlopen(req, timeout=5) as response:
                 result = json.loads(response.read().decode("utf-8"))
@@ -441,6 +473,10 @@ class Config:
         try:
             req = urllib.request.Request(api_url, method="GET")
             req.add_header("Accept", "application/json")
+
+            # 添加认证信息（注意：GET /api/v1/config 可能不需要认证，但添加也无妨）
+            auth_client = get_auth_client()
+            auth_client.add_auth_to_request(req)
 
             with urllib.request.urlopen(req, timeout=5) as response:
                 data = json.loads(response.read().decode("utf-8"))
