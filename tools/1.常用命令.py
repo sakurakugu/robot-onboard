@@ -6,11 +6,10 @@ import sys
 import re
 import shutil
 import subprocess
-import time
 import configparser
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict
 
 # 配置
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -43,7 +42,7 @@ def print_warn(msg: str):
 
 # --- 配置文件管理 ---
 
-def ensure_config_exists():
+def 确保配置文件存在():
     """确保配置文件存在"""
     if not CONFIG_FILE.exists():
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +54,7 @@ def ensure_config_exists():
 
 def load_robots() -> Dict[str, str]:
     """从配置文件加载机器狗列表"""
-    ensure_config_exists()
+    确保配置文件存在()
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE, encoding='utf-8')
 
@@ -64,9 +63,9 @@ def load_robots() -> Dict[str, str]:
 
     return dict(config['robots'])
 
-def save_robots(robots: Dict[str, str]):
+def 保存机器狗列表(robots: Dict[str, str]):
     """保存机器狗列表到配置文件"""
-    ensure_config_exists()
+    确保配置文件存在()
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE, encoding='utf-8')
 
@@ -77,7 +76,7 @@ def save_robots(robots: Dict[str, str]):
 
 # --- 功能函数 ---
 
-def robot_menu():
+def 机器狗列表菜单():
     """机器狗列表菜单"""
     while True:
         robots = load_robots()
@@ -102,19 +101,19 @@ def robot_menu():
         if choice == "0":
             return
         elif choice == "a":
-            add_robot()
+            添加机器狗()
         elif choice.isdigit():
             idx = int(choice)
             robot_list = list(robots.items())
             if 1 <= idx <= len(robot_list):
                 name, ip = robot_list[idx - 1]
-                connect_robot(name, ip)
+                连接机器狗(name, ip)
             else:
                 print_error("无效的编号")
         else:
             print_error("无效选项")
 
-def add_robot():
+def 添加机器狗():
     """添加新机器狗"""
     robots = load_robots()
 
@@ -141,27 +140,29 @@ def add_robot():
         return
 
     robots[name] = ip
-    save_robots(robots)
+    保存机器狗列表(robots)
     print_success(f"已添加机器狗: {name} ({ip})")
 
-def run_ssh_command(command: List[str], use_sshpass: bool):
+def 运行ssh命令(command: List[str], use_sshpass: bool):
+    """运行 SSH 命令"""
     if use_sshpass:
         return subprocess.run(["sshpass", "-p", "firefly"] + command)
     return subprocess.run(command)
 
-def connect_robot(name: str, ip: str):
+def 连接机器狗(name: str, ip: str):
+    """连接机器狗"""
     print_info(f"正在连接机器狗 {name} ({ROBOT_USER}@{ip})...")
     use_sshpass = sys.platform != "win32" and shutil.which("sshpass")
     ssh_cmd = ["ssh", f"{ROBOT_USER}@{ip}"]
     try:
-        run_ssh_command(ssh_cmd, use_sshpass)
+        运行ssh命令(ssh_cmd, use_sshpass)
     except FileNotFoundError:
         print_error("未找到 ssh 命令，请确保已安装 OpenSSH Client")
 
-def get_iso_now() -> str:
+def 获取当前时间戳() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-def backup_files(source_dir: Path, dest_dir: Path, ignore_patterns: List[str] = None):
+def 备份文件(source_dir: Path, dest_dir: Path, ignore_patterns: List[str] = None):
     """使用 shutil.copytree 进行备份"""
     try:
         if ignore_patterns:
@@ -172,7 +173,7 @@ def backup_files(source_dir: Path, dest_dir: Path, ignore_patterns: List[str] = 
     except Exception as e:
         print_error(f"备份失败: {e}")
 
-def backup_git_files(source_dir: Path, dest_dir: Path):
+def 备份git文件(source_dir: Path, dest_dir: Path):
     """仅备份 git 管理的文件"""
     try:
         # 获取 git 文件列表
@@ -199,11 +200,11 @@ def backup_git_files(source_dir: Path, dest_dir: Path):
 
     except subprocess.CalledProcessError:
         print_warn("获取 Git 文件列表失败，可能不是 Git 仓库。回退到完整备份。")
-        backup_files(source_dir, dest_dir)
+        备份文件(source_dir, dest_dir)
     except Exception as e:
         print_error(f"备份失败: {e}")
 
-def backup_menu():
+def 备份菜单():
     root_name = PROJECT_ROOT.name
 
     print("\n------------------------------------------")
@@ -220,23 +221,23 @@ def backup_menu():
         return
 
     name = input(f"备份目录名(回车使用默认: {root_name}): ").strip() or root_name
-    timestamp = get_iso_now()
+    timestamp = 获取当前时间戳()
     dest_path = BACKUPS_DIR / name / timestamp
 
     print_info(f"目标路径: {dest_path}")
 
     if choice == "1":
-        backup_files(PROJECT_ROOT, dest_path)
+        备份文件(PROJECT_ROOT, dest_path)
     elif choice == "2":
         ignores = [
             "node_modules", "build", "__pycache__", "dist",
             ".venv", "venv", ".pytest_cache", ".git", ".idea", ".vscode"
         ]
-        backup_files(PROJECT_ROOT, dest_path, ignores)
+        备份文件(PROJECT_ROOT, dest_path, ignores)
     elif choice == "3":
-        backup_git_files(PROJECT_ROOT, dest_path)
+        备份git文件(PROJECT_ROOT, dest_path)
 
-def fix_git_refs():
+def 修复git_refs():
     git_dir = PROJECT_ROOT / ".git"
     if not git_dir.exists():
         print_error("未检测到 .git 目录")
@@ -268,7 +269,7 @@ def fix_git_refs():
     except Exception:
         pass
 
-def git_amend_commit():
+def 修改git上次提交日志():
     if not (PROJECT_ROOT / ".git").exists():
         print_error("不是 Git 仓库")
         return
@@ -293,7 +294,7 @@ def git_amend_commit():
     except Exception as e:
         print_error(f"操作失败: {e}")
 
-def fix_common_errors():
+def 修复常见错误():
     print("\n------------------------------------------")
     print("修复常见错误:")
     print("  1) 修复 Git refs/heads/main:Zone.Identifier")
@@ -304,17 +305,17 @@ def fix_common_errors():
 
     choice = input("请选择修复项: ").strip()
     if choice == "1":
-        fix_git_refs()
+        修复git_refs()
     elif choice == "2":
-        git_amend_commit()
+        修改git上次提交日志()
     elif choice == "3":
-        fix_gradle_buildship_configs()
+        修复gradle_buildship_configs()
     elif choice == "0":
         return
     else:
         print_error("无效选项")
 
-def fix_gradle_buildship_configs():
+def 修复gradle_buildship_configs():
     """修复 Gradle 项目缺失的 Eclipse Buildship 配置文件"""
     print("\n------------------------------------------")
     print("修复 Gradle Buildship 配置:")
@@ -373,7 +374,7 @@ def fix_gradle_buildship_configs():
     else:
         print_error("无效选项")
 
-def settings_menu():
+def 设置菜单():
     """设置菜单 - 管理机器狗配置"""
     while True:
         robots = load_robots()
@@ -400,15 +401,15 @@ def settings_menu():
         if choice == "0":
             return
         elif choice == "a":
-            add_robot()
+            添加机器狗()
         elif choice == "e":
-            edit_robot()
+            编辑机器狗()
         elif choice == "d":
-            delete_robot()
+            删除机器狗()
         else:
             print_error("无效选项")
 
-def edit_robot():
+def 编辑机器狗():
     """编辑机器狗配置"""
     robots = load_robots()
 
@@ -463,7 +464,7 @@ def edit_robot():
         # 删除旧键，添加新键
         del robots[old_name]
         robots[new_name] = old_ip
-        save_robots(robots)
+        保存机器狗列表(robots)
         print_success(f"已将 '{old_name}' 改名为 '{new_name}'")
 
     elif edit_choice == "2":
@@ -475,7 +476,7 @@ def edit_robot():
             print_error("无效的 IP 地址格式")
             return
         robots[old_name] = new_ip
-        save_robots(robots)
+        保存机器狗列表(robots)
         print_success(f"已将 '{old_name}' 的 IP 修改为 '{new_ip}'")
 
     elif edit_choice == "3":
@@ -497,12 +498,12 @@ def edit_robot():
 
         del robots[old_name]
         robots[new_name] = new_ip
-        save_robots(robots)
+        保存机器狗列表(robots)
         print_success(f"已将 '{old_name}' ({old_ip}) 修改为 '{new_name}' ({new_ip})")
     else:
         print_error("无效选项")
 
-def delete_robot():
+def 删除机器狗():
     """删除机器狗"""
     robots = load_robots()
 
@@ -537,10 +538,10 @@ def delete_robot():
     confirm = input(f"确认删除 '{name}' ({ip})? (y/N): ").strip().lower()
     if confirm == "y":
         del robots[name]
-        save_robots(robots)
+        保存机器狗列表(robots)
         print_success(f"已删除机器狗: {name}")
 
-def show_menu():
+def 显示菜单():
     robots = load_robots()
     robot_count = len(robots)
 
@@ -560,21 +561,21 @@ def main():
     os.system("")
 
     # 确保配置文件存在
-    ensure_config_exists()
+    确保配置文件存在()
 
     while True:
         try:
-            show_menu()
+            显示菜单()
             choice = input("请输入选项编号: ").strip()
 
             if choice == "1":
-                robot_menu()
+                机器狗列表菜单()
             elif choice == "2":
-                backup_menu()
+                备份菜单()
             elif choice == "3":
-                fix_common_errors()
+                修复常见错误()
             elif choice == "4":
-                settings_menu()
+                设置菜单()
             elif choice == "0":
                 print_success("退出脚本")
                 sys.exit(0)

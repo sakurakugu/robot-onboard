@@ -3,7 +3,7 @@
 import os
 import platform
 from typing import Optional, Tuple
-import paramiko
+import paramiko # type: ignore
 import subprocess
 
 

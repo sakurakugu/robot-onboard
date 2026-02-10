@@ -68,7 +68,7 @@ def 确保存在包(package_name, import_name=None):
             try:
                 __import__(import_name)
             except ImportError:
-                print(f"🔄 检测到新环境配置，正在重启脚本以生效...")
+                print("🔄 检测到新环境配置，正在重启脚本以生效...")
                 # 刷新 stdout 以确保日志输出完整
                 sys.stdout.flush()
                 os.execv(sys.executable, [sys.executable] + sys.argv)
@@ -90,7 +90,7 @@ def 确保存在包(package_name, import_name=None):
                         print(f"✅ {package_name} 安装完成")
 
                         # 安装成功后重启脚本
-                        print(f"🔄 环境已更新，正在重启脚本...")
+                        print("🔄 环境已更新，正在重启脚本...")
                         sys.stdout.flush()
                         os.execv(sys.executable, [sys.executable] + sys.argv)
                     except subprocess.CalledProcessError:
@@ -98,9 +98,9 @@ def 确保存在包(package_name, import_name=None):
 
             # 如果重试失败或不是因为 pip 缺失，显示手动安装提示
             print(f"\n❌ 自动安装 {package_name} 失败。")
-            print(f"可能是因为环境中没有安装 pip，或者网络问题。")
-            print(f"请尝试手动运行以下命令安装:")
-            print(f"  sudo apt update && sudo apt install python3-pip")
+            print("可能是因为环境中没有安装 pip，或者网络问题。")
+            print("请尝试手动运行以下命令安装:")
+            print("  sudo apt update && sudo apt install python3-pip")
             print(f"  pip3 install {package_name}")
             raise ImportError(f"无法安装必需的包: {package_name}")
 

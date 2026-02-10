@@ -8,7 +8,6 @@ from .ssh_manager import SSH管理器
 from .network_config import 网络配置管理器
 from .sdk_config import SDK配置管理器
 from .service_installer import 服务安装管理器
-from .robot_listener import 监听管理器
 
 class 机器狗配置器:
     """机器狗配置器 - 组合所有配置功能的主入口"""
