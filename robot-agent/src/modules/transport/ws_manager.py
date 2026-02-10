@@ -42,29 +42,19 @@ class WebSocketManager:
     def _解析服务器URL配置(self) -> Dict[str, str]:
         """ _resolve_server_urls """
         server_cfg = self.config.get("server", {})
-        ws_path = server_cfg.get("ws_path") or "/api/v1/interaction/connect"
         business_url = server_cfg.get("business_url") or server_cfg.get("url")
         control_url = server_cfg.get("control_url")
         audio_upload_url = server_cfg.get("audio_upload_url")
         audio_download_url = server_cfg.get("audio_download_url")
-        base_url = server_cfg.get("base_url")
 
-        if base_url:
+        # 如果未配置，使用business_url作为所有通道的URL
+        if business_url:
             if not control_url:
-                control_url = self._替换URL的端口和路径(base_url, 9000, ws_path)
-            if not business_url:
-                business_url = self._替换URL的端口和路径(base_url, 9001, ws_path)
+                control_url = business_url
             if not audio_upload_url:
-                audio_upload_url = self._替换URL的端口和路径(base_url, 9002, ws_path)
+                audio_upload_url = business_url
             if not audio_download_url:
-                audio_download_url = self._替换URL的端口和路径(base_url, 9003, ws_path)
-
-        if business_url and not control_url:
-            control_url = self._替换URL的端口和路径(business_url, 9000, ws_path)
-        if business_url and not audio_upload_url:
-            audio_upload_url = self._替换URL的端口和路径(business_url, 9002, ws_path)
-        if business_url and not audio_download_url:
-            audio_download_url = self._替换URL的端口和路径(business_url, 9003, ws_path)
+                audio_download_url = business_url
 
         return {
             "business": business_url or "",
