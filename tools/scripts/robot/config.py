@@ -41,7 +41,7 @@ class 机器狗配置器:
 
     def SSH登录(self) -> bool:
         """SSH 登录到机器狗"""
-        return self.ssh.SSH登录(self.机器人IP)
+        return self.ssh.SSH登录()
 
     # ========== SDK 相关方法（委托给 sdk 管理器）==========
     def 修改SDK配置(self, target_ip: str, target_port: int) -> bool:

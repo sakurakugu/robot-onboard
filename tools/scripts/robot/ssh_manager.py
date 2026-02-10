@@ -1,6 +1,7 @@
 """SSH 连接管理模块 - 处理远程机器狗的 SSH 连接和命令执行"""
 
 import os
+import platform
 from typing import Optional, Tuple
 import paramiko
 import subprocess
@@ -113,7 +114,8 @@ class SSH管理器:
             ignore_patterns = [
                 "__pycache__", "*.pyc", "*.pyo", "*.pyd",
                 "*.egg-info", ".git", ".idea", ".vscode",
-                ".DS_Store", "node_modules", "dist", "build"
+                ".DS_Store", "node_modules", "dist", "build",
+                ".mypy_cache",".ruff_cache"
             ]
 
         import fnmatch
@@ -159,14 +161,11 @@ class SSH管理器:
         finally:
             sftp.close()
 
-    def SSH登录(robot_ip: str):
+    def SSH登录(self):
         """SSH 登录到机器狗"""
         print("\n" + "="*50)
-        print(f"正在 SSH 连接到机器狗 ({robot_ip})...")
+        print(f"正在 SSH 连接到机器狗 ({self.机器人IP})...")
         print("="*50)
-
-        username = "firefly"
-        password = "firefly"
 
         system = platform.system().lower()
 
@@ -174,8 +173,8 @@ class SSH管理器:
             if system == "windows":
                 # Windows 下直接调用 ssh，需用户手动输入密码
                 # -o StrictHostKeyChecking=no 自动接受 key
-                cmd = f"ssh -o StrictHostKeyChecking=no {username}@{robot_ip}"
-                print("提示: Windows 环境下请手动输入密码 (firefly)")
+                cmd = f"ssh -o StrictHostKeyChecking=no {self.用户名}@{self.机器人IP}"
+                print(f"提示: Windows 环境下请手动输入密码 (密码：{self.密码})")
                 subprocess.run(cmd, shell=True)
 
             else:
@@ -186,9 +185,9 @@ class SSH管理器:
                 if check_sshpass.returncode == 0:
                     print("检测到 sshpass，尝试自动登录...")
                     cmd = [
-                        "sshpass", "-p", password,
+                        "sshpass", "-p", self.密码,
                         "ssh", "-o", "StrictHostKeyChecking=no",
-                        f"{username}@{robot_ip}"
+                        f"{self.用户名}@{self.机器人IP}"
                     ]
                     subprocess.run(cmd)
                 else:
@@ -196,7 +195,7 @@ class SSH管理器:
                     print("提示: 安装 sshpass 可实现自动登录 (sudo apt install sshpass)")
                     cmd = [
                         "ssh", "-o", "StrictHostKeyChecking=no",
-                        f"{username}@{robot_ip}"
+                        f"{self.用户名}@{self.机器人IP}"
                     ]
                     subprocess.run(cmd)
 
@@ -204,3 +203,4 @@ class SSH管理器:
             print(f"SSH 连接发生错误: {e}")
 
         input("\nSSH 会话已结束，按回车键返回主菜单...")
+        return True
