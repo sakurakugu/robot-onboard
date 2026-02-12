@@ -192,6 +192,7 @@ function switchTab(tabName) {
   } else if (tabName === "system") {
     scanWifi();
     loadVolume();
+    loadLogList();
   } else if (tabName === "sdk") {
     loadSdkConfig();
     loadMotionConfig();
@@ -432,6 +433,208 @@ function connectWifi(e) {
       messageDiv.className = "message error";
       messageDiv.textContent = "请求失败：" + error.message;
     });
+}
+
+// ==================== 日志功能 ====================
+
+function formatDateTimeLocal(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function initLogTimeRange() {
+  const end = new Date();
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  document.getElementById("logStartTime").value = formatDateTimeLocal(start);
+  document.getElementById("logEndTime").value = formatDateTimeLocal(end);
+}
+
+function formatFileSize(bytes) {
+  const size = Number(bytes) || 0;
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(2)} KB`;
+  }
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function showLogMessage(text, type) {
+  const messageDiv = document.getElementById("logMessage");
+  messageDiv.className = `message ${type}`;
+  messageDiv.textContent = text;
+  messageDiv.style.display = "block";
+  setTimeout(() => {
+    messageDiv.style.display = "none";
+  }, 4000);
+}
+
+function renderLogAppOptions(apps, selectedValue) {
+  const select = document.getElementById("logAppSelect");
+  const current = selectedValue ?? select.value;
+
+  let html = '<option value="">全部应用</option>';
+  apps.forEach((app) => {
+    const selectedAttr = app === current ? "selected" : "";
+    html += `<option value="${app}" ${selectedAttr}>${app}</option>`;
+  });
+  select.innerHTML = html;
+}
+
+function renderLogList(logs) {
+  const listDiv = document.getElementById("logList");
+  if (!logs || logs.length === 0) {
+    listDiv.innerHTML = '<div class="loading">暂无日志文件</div>';
+    return;
+  }
+
+  const rows = logs
+    .map(
+      (log) => `
+      <tr>
+        <td>${log.app_name || "-"}</td>
+        <td>${log.date_folder || "-"}</td>
+        <td>${log.file_name}</td>
+        <td>${formatFileSize(log.size_bytes)}</td>
+        <td>${new Date(log.modified_time).toLocaleString()}</td>
+      </tr>`,
+    )
+    .join("");
+
+  listDiv.innerHTML = `
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>应用</th>
+          <th>日期目录</th>
+          <th>文件名</th>
+          <th>大小</th>
+          <th>修改时间</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+async function loadLogList() {
+  const listDiv = document.getElementById("logList");
+  listDiv.innerHTML = '<div class="loading">正在加载日志列表...</div>';
+
+  const appName = document.getElementById("logAppSelect").value.trim();
+  const params = new URLSearchParams();
+  if (appName) {
+    params.set("app_name", appName);
+  }
+  const url = params.toString()
+    ? `/api/v1/logs?${params.toString()}`
+    : "/api/v1/logs";
+
+  try {
+    const response = await fetch(url, { credentials: "include" });
+    const data = await response.json();
+
+    if (handleApiError(response, data)) return;
+    if (!data.success) {
+      throw new Error(data.error || "获取日志列表失败");
+    }
+
+    renderLogAppOptions(data.apps || [], appName);
+    renderLogList(data.logs || []);
+  } catch (error) {
+    listDiv.innerHTML = `<div class="loading" style="color: #f44336;">${error.message}</div>`;
+  }
+}
+
+function getFilenameFromDisposition(disposition) {
+  if (!disposition) {
+    return "logs.zip";
+  }
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match && utf8Match[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+  const asciiMatch = disposition.match(/filename="?([^";]+)"?/i);
+  if (asciiMatch && asciiMatch[1]) {
+    return asciiMatch[1];
+  }
+  return "logs.zip";
+}
+
+async function downloadLogsByTime() {
+  const startInput = document.getElementById("logStartTime").value;
+  const endInput = document.getElementById("logEndTime").value;
+  const appName = document.getElementById("logAppSelect").value.trim();
+
+  if (!startInput || !endInput) {
+    showLogMessage("请选择开始和结束时间", "error");
+    return;
+  }
+
+  const startDate = new Date(startInput);
+  const endDate = new Date(endInput);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    showLogMessage("时间格式无效", "error");
+    return;
+  }
+  if (startDate > endDate) {
+    showLogMessage("开始时间不能晚于结束时间", "error");
+    return;
+  }
+
+  const params = new URLSearchParams({
+    start_time: startDate.toISOString(),
+    end_time: endDate.toISOString(),
+  });
+  if (appName) {
+    params.set("app_name", appName);
+  }
+
+  showLogMessage("正在打包日志，请稍候...", "success");
+
+  try {
+    const response = await fetch(`/api/v1/logs/download?${params.toString()}`, {
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      let errorMessage = `下载失败 (${response.status})`;
+      try {
+        const errorData = await response.json();
+        if (handleApiError(response, errorData)) return;
+        errorMessage =
+          errorData?.error ||
+          errorData?.detail?.error ||
+          errorData?.message ||
+          errorMessage;
+      } catch (_e) {
+        // 忽略JSON解析失败，使用默认错误信息
+      }
+      throw new Error(errorMessage);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition");
+    const fileName = getFilenameFromDisposition(disposition);
+
+    const link = document.createElement("a");
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+
+    showLogMessage("日志打包下载成功", "success");
+  } catch (error) {
+    showLogMessage(error.message || "下载失败", "error");
+  }
 }
 
 // ==================== 配置功能 ====================
@@ -889,5 +1092,6 @@ window.onload = function () {
   checkLoginStatus();
   scanWifi();
   loadVolume();
+  initLogTimeRange();
+  loadLogList();
 };
-

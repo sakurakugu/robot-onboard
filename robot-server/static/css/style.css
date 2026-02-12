@@ -349,6 +349,35 @@ button.btn-full {
 .current-value strong {
   color: #333;
 }
+/* 日志相关样式 */
+.log-time-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.log-list {
+  margin-top: 15px;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.log-table th,
+.log-table td {
+  border-bottom: 1px solid #f0f0f0;
+  padding: 10px;
+  text-align: left;
+}
+.log-table thead {
+  background: #fafafa;
+}
+.log-table tbody tr:hover {
+  background: #f8fdf8;
+}
 /* 登录相关样式 */
 .login-overlay {
   position: fixed;

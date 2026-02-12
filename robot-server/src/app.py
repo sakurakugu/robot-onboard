@@ -8,6 +8,7 @@ from .服务.config_service import 获取配置管理器单例
 from .服务.mdns_service import 初始化并启动_mDNS_服务
 from .路由 import auth as auth_router
 from .路由 import config as config_router
+from .路由 import logs as logs_router
 from .路由 import sdk as sdk_router
 from .路由 import system as system_router
 from .路由 import volume as volume_router
@@ -27,6 +28,7 @@ app.include_router(sdk_router.router)
 app.include_router(wifi_router.router)
 app.include_router(system_router.router)
 app.include_router(volume_router.router)
+app.include_router(logs_router.router)
 
 static_dir = Path(__file__).resolve().parent.parent / "static"
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
