@@ -1,56 +1,146 @@
-# 机器狗客户端
+# robot-agent - 机器狗客户端
 
-## 结构
-
-core/ 底层 ， core之间可以相互调用，但是无法直接调用 modules/ 中的功能模块
-modules / 功能模块，依赖 core/ ，modules之间可以相互调用
-main.py 主入口
-application.py 应用入口
+机器狗端核心客户端程序，负责与云端服务通信、音频处理、动作执行等功能。
 
 ## 功能特性
 
-- ✅ 配置管理：分离配置存储
-  - 全局配置（UUID等）：`~/sparkrobot/config/config.toml`
-  - 机器人对话配置：`~/sparkrobot/config/robot-agent.toml`
-- ✅ WebSocket 通信：与服务端实时通信
-- ✅ 心跳保持：自动发送心跳包保持连接
-- ✅ 客户端注册：连接时自动注册到服务器
-- ✅ 接收音频：接收服务端语音回复并在音箱播放
-- ✅ 语音对话：麦克风采集 → Opus压缩 → 服务端ASR → 大模型
-- ✅ 执行动作：接收并执行服务端发送的动作指令
-- ✅ 日志记录：在 `~/sparkrobot/logs/robot-agent/` 中记录运行日志
-- ✅ 自动重连：断线后自动重连
-- ✅ 后台运行：支持以守护进程方式运行
+- **配置管理**: 分离配置存储，支持热更新
+- **WebSocket 通信**: 多通道实时通信
+- **心跳保持**: 自动发送心跳包保持连接
+- **客户端注册**: 连接时自动注册到服务器
+- **音频采集**: 麦克风采集 → Opus 压缩 → 服务端 ASR
+- **音频播放**: 接收服务端语音回复并在音箱播放
+- **动作执行**: 接收并执行服务端发送的动作指令
+- **视觉识别**: 支持摄像头拍照和视觉分析
+- **日志记录**: 完整的运行日志
+- **自动重连**: 断线后自动重连
+- **后台运行**: 支持守护进程方式运行
 
+## 目录结构
+
+```
+robot-agent/
+├── src/
+│   ├── core/                    # 核心层
+│   │   ├── config/              # 配置管理
+│   │   │   └── __init__.py
+│   │   ├── dog/                 # 机器狗 SDK
+│   │   │   ├── lib/             # SDK 动态库
+│   │   │   │   ├── zsl-1/       # ZSL-1 型号
+│   │   │   │   ├── zsl-1w/      # ZSL-1W 型号
+│   │   │   │   └── zsm-1w/      # ZSM-1W 型号
+│   │   │   └── sdk.py           # SDK 封装
+│   │   ├── __init__.py
+│   │   └── auth_client.py       # 认证客户端
+│   ├── modules/                 # 功能模块
+│   │   ├── actions/             # 动作执行
+│   │   │   ├── executor.py      # 动作执行器
+│   │   │   └── mapping.py       # 动作映射
+│   │   ├── audio/               # 音频处理
+│   │   │   ├── capture.py       # 音频采集
+│   │   │   └── playback.py      # 音频播放
+│   │   ├── control/             # 控制模块
+│   │   │   ├── ipc.py           # IPC 通信
+│   │   │   ├── joystick.py      # 摇杆控制
+│   │   │   └── process.py       # 进程控制
+│   │   ├── group_control/       # 群控模块 (旧)
+│   │   │   ├── robot_dog.py
+│   │   │   └── trick_robot_dog.py
+│   │   ├── transport/           # 通信模块
+│   │   │   ├── protocol.py      # 协议定义
+│   │   │   └── ws_manager.py    # WebSocket 管理
+│   │   └── vision/              # 视觉模块
+│   │       └── camera.py        # 摄像头
+│   ├── __init__.py
+│   ├── application.py           # 应用主类
+│   └── main.py                  # 入口文件
+├── scripts/
+│   ├── install.sh               # 安装脚本
+│   ├── start.sh                 # 启动脚本
+│   └── stop.sh                  # 停止脚本
+├── pyproject.toml
+├── requirements.txt
+└── README.md
+```
+
+## 架构设计
+
+### 分层架构
+
+```
+┌─────────────────────────────────────────┐
+│              main.py                    │
+│            (程序入口)                    │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│           application.py                │
+│           (应用主类)                     │
+│  - 初始化各模块                          │
+│  - 管理连接生命周期                      │
+│  - 消息路由分发                          │
+└─────────────────┬───────────────────────┘
+                  │
+    ┌─────────────┼─────────────┐
+    │             │             │
+┌───▼───┐    ┌────▼────┐     ┌───▼───┐
+│ core/ │    │ modules │     │       │
+│ 核心层 │    │ 功能模块│     │       │
+└───────┘    └─────────┘     └───────┘
+```
+
+### 核心层 (core/)
+
+底层功能，core 之间可以相互调用，但无法直接调用 modules 中的功能模块。
+
+| 模块        | 功能                 |
+| ----------- | -------------------- |
+| config      | 配置管理，支持热更新 |
+| dog/sdk     | 机器狗 SDK 封装      |
+| auth_client | 认证客户端           |
+
+### 功能模块 (modules/)
+
+依赖 core，modules 之间可以相互调用。
+
+| 模块          | 功能                         |
+| ------------- | ---------------------------- |
+| actions       | 动作执行，解析和执行动作指令 |
+| audio         | 音频采集和播放               |
+| control       | IPC 通信、摇杆控制、进程控制 |
+| group_control | 群控功能                     |
+| transport     | WebSocket 通信管理           |
+| vision        | 摄像头和视觉识别             |
+
+## 安装部署
+
+### 系统依赖
+
+```bash
 sudo apt update
 sudo apt install -y portaudio19-dev libportaudio2
+```
 
-## 快速开始
-
-### 1. 安装依赖
+### 安装
 
 ```bash
 # 在机器狗上运行
-./install.sh
+cd robot-agent
+./scripts/install.sh
 ```
 
-### 2. 配置
+### 配置文件
 
-首次运行时会自动创建配置文件：
+首次运行时自动创建配置文件：
 
-**全局配置** (`~/sparkrobot/config/config.toml`)：
-
-```toml
-# 全局配置 - 所有应用共享
-uuid = "自动生成的UUIDv7"
-```
-
-**机器人对话配置** (`~/sparkrobot/config/robot-agent.toml`)：
+**配置** (`~/sparkrobot/config/config.toml`):
 
 ```toml
 [robot]
 name = "robot-dog-1"
 model = "unitree-go2"
+uuid = "自动生成的UUIDv7"
+version = "0.0.0"  # 自动检测
 
 [server]
 base_url = "ws://localhost"
@@ -77,134 +167,44 @@ level = "INFO"
 max_file_size_mb = 10
 ```
 
-修改 `server.business_url` / `server.control_url` / `server.audio_*_url` 为实际的服务器地址（或设置 `server.base_url`）。
+### 运行
 
-### 3. 运行
-
-#### 前台运行（调试用）
+**前台运行（调试用）**:
 
 ```bash
-./start.sh
-# 或者
-python3 robot_client.py
+./scripts/start.sh # 启动
+./scripts/stop.sh  # 停止
 ```
 
-#### 后台运行（生产环境）
+**后台运行（生产环境）**:
 
 ```bash
 # 启动
-./start_后台.sh
-
-# 停止
-./stop.sh
+systemctl start robot-agent
+# 停止（二选一）
+./scripts/stop.sh
+systemctl stop robot-agent
 
 # 查看日志
 tail -f ~/sparkrobot/logs/robot-agent/robot-agent_$(date +%Y%m%d).log
 ```
 
-## 部署流程
+## WebSocket 通信
 
-### 自动部署（推荐）
+### 通道说明
 
-通过服务端前端界面添加机器狗时：
+| 通道           | 用途     | 消息类型             |
+| -------------- | -------- | -------------------- |
+| business       | 业务消息 | 注册、文本、动作指令 |
+| control        | 控制消息 | 心跳、状态、摇杆数据 |
+| audio_upload   | 音频上传 | 语音输入流           |
+| audio_download | 音频下载 | 语音回复流           |
 
-1. 填写机器狗信息和 IP 地址
-2. 点击"添加"
-3. 服务端会自动：
-   - 通过 SSH 连接到机器狗
-   - 创建 `~/sparkrobot/robot-agent` 目录（存放代码）
-   - 创建 `~/sparkrobot/config` 目录（存放配置）
-   - 复制客户端代码
-   - 检测或生成 UUID 到 `config.toml`
+### 消息格式
 
-### 手动部署
+#### 客户端发送
 
-```bash
-# 1. 复制客户端代码到机器狗
-scp -r client/* firefly@<机器狗IP>:~/sparkrobot/robot-agent/
-
-# 2. 登录机器狗
-ssh firefly@<机器狗IP>
-
-# 3. 安装依赖
-cd ~/sparkrobot/robot-agent
-./install.sh
-
-# 4. 修改配置
-vim ~/sparkrobot/config/robot-agent.toml
-# 修改 server.business_url / server.control_url / server.audio_*_url 为服务器地址（或设置 server.base_url）
-
-# 5. 启动客户端
-./start_daemon.sh
-```
-
-## 目录结构
-
-```
-~/sparkrobot/
-├── config/                  # 配置目录（所有应用共享）
-│   ├── config.toml          # 全局配置（UUID等）
-│   └── robot-agent.toml     # 机器人对话专用配置
-├── robot-agent/             # 客户端代码目录
-│   ├── pyproject.toml
-│   ├── README.md
-│   ├── requirements.txt
-│   ├── scripts
-│   │   ├── install.sh
-│   │   ├── start_后台.sh
-│   │   ├── start.sh
-│   │   └── stop.sh
-│   └── src
-│       ├── application.py
-│       ├── core
-│       │   ├── config
-│       │   │   ├── config.py
-│       │   │   ├── const.py
-│       │   │   └── __init__.py
-│       │   ├── dog
-│       │   │   ├── lib      # 智元官方的sdk库
-│       │   │   └── sdk.py
-│       │   ├── __init__.py
-│       │   ├── logger
-│       │   │   └── __init__.py
-│       │   └── utils
-│       │       └── __init__.py
-│       ├── main.py
-│       └── modules
-│           ├── actions
-│           │   ├── executor.py
-│           │   ├── __init__.py
-│           │   └── mapping.py
-│           ├── audio
-│           │   ├── capture.py
-│           │   ├── __init__.py
-│           │   └── playback.py
-│           ├── control
-│           │   ├── ipc.py
-│           │   └── process.py
-│           ├── group_control
-│           │   ├── crazy.py
-│           │   └── dog_core.py
-│           ├── __init__.py
-│           └── transport
-│               ├── __init__.py
-│               ├── protocol.py
-│               └── ws_manager.py
-├── logs/                    # 日志目录
-│   ├── robot-agent_20260114.log
-│   └── client_output.log
-└── cache/                   # 缓存目录
-    └── media/               # 媒体缓存目录
-        └── tts/             # 文本转语音缓存目录
-```
-
-// TODO: 修改以下内容
-
-## 消息格式
-
-### 客户端发送
-
-#### 客户端注册
+**注册消息**:
 
 ```json
 {
@@ -214,26 +214,24 @@ vim ~/sparkrobot/config/robot-agent.toml
   "data": {
     "name": "机器狗-{{uuid前四位}}",
     "model": "agibot-d1",
-    "version": "1.0.0",
+    "version": "0.0.0",
     "metadata": {}
   }
 }
 ```
 
-#### 文本输入
+**心跳消息**:
 
 ```json
 {
-  "type": "text_input",
+  "type": "heartbeat",
   "robotId": "uuid",
   "timestamp": 1234567890,
-  "data": {
-    "text": "你好"
-  }
+  "data": {}
 }
 ```
 
-#### 音频输入（会话开始）
+**音频开始**:
 
 ```json
 {
@@ -250,7 +248,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 }
 ```
 
-#### 音频输入（数据块）
+**音频数据块**:
 
 ```json
 {
@@ -258,10 +256,6 @@ vim ~/sparkrobot/config/robot-agent.toml
   "robotId": "uuid",
   "timestamp": 1234567890,
   "data": {
-    "format": "opus",
-    "sampleRate": 16000,
-    "channels": 1,
-    "frameDurationMs": 20,
     "sessionId": "uuid",
     "seq": 12,
     "buffer": "base64..."
@@ -269,7 +263,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 }
 ```
 
-#### 音频输入（会话结束）
+**音频结束**:
 
 ```json
 {
@@ -283,35 +277,9 @@ vim ~/sparkrobot/config/robot-agent.toml
 }
 ```
 
-#### 心跳包
+#### 服务端发送
 
-```json
-{
-  "type": "heartbeat",
-  "robotId": "uuid",
-  "timestamp": 1234567890,
-  "data": {}
-}
-```
-
-#### 状态更新
-
-```json
-{
-  "type": "status",
-  "robotId": "uuid",
-  "timestamp": 1234567890,
-  "data": {
-    "battery": 85,
-    "temperature": 45,
-    "position": "standing"
-  }
-}
-```
-
-### 服务端发送
-
-#### 文本响应
+**文本响应**:
 
 ```json
 {
@@ -324,22 +292,7 @@ vim ~/sparkrobot/config/robot-agent.toml
 }
 ```
 
-#### 音频响应
-
-```json
-{
-  "type": "audio_response",
-  "robotId": "uuid",
-  "timestamp": 1234567890,
-  "data": {
-    "format": "opus",
-    "buffer": "base64编码的音频数据",
-    "duration": 3.5
-  }
-}
-```
-
-#### 动作指令
+**动作指令**:
 
 ```json
 {
@@ -348,31 +301,139 @@ vim ~/sparkrobot/config/robot-agent.toml
   "timestamp": 1234567890,
   "data": {
     "action": "stand_up",
-    "parameters": {},
-    "safetyChecked": true
+    "parameters": {}
   }
 }
 ```
 
-#### 错误消息
+**音频响应**:
 
 ```json
 {
-  "type": "error",
+  "type": "audio_response",
   "robotId": "uuid",
   "timestamp": 1234567890,
   "data": {
-    "code": "ERROR_CODE",
-    "message": "错误描述"
+    "format": "opus",
+    "buffer": "base64..."
   }
 }
 ```
+
+## 动作系统
+
+### 动作格式
+
+动作通过特定格式的文本触发：
+
+```
+{{action=动作名,参数1=值1,参数2=值2}}
+```
+
+示例：
+
+```
+{{action=forward,vx=0.2,vy=0,yaw_rate=0}}
+{{action=stand_up}}
+{{action=sit_down}}
+```
+
+### 支持的动作
+
+| 动作名     | 参数             | 描述 |
+| ---------- | ---------------- | ---- |
+| stand_up   | -                | 站立 |
+| sit_down   | -                | 趴下 |
+| forward    | vx, vy, yaw_rate | 前进 |
+| backward   | -                | 后退 |
+| turn_left  | -                | 左转 |
+| turn_right | -                | 右转 |
+| dance      | -                | 跳舞 |
+
+### 动作执行流程
+
+```
+服务端动作指令
+      │
+      ▼
+┌─────────────────┐
+│  mapping.py     │
+│  解析动作格式    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  executor.py    │
+│  执行动作        │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  sdk.py         │
+│  调用底层 SDK    │
+└─────────────────┘
+```
+
+## 音频处理
+
+### 音频采集流程
+
+```
+麦克风采集
+    │
+    ▼
+┌─────────────┐
+│  PyAudio    │
+│  16kHz 单声道│
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  VAD 检测    │
+│  语音活动检测 │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  Opus 编码   │
+│  20ms 帧     │
+└──────┬──────┘
+       │
+       ▼
+WebSocket 上传
+```
+
+### 音频播放流程
+
+```
+WebSocket 下载
+       │
+       ▼
+┌─────────────┐
+│  Opus 解码   │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  PyAudio    │
+│  播放输出    │
+└─────────────┘
+```
+
+## SDK 模式
+
+robot-agent 支持两种控制模式：
+
+- **SDK 模式**: 通过 SDK 直接控制机器狗
+- **遥控模式**: 通过外部遥控器控制
+
+可通过服务端指令切换模式。
 
 ## 开机自启动
 
 ### 使用 systemd
 
-创建服务文件 `/etc/systemd/system/robot-agent.service`：
+创建服务文件 `/etc/systemd/system/robot-agent.service`:
 
 ```ini
 [Unit]
@@ -383,7 +444,7 @@ After=network.target
 Type=simple
 User=firefly
 WorkingDirectory=/home/firefly/sparkrobot/robot-agent
-ExecStart=/usr/bin/python3 /home/firefly/sparkrobot/robot-agent/src/robot_agent.py
+ExecStart=/usr/bin/python3 /home/firefly/sparkrobot/robot-agent/src/main.py
 Restart=always
 RestartSec=10
 
@@ -406,3 +467,21 @@ sudo journalctl -u robot-agent -f
 ```
 
 ## 故障排查
+
+### 连接问题
+
+1. 检查网络连接
+2. 确认服务器地址配置正确
+3. 查看日志中的错误信息
+
+### 音频问题
+
+1. 确认 `portaudio19-dev` 已安装
+2. 检查麦克风和音箱设备
+3. 查看音频配置参数
+
+### 动作执行问题
+
+1. 确认 SDK 模式已启用
+2. 检查动作名称和参数
+3. 查看 SDK 日志
