@@ -23,8 +23,8 @@ from sparkrobot_common import (
     ROBOT_SERVER_URL,  # 机器人服务器 URL
     WORKSPACE_DIR,  # 工作目录
     TomlParser,
-    获取默认配置,
     get_logger,
+    获取默认配置,
 )
 
 APP_NAME = "robot-agent"

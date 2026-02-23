@@ -29,7 +29,7 @@ async def 获取SDK配置() -> dict:
                 status_code=500,
                 detail={"success": False, "error": error}
             )
-        
+
         return {
             "success": True,
             "config": config
@@ -50,13 +50,13 @@ async def 修改SDK配置(request: Request) -> dict:
         data = await request.json()
         target_ip = data.get("target_ip")
         target_port = data.get("target_port")
-        
+
         if not target_ip or not target_port:
             raise HTTPException(
                 status_code=400,
                 detail={"success": False, "error": "缺少必要参数 target_ip 或 target_port"}
             )
-        
+
         # 验证 IP 格式
         import re
         if not re.match(r"^\d{1,3}(\.\d{1,3}){3}$", target_ip):
@@ -64,7 +64,7 @@ async def 修改SDK配置(request: Request) -> dict:
                 status_code=400,
                 detail={"success": False, "error": "IP 地址格式无效"}
             )
-        
+
         # 验证端口范围
         try:
             port = int(target_port)
@@ -75,14 +75,14 @@ async def 修改SDK配置(request: Request) -> dict:
                 status_code=400,
                 detail={"success": False, "error": "端口号必须在 1-65535 之间"}
             ) from None
-        
+
         success, error = sdk_service.修改SDK配置(target_ip, port)
         if not success:
             raise HTTPException(
                 status_code=500,
                 detail={"success": False, "error": error}
             )
-        
+
         return {
             "success": True,
             "message": f"SDK 配置已更新 (target_ip: {target_ip}, target_port: {port})"
@@ -106,7 +106,7 @@ async def 重置SDK配置() -> dict:
                 status_code=500,
                 detail={"success": False, "error": error}
             )
-        
+
         return {
             "success": True,
             "message": "SDK 配置已重置为默认值 (127.0.0.1:43988)"
@@ -132,7 +132,7 @@ async def 获取运控配置() -> dict:
                 status_code=500,
                 detail={"success": False, "error": error}
             )
-        
+
         return {
             "success": True,
             "config": config
@@ -152,7 +152,7 @@ async def 修改运控配置(request: Request) -> dict:
     try:
         data = await request.json()
         sdk_client_ip = data.get("sdk_client_ip")
-        
+
         # 如果提供了 IP，验证格式
         if sdk_client_ip and sdk_client_ip.strip():
             import re
@@ -164,14 +164,14 @@ async def 修改运控配置(request: Request) -> dict:
         else:
             # 空值表示清除配置
             sdk_client_ip = None
-        
+
         success, error = sdk_service.修改运控配置(sdk_client_ip)
         if not success:
             raise HTTPException(
                 status_code=500,
                 detail={"success": False, "error": error}
             )
-        
+
         message = f"运控配置已更新 (SDK_CLIENT_IP: {sdk_client_ip})" if sdk_client_ip else "运控配置已更新（已清除 SDK_CLIENT_IP）"
         return {
             "success": True,
@@ -196,7 +196,7 @@ async def 重置运控配置() -> dict:
                 status_code=500,
                 detail={"success": False, "error": error}
             )
-        
+
         return {
             "success": True,
             "message": "运控配置已重置（已清除 SDK_CLIENT_IP）"
@@ -215,7 +215,7 @@ async def 重置运控配置() -> dict:
 @router.post("/api/v1/sdk/motion/restart")
 async def 重启运控服务() -> dict:
     """重启运控服务
-    
+
     注意：重启前请确保机器狗已经卧倒，否则会急停！
     """
     try:
@@ -225,7 +225,7 @@ async def 重启运控服务() -> dict:
                 status_code=500,
                 detail={"success": False, "error": error}
             )
-        
+
         return {
             "success": True,
             "message": "运控服务重启成功"

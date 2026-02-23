@@ -129,45 +129,7 @@ function handleApiError(response, data) {
 
 // ==================== 配置相关 ====================
 
-// 配置字段分组（使用section.key格式）
-const CONFIG_SECTIONS = {
-  robot: {
-    title: "机器人信息",
-    keys: ["uuid", "name", "model", "version"],
-  },
-  server: {
-    title: "服务器配置",
-    keys: [
-      "control_url",
-      "business_url",
-      "audio_upload_url",
-      "audio_download_url",
-      "reconnect_interval",
-      "heartbeat_interval",
-    ],
-  },
-  sdk: { title: "SDK配置", keys: ["robot_ip", "local_port"] },
-  audio: {
-    title: "音频配置",
-    keys: [
-      "sample_rate",
-      "channels",
-      "frame_duration_ms",
-      "vad_threshold",
-      "vad_silence_ms",
-      "max_segment_ms",
-      "enable_streaming",
-      "input_device",
-    ],
-  },
-  actions: { title: "动作配置", keys: ["exit_behavior"] },
-  logging: { title: "日志配置", keys: ["level", "max_file_size_mb"] },
-  auth: {
-    title: "认证配置",
-    keys: ["username", "password", "session_timeout"],
-  },
-};
-
+let CONFIG_SECTIONS = {}; // 配置字段分组
 let currentConfig = {}; // 嵌套格式: {section: {key: value}}
 let configFields = {}; // full_key -> field信息
 
@@ -514,7 +476,7 @@ function renderLogList(logs) {
           <th>日期目录</th>
           <th>文件名</th>
           <th>大小</th>
-          <th>修改时间</th>
+          <th>最后修改时间</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -644,19 +606,26 @@ async function loadConfig() {
   container.innerHTML = '<div class="loading">正在加载配置...</div>';
 
   try {
-    // 并行加载配置和字段信息
-    const [configRes, fieldsRes] = await Promise.all([
+    // 并行加载配置、字段信息和分组信息
+    const [configRes, fieldsRes, sectionsRes] = await Promise.all([
       fetch("/api/v1/config"),
       fetch("/api/v1/config/fields"),
+      fetch("/api/v1/config/sections"),
     ]);
 
     const configData = await configRes.json();
     const fieldsData = await fieldsRes.json();
+    const sectionsData = await sectionsRes.json();
 
-    if (configData.success && fieldsData.success) {
+    if (configData.success && fieldsData.success && sectionsData.success) {
       currentConfig = configData.config; // 嵌套格式
       configFields = {};
       fieldsData.fields.forEach((f) => (configFields[f.full_key] = f));
+      // 将数组转换为对象格式供 renderConfig 使用
+      CONFIG_SECTIONS = {};
+      sectionsData.sections.forEach((s) => {
+        CONFIG_SECTIONS[s.section] = { title: s.title, keys: s.keys };
+      });
       renderConfig();
     } else {
       container.innerHTML =

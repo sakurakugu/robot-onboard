@@ -3,16 +3,10 @@ import threading
 from collections import deque
 from typing import Any, Awaitable, Callable, Dict, Optional
 
-from sparkrobot_common import 生成UUID
-
-try:
-    import numpy as np_module
-    import opuslib as opus_module
-    import sounddevice as sd_module
-except ImportError as e:
-    raise ImportError(f"缺少音频依赖，请安装: pip install numpy sounddevice opuslib (导入错误: {e})") from e
-
-from sparkrobot_common import get_logger
+import numpy as np_module
+import opuslib as opus_module
+import sounddevice as sd_module
+from sparkrobot_common import 生成UUID, get_logger
 
 logger = get_logger("robot-agent")
 
@@ -33,7 +27,7 @@ class ThreadSafeAudioBuffer:
 
     def put(self, data) -> bool:
         """线程安全地放入数据（从音频回调线程调用）
-        
+
         使用环形缓冲区，当缓冲区满时会自动丢弃最旧的数据，不会抛出异常
         """
         if self._closed:
@@ -144,16 +138,17 @@ class AudioCapture:
         """ 音频捕获循环 """
         encoder = opus_module.Encoder(settings["sample_rate"], settings["channels"], opus_module.APPLICATION_VOIP)
         loop = asyncio.get_running_loop()
-        
+
         # 使用线程安全的音频缓冲区替代 asyncio.Queue
-        self._audio_buffer = ThreadSafeAudioBuffer(maxsize=100)
-        self._audio_buffer.set_loop(loop)
+        audio_buffer = ThreadSafeAudioBuffer(maxsize=100)
+        self._audio_buffer = audio_buffer
+        audio_buffer.set_loop(loop)
 
         def callback(indata, frames, time_info, status):
             if status:
                 logger.debug(f"音频采集状态: {status}")
             # 使用线程安全的缓冲区，不会抛出异常
-            self._audio_buffer.put(indata.copy())
+            audio_buffer.put(indata.copy())
 
         stream = None
         state = {"session_id": None, "seq": 0, "silence_frames": 0, "frames_in_segment": 0}

@@ -50,6 +50,16 @@ class 配置字段:
     value_type: str   # "string", "int", "float", "bool", "list"
     readonly: bool = False  # 是否只读
 
+# 配置分组标题映射
+CONFIG_SECTION_TITLES: dict[str, str] = {
+    "robot": "机器人信息",
+    "server": "服务器配置",
+    "sdk": "SDK配置",
+    "audio": "音频配置",
+    "actions": "动作配置",
+    "logging": "日志配置",
+    "auth": "认证配置",
+}
 
 # 默认配置字段定义（一层嵌套结构）
 DEFAULT_CONFIG_FIELDS: list[配置字段] = [
@@ -57,7 +67,9 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     配置字段("robot", "uuid", "", "机器人唯一标识（自动生成）", "string", readonly=True),
     配置字段("robot", "name", "", "机器人名称", "string"),
     配置字段("robot", "model", "agibot-d1", "机器人型号", "string", readonly=True),
-    配置字段("robot", "version", "0.0.0", "机器人运控版本", "string", readonly=True),
+    配置字段("robot", "agent_version", "0.0.0", "机器人运控版本", "string", readonly=True),
+    配置字段("robot", "motion_control_version", "0.0.0", "机器人运控版本", "string", readonly=True),
+
 
     # 服务器配置 [server]
     配置字段("server", "control_url", f"ws://{DEFAULT_SERVER_ADDR}:9000/api/v1/interaction/connect/control", "控制连接URL", "string"),
@@ -167,6 +179,20 @@ def 获取配置项字段信息() -> list[dict[str, Any]]:
     ]
 
 
+def 获取配置分组信息() -> list[dict[str, Any]]:
+    """获取配置分组信息（用于前端展示），包含分组名、标题和有序字段列表"""
+    sections: dict[str, dict[str, Any]] = {}
+    for f in DEFAULT_CONFIG_FIELDS:
+        if f.section not in sections:
+            sections[f.section] = {
+                "section": f.section,
+                "title": CONFIG_SECTION_TITLES.get(f.section, f.section),
+                "keys": [],
+            }
+        sections[f.section]["keys"].append(f.key)
+    return list(sections.values())
+
+
 __all__ = [
     "ORG_NAME",
     "WORKSPACE_DIR",
@@ -184,4 +210,6 @@ __all__ = [
     "获取字段信息",
     "通过完整键名获取字段信息",
     "获取配置项字段信息",
+    "CONFIG_SECTION_TITLES",
+    "获取配置分组信息",
 ]

@@ -7,6 +7,7 @@ SparkRobot Common - 通用库
 from sparkrobot_common.const import (
     CONFIG_DIR,
     CONFIG_FILE,
+    CONFIG_SECTION_TITLES,
     DEFAULT_CONFIG_FIELDS,
     DEFAULT_SERVER_ADDR,
     # 基础常量
@@ -18,6 +19,7 @@ from sparkrobot_common.const import (
     WORKSPACE_DIR,
     获取字段信息,
     获取所有分组,
+    获取配置分组信息,
     获取配置项字段信息,
     获取默认配置,
     通过完整键名获取字段信息,
@@ -60,6 +62,8 @@ __all__ = [
     "获取字段信息",
     "通过完整键名获取字段信息",
     "获取配置项字段信息",
+    "CONFIG_SECTION_TITLES",
+    "获取配置分组信息",
     # TOML 解析
     "TomlParser",
     # 日志

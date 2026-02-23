@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
-from sparkrobot_common import ROBOT_SERVER_URL,get_logger
+from sparkrobot_common import ROBOT_SERVER_URL, get_logger
 
 APP_NAME = "robot-agent"
 logger = get_logger(APP_NAME)

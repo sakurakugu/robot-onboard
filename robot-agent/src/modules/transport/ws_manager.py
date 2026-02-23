@@ -10,6 +10,20 @@ from websockets import ClientConnection
 
 
 class WebSocketManager:
+    # 通道名称 -> 连接状态属性名
+    _CHANNEL_STATUS_ATTRS: Dict[str, str] = {
+        "business": "connected",
+        "control": "connected_control",
+        "audio_upload": "connected_audio_upload",
+        "audio_download": "connected_audio_download",
+    }
+    # 二级通道配置（不含business）: 通道名称 -> (ws属性名, url配置键)
+    _SECONDARY_CHANNEL_CONFIG: Dict[str, tuple] = {
+        "control": ("ws_control", "control"),
+        "audio_upload": ("ws_audio_upload", "audio_upload"),
+        "audio_download": ("ws_audio_download", "audio_download"),
+    }
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.logger = get_logger("robot-agent")
@@ -23,6 +37,12 @@ class WebSocketManager:
         self.connected_audio_download = False
         self.robot_uuid: Optional[str] = None
         self._reconnecting_channels: set = set()  # 正在重连的通道
+
+    def _设置通道连接状态(self, channel: str, connected: bool) -> None:
+        """设置指定通道的连接状态"""
+        attr = self._CHANNEL_STATUS_ATTRS.get(channel)
+        if attr:
+            setattr(self, attr, connected)
 
     def _确保URL有ws或wss头部(self, url: str) -> str:
         """ _ensure_scheme """
@@ -132,22 +152,18 @@ class WebSocketManager:
 
     async def 断开连接(self) -> None:
         """ 断开所有WebSocket通道 """
-        if self.ws_business:
-            await self.ws_business.close()
-            self.ws_business = None
-        if self.ws_control:
-            await self.ws_control.close()
-            self.ws_control = None
-        if self.ws_audio_upload:
-            await self.ws_audio_upload.close()
-            self.ws_audio_upload = None
-        if self.ws_audio_download:
-            await self.ws_audio_download.close()
-            self.ws_audio_download = None
-        self.connected = False
-        self.connected_control = False
-        self.connected_audio_upload = False
-        self.connected_audio_download = False
+        _ws_attrs = [
+            ("ws_business", "connected"),
+            ("ws_control", "connected_control"),
+            ("ws_audio_upload", "connected_audio_upload"),
+            ("ws_audio_download", "connected_audio_download"),
+        ]
+        for ws_attr, connected_attr in _ws_attrs:
+            ws = getattr(self, ws_attr)
+            if ws:
+                await ws.close()
+                setattr(self, ws_attr, None)
+            setattr(self, connected_attr, False)
         self.robot_uuid = None
         self._reconnecting_channels.clear()
         self.logger.info("已断开连接")
@@ -186,14 +202,7 @@ class WebSocketManager:
             self.logger.debug(f"发送消息到 {channel}: {message['type']}")
         except Exception as e:
             self.logger.error(f"发送消息失败({channel}): {e}")
-            if channel == "business":
-                self.connected = False
-            elif channel == "control":
-                self.connected_control = False
-            elif channel == "audio_upload":
-                self.connected_audio_upload = False
-            elif channel == "audio_download":
-                self.connected_audio_download = False
+            self._设置通道连接状态(channel, False)
 
     async def 接受消息循环(
         self, channel: str, ws: ClientConnection, on_message: Callable[[Dict[str, Any]], Awaitable[None]]
@@ -221,15 +230,9 @@ class WebSocketManager:
                 await on_message(message)
             except websockets.exceptions.ConnectionClosed as e:
                 self.logger.warning(f"连接已关闭: {channel}, code={e.code}, reason={e.reason}")
+                self._设置通道连接状态(channel, False)
                 if channel == "business":
-                    self.connected = False
                     self.logger.info("业务通道断开，主连接将触发重连")
-                elif channel == "control":
-                    self.connected_control = False
-                elif channel == "audio_upload":
-                    self.connected_audio_upload = False
-                elif channel == "audio_download":
-                    self.connected_audio_download = False
 
                 # 如果不是主连接断开，尝试重连该通道（不阻塞当前循环）
                 if channel != "business" and self.connected and self.robot_uuid:
@@ -245,12 +248,12 @@ class WebSocketManager:
         """ 发送心跳消息循环 """
         interval = self.config.get("server", {}).get("heartbeat_interval", 30)
         self.logger.info(f"心跳循环已启动，间隔: {interval}秒")
-        
+
         # 连接建立后立即发送首次心跳，避免等待
         if self.connected:
             message = 构建心跳消息(robot_uuid)
             await self._发送心跳到所有通道(message)
-        
+
         while self.connected:
             await asyncio.sleep(interval)
             if self.connected:
@@ -260,7 +263,7 @@ class WebSocketManager:
     async def _发送心跳到所有通道(self, message: Dict[str, Any]) -> None:
         """ 发送心跳到所有已连接的通道 """
         sent_channels = []
-        
+
         # 优先使用 control 通道发送心跳
         if self.connected_control:
             try:
@@ -291,7 +294,7 @@ class WebSocketManager:
                 sent_channels.append("audio_download")
             except Exception as e:
                 self.logger.warning(f"发送心跳到 audio_download 通道失败: {e}")
-        
+
         if sent_channels:
             self.logger.debug(f"已发送心跳到通道: {', '.join(sent_channels)}")
 
@@ -306,65 +309,34 @@ class WebSocketManager:
             self.logger.debug(f"通道 {channel} 正在重连中，跳过")
             return False
 
-        self._reconnecting_channels.add(channel)
+        if channel not in self._SECONDARY_CHANNEL_CONFIG:
+            self.logger.warning(f"不支持重连通道: {channel}")
+            return False
 
+        self._reconnecting_channels.add(channel)
+        ws_attr, url_key = self._SECONDARY_CHANNEL_CONFIG[channel]
         try:
             urls = self._解析服务器URL配置()
-
-            if channel == "control":
-                control_url = urls.get("control")
-                if not control_url:
-                    self.logger.warning("未配置控制通道地址")
-                    return False
-                control_full = self._为URL添加机器人参数(control_url, self.robot_uuid)
-                self.logger.info(f"重连控制通道: {control_full}")
-                if self.ws_control:
-                    try:
-                        await self.ws_control.close()
-                    except Exception:
-                        pass
-                self.ws_control = await websockets.connect(control_full)
-                self.connected_control = True
-                self.logger.info("控制通道重连成功")
-                return True
-
-            elif channel == "audio_upload":
-                audio_upload_url = urls.get("audio_upload")
-                if not audio_upload_url:
-                    self.logger.warning("未配置音频上传通道地址")
-                    return False
-                audio_upload_full = self._为URL添加机器人参数(audio_upload_url, self.robot_uuid)
-                self.logger.info(f"重连音频上传通道: {audio_upload_full}")
-                if self.ws_audio_upload:
-                    try:
-                        await self.ws_audio_upload.close()
-                    except Exception:
-                        pass
-                self.ws_audio_upload = await websockets.connect(audio_upload_full)
-                self.connected_audio_upload = True
-                self.logger.info("音频上传通道重连成功")
-                return True
-
-            elif channel == "audio_download":
-                audio_download_url = urls.get("audio_download")
-                if not audio_download_url:
-                    self.logger.warning("未配置音频下载通道地址")
-                    return False
-                audio_download_full = self._为URL添加机器人参数(audio_download_url, self.robot_uuid)
-                self.logger.info(f"重连音频下载通道: {audio_download_full}")
-                if self.ws_audio_download:
-                    try:
-                        await self.ws_audio_download.close()
-                    except Exception:
-                        pass
-                self.ws_audio_download = await websockets.connect(audio_download_full)
-                self.connected_audio_download = True
-                self.logger.info("音频下载通道重连成功")
-                return True
-
-            else:
-                self.logger.warning(f"不支持重连通道: {channel}")
+            url = urls.get(url_key)
+            if not url:
+                self.logger.warning(f"未配置{channel}通道地址")
                 return False
+
+            full_url = self._为URL添加机器人参数(url, self.robot_uuid)
+            self.logger.info(f"重连{channel}通道: {full_url}")
+
+            old_ws = getattr(self, ws_attr)
+            if old_ws:
+                try:
+                    await old_ws.close()
+                except Exception:
+                    pass
+
+            new_ws = await websockets.connect(full_url)
+            setattr(self, ws_attr, new_ws)
+            self._设置通道连接状态(channel, True)
+            self.logger.info(f"{channel}通道重连成功")
+            return True
 
         except Exception as e:
             self.logger.error(f"重连通道 {channel} 失败: {e}")
@@ -406,12 +378,8 @@ class WebSocketManager:
                 success = await self._重连单个通道(channel)
                 if success:
                     # 重连成功，重启接收循环
-                    ws_map = {
-                        "control": self.ws_control,
-                        "audio_upload": self.ws_audio_upload,
-                        "audio_download": self.ws_audio_download,
-                    }
-                    ws = ws_map.get(channel)
+                    ws_attr = self._SECONDARY_CHANNEL_CONFIG.get(channel, ("",))[0]
+                    ws = getattr(self, ws_attr, None) if ws_attr else None
                     if ws:
                         self.logger.info(f"✓ 通道 {channel} 重连成功，重启接收循环")
                         # 创建新的接收循环任务

@@ -66,7 +66,7 @@ class MDNSService:
                 "uuid": robot_uuid,
                 "name": robot_info["name"] or f"机器狗-{robot_uuid[:4]}",
                 "model": robot_info["model"],
-                "version": robot_info["version"],
+                "version": robot_info["version"], # 机器人版本信息（robot-agent版本）
                 "ip": local_ip,
                 "port": str(self.port),
             }
@@ -83,7 +83,7 @@ class MDNSService:
             self.zeroconf = Zeroconf()
             self.zeroconf.register_service(self.service_info)
 
-            print("[mDNS] 服务已启动:")
+            print( "[mDNS] 服务已启动:")
             print(f"       服务名称: {service_name}")
             print(f"       IP: {local_ip}:{self.port}")
             print(f"       UUID: {robot_uuid}")

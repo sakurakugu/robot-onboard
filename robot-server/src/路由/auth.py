@@ -1,8 +1,9 @@
 """
 认证路由 - 处理登录、登出和会话验证
 """
-from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 from typing import Optional
+
+from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 
 from ..服务.auth_service import 获取认证服务单例
 
@@ -25,7 +26,7 @@ async def 登录(request: Request, response: Response) -> dict:
             )
 
         token = auth_service.login(username, password)
-        
+
         if token:
             # 设置cookie（HttpOnly, SameSite等安全选项）
             response.set_cookie(
@@ -64,10 +65,10 @@ async def 登出(
     try:
         if session_token:
             auth_service.logout(session_token)
-        
+
         # 清除cookie
         response.delete_cookie(key="session_token")
-        
+
         return {
             "success": True,
             "message": "登出成功"
@@ -89,7 +90,7 @@ async def 检查登录状态(
         username = None
         if is_logged_in and session_token:
             username = auth_service.get_username(session_token)
-        
+
         return {
             "success": True,
             "logged_in": is_logged_in,

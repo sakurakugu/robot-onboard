@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,8 +23,8 @@ async def 获取日志列表(app_name: str | None = Query(default=None, descript
 
 @router.get("/api/v1/logs/download")
 async def 打包下载日志(
-    start_time: datetime = Query(..., description="开始时间，ISO8601格式"),
-    end_time: datetime = Query(..., description="结束时间，ISO8601格式"),
+    start_time: Annotated[datetime, Query(..., description="开始时间，ISO8601格式")],
+    end_time: Annotated[datetime, Query(..., description="结束时间，ISO8601格式")],
     app_name: str | None = Query(default=None, description="按应用名筛选"),
     _token: str = Depends(需要认证),
 ) -> Response:

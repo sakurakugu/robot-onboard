@@ -6,7 +6,6 @@
 2. 生成和验证session token
 3. 管理会话状态和超时
 """
-import hashlib
 import secrets
 import time
 from typing import Dict, Optional

@@ -2,6 +2,8 @@
 
 机器狗端本地配置服务器，提供 HTTP API 和 mDNS 服务发现功能。
 
+> 使用Python而不是Go或C++是为了快速开发和迭代，后续可以根据需要重写为更高性能的语言。而且大多数是I/O密集型操作，Go或C++主要是降低资源占用，Python的性能目前足够了。
+
 ## 功能特性
 
 - **配置管理**: 读取、写入、重置配置文件
@@ -143,14 +145,14 @@ robot-server 启动后会自动在局域网广播 mDNS 服务，robot-cloud 可�
 
 广播的 TXT 记录包含：
 
-| 字段    | 描述           |
-| ------- | -------------- |
-| uuid    | 机器人唯一标识 |
-| name    | 机器人名称     |
-| model   | 机器人型号     |
-| version | 运控版本       |
-| ip      | IP 地址        |
-| port    | 服务端口       |
+| 字段    | 描述            |
+| ------- | --------------- |
+| uuid    | 机器人唯一标识  |
+| name    | 机器人名称      |
+| model   | 机器人型号      |
+| version | robot-agent版本 |
+| ip      | IP 地址         |
+| port    | 服务端口        |
 
 ### 发现流程
 
@@ -263,4 +265,17 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 sudo systemctl enable robot-server
 sudo systemctl start robot-server
+```
+
+查看日志：
+
+```bash
+sudo journalctl -u robot-server -f
+```
+
+关闭/重启服务：
+
+```bash
+sudo systemctl stop robot-server
+sudo systemctl restart robot-server
 ```

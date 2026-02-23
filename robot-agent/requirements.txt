@@ -1,6 +1,7 @@
 sparkrobot-common
 websockets>=16.0
-numpy>=2.2.6
+numpy>=2.3.2
 sounddevice>=0.5.5
 opuslib>=3.0.1
-opencv-python>=4.8.0
+opencv-python>=4.13.0
+httpx>=0.28.1

@@ -79,10 +79,10 @@ def 构建音频结束消息(
 
 # TODO: 到时候要传sn值、软件版本等，这里的部分作为metadata是机器人本身的数据，配置不要从这里传
 def 构建机器人注册消息(
-    robot_uuid: str,        # 机器人 UUID
-    name: str,              # 机器人名称
-    model: str,             # 机器人模型
-    version: str,           # 机器人版本
+    robot_uuid: str,                # 机器人 UUID
+    name: str,                      # 机器人名称
+    model: str,                     # 机器人模型
+    agent_version: str,             # Agent 版本（robot-agent 软件版本）
 ) -> Dict[str, Any]:
     """ build_robot_register """
     return {
@@ -92,7 +92,7 @@ def 构建机器人注册消息(
         "data": {
             "name": name,
             "model": model,
-            "version": version, # 运控版本（不是机器人软件版本）
+            "version": agent_version,
             "metadata": {},
         },
     }

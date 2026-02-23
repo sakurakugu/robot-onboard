@@ -15,13 +15,15 @@ import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+import httpx
 from sparkrobot_common import WORKSPACE_DIR, configure_logger, get_logger, 检测机器人运控版本
 
-from core.config import Config
 from core.auth_client import get_auth_client
+from core.config import Config
 from modules.actions.mapping import 处理动作指令, 处理文本响应
 from modules.audio.capture import AudioCapture
 from modules.audio.playback import 停止当前音频播放, 处理音频响应并播放
@@ -29,17 +31,17 @@ from modules.control.ipc import IpcServer
 from modules.control.joystick import JoystickController
 from modules.control.process import ProcessController
 from modules.transport.protocol import (
+    构建SDK模式响应消息,
     构建心跳消息,
+    构建拍照响应消息,
     构建文本输入消息,
     构建机器人注册消息,
     构建状态消息,
+    构建配置响应消息,
+    构建音量响应消息,
     构建音频帧消息,
     构建音频开始消息,
     构建音频结束消息,
-    构建拍照响应消息,
-    构建音量响应消息,
-    构建配置响应消息,
-    构建SDK模式响应消息,
 )
 from modules.transport.ws_manager import WebSocketManager
 from modules.vision.camera import capture_photo
@@ -133,9 +135,16 @@ class RobotClient:
         """ 初始化机器人版本 """
         version = 检测机器人运控版本()
         if version:
-            # 使用新的扁平化配置格式
-            self.config_store.设置("robot.version", version)
-            self.config = self.config_store.get()
+            # 使用扁平化配置格式
+            self.config_store.设置("robot.motion_control_version", version)
+
+        try:
+            agent_ver = pkg_version("robot-agent")
+        except Exception:
+            agent_ver = "unknown"
+        self.config_store.设置("robot.agent_version", agent_ver)
+
+        self.config = self.config_store.get()
 
         # 重连策略配置
         self.initial_reconnect_interval = self.config["server"].get("reconnect_interval", 5)
@@ -158,6 +167,7 @@ class RobotClient:
         logging_cfg = self.config.get("logging", {})
         level = logging_cfg.get("level", "INFO")
         max_file_size_mb = logging_cfg.get("max_file_size_mb")
+        global logger
         logger = configure_logger(
             app_name=self.project_name,
             log_dir=self.log_dir,
@@ -286,6 +296,25 @@ class RobotClient:
     async def _处理IPC状态(self, status_msg: Dict[str, Any]) -> None:
         await self._ipc_status_queue.put(status_msg)
 
+    def _获取认证cookies(self) -> dict:
+        """获取认证 cookies"""
+        token = get_auth_client().获取_token()
+        return {"session_token": token} if token else {}
+
+    async def _调用机器人服务器API(self, method: str, path: str, payload: dict | None = None) -> dict:
+        """调用 robot-server HTTP API（127.0.0.1:8080）"""
+        cookies = self._获取认证cookies()
+        async with httpx.AsyncClient() as client:
+            if method.upper() == "GET":
+                response = await client.get(
+                    f"http://127.0.0.1:8080{path}", cookies=cookies, timeout=10.0
+                )
+            else:
+                response = await client.post(
+                    f"http://127.0.0.1:8080{path}", json=payload, cookies=cookies, timeout=10.0
+                )
+        return response.json()
+
     async def _发送IPC状态循环(self) -> None:
         while True:
             status_msg = await self._ipc_status_queue.get()
@@ -323,31 +352,14 @@ class RobotClient:
         """处理音量获取消息"""
         request_id = data.get("requestId", "")
         logger.info(f"收到音量获取请求: {request_id}")
-
         try:
-            import httpx
-
-            # 获取认证 token
-            auth_client = get_auth_client()
-            token = auth_client.获取_token()
-            cookies = {"session_token": token} if token else {}
-
-            # 调用 robot-server API
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "http://127.0.0.1:8080/api/v1/volume",
-                    cookies=cookies,
-                    timeout=10.0
-                )
-                result = response.json()
-
-                if result.get("success"):
-                    await self.发送音量响应(request_id, True, result.get("data"))
-                    logger.info(f"音量获取成功: {request_id}")
-                else:
-                    await self.发送音量响应(request_id, False, None, result.get("error", "获取音量失败"))
-                    logger.error(f"音量获取失败: {request_id}")
-
+            result = await self._调用机器人服务器API("GET", "/api/v1/volume")
+            if result.get("success"):
+                await self.发送音量响应(request_id, True, result.get("data"))
+                logger.info(f"音量获取成功: {request_id}")
+            else:
+                await self.发送音量响应(request_id, False, None, result.get("error", "获取音量失败"))
+                logger.error(f"音量获取失败: {request_id}")
         except Exception as e:
             logger.error(f"处理音量获取请求时出错: {e}", exc_info=True)
             await self.发送音量响应(request_id, False, None, str(e))
@@ -357,32 +369,14 @@ class RobotClient:
         request_id = data.get("requestId", "")
         volume = data.get("volume")
         logger.info(f"收到音量设置请求: {request_id}, 音量: {volume}")
-
         try:
-            import httpx
-
-            # 获取认证 token
-            auth_client = get_auth_client()
-            token = auth_client.获取_token()
-            cookies = {"session_token": token} if token else {}
-
-            # 调用 robot-server API
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "http://127.0.0.1:8080/api/v1/volume",
-                    json={"volume": volume},
-                    cookies=cookies,
-                    timeout=10.0
-                )
-                result = response.json()
-
-                if result.get("success"):
-                    await self.发送音量响应(request_id, True, {"message": result.get("message")})
-                    logger.info(f"音量设置成功: {request_id}")
-                else:
-                    await self.发送音量响应(request_id, False, None, result.get("error", "设置音量失败"))
-                    logger.error(f"音量设置失败: {request_id}")
-
+            result = await self._调用机器人服务器API("POST", "/api/v1/volume", {"volume": volume})
+            if result.get("success"):
+                await self.发送音量响应(request_id, True, {"message": result.get("message")})
+                logger.info(f"音量设置成功: {request_id}")
+            else:
+                await self.发送音量响应(request_id, False, None, result.get("error", "设置音量失败"))
+                logger.error(f"音量设置失败: {request_id}")
         except Exception as e:
             logger.error(f"处理音量设置请求时出错: {e}", exc_info=True)
             await self.发送音量响应(request_id, False, None, str(e))
@@ -392,32 +386,14 @@ class RobotClient:
         request_id = data.get("requestId", "")
         mute = data.get("mute")
         logger.info(f"收到设置静音请求: {request_id}, 静音: {mute}")
-
         try:
-            import httpx
-
-            # 获取认证 token
-            auth_client = get_auth_client()
-            token = auth_client.获取_token()
-            cookies = {"session_token": token} if token else {}
-
-            # 调用 robot-server API
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "http://127.0.0.1:8080/api/v1/volume/mute",
-                    json={"mute": mute},
-                    cookies=cookies,
-                    timeout=10.0
-                )
-                result = response.json()
-
-                if result.get("success"):
-                    await self.发送音量响应(request_id, True, {"message": result.get("message")})
-                    logger.info(f"设置静音成功: {request_id}")
-                else:
-                    await self.发送音量响应(request_id, False, None, result.get("error", "设置静音失败"))
-                    logger.error(f"设置静音失败: {request_id}")
-
+            result = await self._调用机器人服务器API("POST", "/api/v1/volume/mute", {"mute": mute})
+            if result.get("success"):
+                await self.发送音量响应(request_id, True, {"message": result.get("message")})
+                logger.info(f"设置静音成功: {request_id}")
+            else:
+                await self.发送音量响应(request_id, False, None, result.get("error", "设置静音失败"))
+                logger.error(f"设置静音失败: {request_id}")
         except Exception as e:
             logger.error(f"处理设置静音请求时出错: {e}", exc_info=True)
             await self.发送音量响应(request_id, False, None, str(e))
@@ -426,31 +402,14 @@ class RobotClient:
         """处理配置获取消息"""
         request_id = data.get("requestId", "")
         logger.info(f"收到配置获取请求: {request_id}")
-
         try:
-            import httpx
-
-            # 获取认证 token
-            auth_client = get_auth_client()
-            token = auth_client.获取_token()
-            cookies = {"session_token": token} if token else {}
-
-            # 调用 robot-server API
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "http://127.0.0.1:8080/api/v1/config",
-                    cookies=cookies,
-                    timeout=10.0
-                )
-                result = response.json()
-
-                if result.get("success"):
-                    await self.发送配置响应(request_id, True, result.get("config"))
-                    logger.info(f"配置获取成功: {request_id}")
-                else:
-                    await self.发送配置响应(request_id, False, None, result.get("error", "获取配置失败"))
-                    logger.error(f"配置获取失败: {request_id}")
-
+            result = await self._调用机器人服务器API("GET", "/api/v1/config")
+            if result.get("success"):
+                await self.发送配置响应(request_id, True, result.get("config"))
+                logger.info(f"配置获取成功: {request_id}")
+            else:
+                await self.发送配置响应(request_id, False, None, result.get("error", "获取配置失败"))
+                logger.error(f"配置获取失败: {request_id}")
         except Exception as e:
             logger.error(f"处理配置获取请求时出错: {e}", exc_info=True)
             await self.发送配置响应(request_id, False, None, str(e))
@@ -460,32 +419,14 @@ class RobotClient:
         request_id = data.get("requestId", "")
         config_data = data.get("config", {})
         logger.info(f"收到配置更新请求: {request_id}")
-
         try:
-            import httpx
-
-            # 获取认证 token
-            auth_client = get_auth_client()
-            token = auth_client.获取_token()
-            cookies = {"session_token": token} if token else {}
-
-            # 调用 robot-server API
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "http://127.0.0.1:8080/api/v1/config",
-                    json=config_data,
-                    cookies=cookies,
-                    timeout=10.0
-                )
-                result = response.json()
-
-                if result.get("success"):
-                    await self.发送配置响应(request_id, True, {"message": result.get("message"), "results": result.get("results")})
-                    logger.info(f"配置更新成功: {request_id}")
-                else:
-                    await self.发送配置响应(request_id, False, None, result.get("error", "更新配置失败"))
-                    logger.error(f"配置更新失败: {request_id}")
-
+            result = await self._调用机器人服务器API("POST", "/api/v1/config", config_data)
+            if result.get("success"):
+                await self.发送配置响应(request_id, True, {"message": result.get("message"), "results": result.get("results")})
+                logger.info(f"配置更新成功: {request_id}")
+            else:
+                await self.发送配置响应(request_id, False, None, result.get("error", "更新配置失败"))
+                logger.error(f"配置更新失败: {request_id}")
         except Exception as e:
             logger.error(f"处理配置更新请求时出错: {e}", exc_info=True)
             await self.发送配置响应(request_id, False, None, str(e))

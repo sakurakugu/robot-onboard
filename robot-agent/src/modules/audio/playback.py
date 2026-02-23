@@ -2,7 +2,6 @@ import base64
 import hashlib
 import subprocess
 import time
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from sparkrobot_common import WORKSPACE_DIR, get_logger

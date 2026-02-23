@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sparkrobot_common import 获取配置项字段信息
+from sparkrobot_common import 获取配置分组信息, 获取配置项字段信息
 
 from ..依赖 import 需要认证
 from ..服务.config_service import 获取配置管理器单例
@@ -22,6 +22,15 @@ async def 获取配置项字段() -> dict:
     try:
         fields = 获取配置项字段信息()
         return {"success": True, "fields": fields}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
+
+
+@router.get("/api/v1/config/sections")
+async def 获取配置分组() -> dict:
+    try:
+        sections = 获取配置分组信息()
+        return {"success": True, "sections": sections}
     except Exception as e:
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 
