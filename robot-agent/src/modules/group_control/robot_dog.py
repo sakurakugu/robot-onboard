@@ -1,4 +1,4 @@
-# 目前有个bug，这两个类把sdk封装后，在机器狗身上就跑不起来了，不知道是什么原因。但是通过远程是可以跑的
+# 目前有个bug，这两个类把sdk封装后，在机器狗身上就跑不起来了，不知道是什么原因（TOOD: 没时间细查）。但是通过远程是可以跑的
 import time
 from typing import Any, Callable, cast
 

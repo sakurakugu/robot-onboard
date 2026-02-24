@@ -4,7 +4,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ..依赖 import 需要认证
+from ..认证 import 需要认证
 from ..服务.volume_service import 获取音量服务单例
 
 router = APIRouter()

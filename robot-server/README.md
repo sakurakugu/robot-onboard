@@ -39,7 +39,7 @@ robot-server/
 │   │   └── wifi.py              # WiFi 路由
 │   ├── __init__.py
 │   ├── app.py                   # FastAPI 应用
-│   └── 依赖.py                  # 依赖注入
+│   └── 认证.py                  # 依赖注入
 ├── static/                      # 静态文件
 │   ├── css/
 │   │   └── style.css

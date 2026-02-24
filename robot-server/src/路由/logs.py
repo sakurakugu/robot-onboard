@@ -5,7 +5,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
-from ..依赖 import 需要认证
+from ..认证 import 需要认证
 from ..服务.log_service import 获取日志服务单例
 
 router = APIRouter()
