@@ -4,6 +4,8 @@ mDNS 服务模块 - 在局域网广播机器人服务
 使用 zeroconf 库实现 mDNS 服务注册，允许 robot-cloud 自动发现机器人。
 """
 import socket
+import subprocess
+import threading
 from typing import TYPE_CHECKING
 
 from sparkrobot_common.utils import 获取本机IP
@@ -30,6 +32,11 @@ class MDNSService:
         self.port = port
         self.zeroconf: Zeroconf | None = None
         self.service_info: ServiceInfo | None = None
+        self._last_ip: str | None = None
+        self._stop_event = threading.Event()
+        self._watch_thread: threading.Thread | None = None
+        self._service_properties: dict[str, str] | None = None
+        self._monitor_process: subprocess.Popen[str] | None = None
 
     def _获取机器人信息(self) -> dict[str, str]:
         """从配置中获取机器人信息"""
@@ -70,6 +77,7 @@ class MDNSService:
                 "ip": local_ip,
                 "port": str(self.port),
             }
+            self._service_properties = properties
 
             self.service_info = ServiceInfo(
                 type_=SERVICE_TYPE,
@@ -82,6 +90,8 @@ class MDNSService:
 
             self.zeroconf = Zeroconf()
             self.zeroconf.register_service(self.service_info)
+            self._last_ip = local_ip
+            self._启动监听()
 
             print( "[mDNS] 服务已启动:")
             print(f"       服务名称: {service_name}")
@@ -95,9 +105,70 @@ class MDNSService:
             print(f"[mDNS] 启动失败: {e}")
             return False
 
+    def _启动监听(self) -> None:
+        if self._watch_thread and self._watch_thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._watch_thread = threading.Thread(target=self._监听IP变化, daemon=True)
+        self._watch_thread.start()
+
+    def _监听IP变化(self) -> None:
+        try:
+            self._monitor_process = subprocess.Popen(
+                ["ip", "monitor", "addr"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except Exception as e:
+            print(f"[mDNS] 监听启动失败: {e}")
+            return
+        if not self._monitor_process.stdout:
+            return
+        while not self._stop_event.is_set():
+            line = self._monitor_process.stdout.readline()
+            if not line:
+                if self._monitor_process.poll() is not None:
+                    break
+                continue
+            if "wlan0" not in line and "ap0" not in line:
+                continue
+            current_ip = 获取本机IP()
+            if current_ip != self._last_ip and current_ip != "127.0.0.1":
+                self._更新IP(current_ip)
+                self._last_ip = current_ip
+
+    def _更新IP(self, ip: str) -> None:
+        if not self.zeroconf or not self.service_info or not self._service_properties:
+            return
+        try:
+            self._service_properties["ip"] = ip
+            updated_info = ServiceInfo(
+                type_=self.service_info.type,
+                name=self.service_info.name,
+                port=self.service_info.port,
+                properties=self._service_properties,
+                server=self.service_info.server,
+                addresses=[socket.inet_aton(ip)],
+            )
+            self.zeroconf.update_service(updated_info)
+            self.service_info = updated_info
+            print(f"[mDNS] IP 已更新: {ip}:{self.port}")
+        except Exception as e:
+            print(f"[mDNS] 更新 IP 失败: {e}")
+
     def 停止(self) -> None:
         """停止 mDNS 服务广播"""
         try:
+            self._stop_event.set()
+            if self._monitor_process and self._monitor_process.poll() is None:
+                self._monitor_process.terminate()
+                try:
+                    self._monitor_process.wait(timeout=2)
+                except Exception:
+                    self._monitor_process.kill()
+            if self._watch_thread and self._watch_thread.is_alive():
+                self._watch_thread.join(timeout=2)
             if self.zeroconf and self.service_info:
                 self.zeroconf.unregister_service(self.service_info)
                 self.zeroconf.close()
@@ -107,6 +178,10 @@ class MDNSService:
         finally:
             self.zeroconf = None
             self.service_info = None
+            self._watch_thread = None
+            self._last_ip = None
+            self._service_properties = None
+            self._monitor_process = None
 
     def 更新(self) -> None:
         """更新 mDNS 服务信息（配置变更时调用）"""

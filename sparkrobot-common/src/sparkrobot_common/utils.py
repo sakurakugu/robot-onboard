@@ -1,6 +1,7 @@
 """
 通用工具函数
 """
+import re
 import socket
 import subprocess
 from pathlib import Path
@@ -28,8 +29,36 @@ def 获取IPC路径(org_name: str, name: str) -> Path:
     return ipc_path
 
 
+def _获取接口IPv4(interface: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["ip", "-4", "-o", "addr", "show", "dev", interface],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        match = re.search(r"\s+inet\s+(\d+\.\d+\.\d+\.\d+)/", result.stdout)
+        if not match:
+            return None
+        ip = match.group(1)
+        if ip.startswith("127."):
+            return None
+        return ip
+    except Exception:
+        return None
+
+
 def 获取本机IP() -> str:
-    """通过 UDP 连接获取本机对外的 IP 地址"""
+    """获取本机对外的 IP 地址，优先 WIFI，其次 AP"""
+    wlan_ip = _获取接口IPv4("wlan0")
+    if wlan_ip:
+        return wlan_ip
+    ap_ip = _获取接口IPv4("ap0")
+    if ap_ip:
+        return ap_ip
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             # 不会真的建立连接，仅用于获取本机出口 IP

@@ -13,8 +13,8 @@ class IpcServer:
         self._server: Optional[asyncio.AbstractServer] = None
 
     async def 启动(self) -> None:
+        ipc_path = 获取IPC路径(ORG_NAME, self.project_name)
         try:
-            ipc_path = 获取IPC路径(ORG_NAME, self.project_name)
             if ipc_path.exists():
                 ipc_path.unlink()
         except Exception:
