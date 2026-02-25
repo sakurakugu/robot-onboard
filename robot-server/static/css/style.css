@@ -428,3 +428,38 @@ button.btn-full {
 .hidden {
   display: none !important;
 }
+
+/* 遥测状态栏 */
+.telemetry-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+.telemetry-item {
+  color: #555;
+  font-weight: 500;
+}
+.telemetry-item.online {
+  color: #4caf50;
+}
+.telemetry-item.offline {
+  color: #999;
+}
+.telemetry-item.danger {
+  color: #e53935;
+  font-weight: bold;
+}
+.telemetry-item.warning {
+  color: #fb8c00;
+}
+.telemetry-divider {
+  color: #ddd;
+}

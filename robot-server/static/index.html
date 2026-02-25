@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>机器狗配置中心</title>
     <!-- 如果样式或脚本有变化，但是网页上没显示的话，需要用Ctrl+Shift+R刷新页面 -->
-     <!-- 或者给下面改成css/style.css?v=2026-2-24 -->
+    <!-- 或者给下面改成css/style.css?v=2026-2-24 -->
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
@@ -49,6 +49,22 @@
 
     <div class="container">
       <h1>机器狗配置中心</h1>
+
+      <!-- 遥测状态栏 -->
+      <div id="telemetryBar" class="telemetry-bar">
+        <span class="telemetry-item" id="telemetryOnline">🔴 离线</span>
+        <span class="telemetry-divider">|</span>
+        <span class="telemetry-item" id="telemetryPower">🔋 --</span>
+        <span class="telemetry-divider">|</span>
+        <span class="telemetry-item" id="telemetryTemp">🌡️ --</span>
+        <span
+          class="telemetry-divider"
+          id="telemetryDevDivider"
+          style="display: none"
+          >|</span
+        >
+        <span class="telemetry-item" id="telemetryDev"></span>
+      </div>
 
       <div class="tabs">
         <button class="tab active" onclick="switchTab('system')">

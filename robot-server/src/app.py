@@ -6,11 +6,13 @@ from fastapi.staticfiles import StaticFiles
 
 from .服务.config_service import 获取配置管理器单例
 from .服务.mdns_service import 初始化并启动_mDNS_服务
+from .服务 import telemetry_service
 from .路由 import auth as auth_router
 from .路由 import config as config_router
 from .路由 import logs as logs_router
 from .路由 import sdk as sdk_router
 from .路由 import system as system_router
+from .路由 import telemetry as telemetry_router
 from .路由 import volume as volume_router
 from .路由 import wifi as wifi_router
 
@@ -22,9 +24,14 @@ config_manager = 获取配置管理器单例()
 mdns_service = 初始化并启动_mDNS_服务(config_manager, PORT)
 atexit.register(mdns_service.停止)
 
+# 启动遥测后台服务（向 dog 发心跳，缓存 dog_state）
+telemetry_service.start()
+atexit.register(telemetry_service.stop)
+
 app.include_router(auth_router.router)
 app.include_router(config_router.router)
 app.include_router(sdk_router.router)
+app.include_router(telemetry_router.router)
 app.include_router(wifi_router.router)
 app.include_router(system_router.router)
 app.include_router(volume_router.router)

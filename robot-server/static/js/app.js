@@ -1056,6 +1056,54 @@ async function restartMotion() {
   }
 }
 
+// ==================== 遥测状态 ====================
+async function loadTelemetry() {
+  try {
+    const response = await fetch("/api/v1/telemetry", {
+      credentials: "include",
+    });
+    const data = await response.json();
+    if (!data.success) return;
+
+    const d = data.data;
+
+    // 在线状态
+    const onlineEl = document.getElementById("telemetryOnline");
+    onlineEl.textContent = d.online ? "🟢 在线" : "🔴 离线";
+    onlineEl.className = "telemetry-item " + (d.online ? "online" : "offline");
+
+    // 电量
+    const powerEl = document.getElementById("telemetryPower");
+    const power = d.power ?? null;
+    powerEl.textContent = power !== null ? `🔋 ${power}%` : "🔋 --";
+    powerEl.className =
+      "telemetry-item" +
+      (power !== null && power <= 20
+        ? " danger"
+        : power !== null && power <= 50
+          ? " warning"
+          : "");
+
+    // 温度
+    const tempEl = document.getElementById("telemetryTemp");
+    const temp = d.temp ?? null;
+    tempEl.textContent = temp !== null ? `🌡️ ${temp.toFixed(1)}°C` : "🌡️ --";
+
+    // 设备名
+    const devEl = document.getElementById("telemetryDev");
+    const devDividerEl = document.getElementById("telemetryDevDivider");
+    if (d.dev_name || d.model) {
+      devEl.textContent = `🐕 ${d.dev_name || d.model}`;
+      devDividerEl.style.display = "";
+    } else {
+      devEl.textContent = "";
+      devDividerEl.style.display = "none";
+    }
+  } catch (e) {
+    // 静默失败
+  }
+}
+
 // 页面加载时检查登录状态
 window.onload = function () {
   checkLoginStatus();
@@ -1063,4 +1111,6 @@ window.onload = function () {
   loadVolume();
   initLogTimeRange();
   loadLogList();
+  loadTelemetry();
+  setInterval(loadTelemetry, 5000);
 };
