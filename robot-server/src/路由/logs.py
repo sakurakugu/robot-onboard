@@ -5,7 +5,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
-from ..认证 import 需要认证
+from ..认证 import 需要认证_含查询参数
 from ..服务.log_service import 获取日志服务单例
 
 router = APIRouter()
@@ -26,7 +26,7 @@ async def 打包下载日志(
     start_time: Annotated[datetime, Query(..., description="开始时间，ISO8601格式")],
     end_time: Annotated[datetime, Query(..., description="结束时间，ISO8601格式")],
     app_name: str | None = Query(default=None, description="按应用名筛选"),
-    _token: str = Depends(需要认证),
+    _token: str = Depends(需要认证_含查询参数),
 ) -> Response:
     try:
         zip_data, file_name = log_service.打包下载(

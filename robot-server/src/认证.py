@@ -3,7 +3,7 @@
 """
 from typing import Optional
 
-from fastapi import Cookie, HTTPException
+from fastapi import Cookie, HTTPException, Query
 
 from .服务.auth_service import 获取认证服务单例
 
@@ -23,6 +23,26 @@ def 需要认证(session_token: Optional[str] = Cookie(None)) -> str:
         )
 
     return session_token  # 返回有效的token，路由可以选择使用
+
+
+def 需要认证_含查询参数(
+    session_token: Optional[str] = Cookie(None),
+    q_token: Optional[str] = Query(None, alias="session_token"),
+) -> str:
+    """
+    认证依赖项 - 支持从 Cookie 或 URL 查询参数（session_token）读取 token
+    主要用于文件下载等需要在 URL 中携带 token 的场景
+    """
+    auth_service = 获取认证服务单例()
+    token = session_token or q_token
+
+    if not token or not auth_service.validate_token(token):
+        raise HTTPException(
+            status_code=401,
+            detail={"success": False, "error": "未登录或会话已过期，请先登录"}
+        )
+
+    return token
 
 
 def 可选认证(session_token: Optional[str] = Cookie(None)) -> Optional[str]:

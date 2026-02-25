@@ -238,7 +238,7 @@ class RobotClient:
             self.config["robot"]["uuid"],
             self.config["robot"]["name"],
             self.config["robot"]["model"],
-            self.config["robot"]["version"],
+            self.config["robot"]["agent_version"],
         )
         await self.发送消息(message, channel="business")
 
