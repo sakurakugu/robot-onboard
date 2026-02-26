@@ -374,6 +374,20 @@ def 修复gradle_buildship_configs():
     else:
         print_error("无效选项")
 
+def 检查代码注释():
+    """运行 check_comments.py 扫描根目录"""
+    script_path = SCRIPTS_DIR / "hook" / "check_comments.py"
+    if not script_path.exists():
+        print_error(f"找不到脚本: {script_path}")
+        return
+
+    print_info("正在扫描代码注释 (根目录)...")
+    try:
+        # 使用当前 python 解释器运行脚本，并传递 --all 参数
+        subprocess.run([sys.executable, str(script_path), "--all"], cwd=PROJECT_ROOT)
+    except Exception as e:
+        print_error(f"运行失败: {e}")
+
 def 设置菜单():
     """设置菜单 - 管理机器狗配置"""
     while True:
@@ -551,7 +565,8 @@ def 显示菜单():
     print(f"  1) SSH 连接机器狗 (已保存 {robot_count} 个)")
     print("  2) 备份当前项目文件夹")
     print("  3) 修复常见错误")
-    print("  4) 设置 (管理机器狗)")
+    print("  4) 检查代码注释 (默认扫描根目录)")
+    print("  5) 设置 (管理机器狗)")
     print("  0) 退出")
     print("")
     print("==========================================")
@@ -575,6 +590,8 @@ def main():
             elif choice == "3":
                 修复常见错误()
             elif choice == "4":
+                检查代码注释()
+            elif choice == "5":
                 设置菜单()
             elif choice == "0":
                 print_success("退出脚本")

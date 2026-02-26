@@ -4,6 +4,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from ..认证 import 需要认证_含查询参数
 from ..服务.log_service import 获取日志服务单例
@@ -12,11 +13,24 @@ router = APIRouter()
 log_service = 获取日志服务单例()
 
 
+class 日志标记请求(BaseModel):
+    message: str = ""
+
+
 @router.get("/api/v1/logs")
 async def 获取日志列表(app_name: str | None = Query(default=None, description="按应用名筛选")) -> dict:
     try:
         logs, apps, _ = log_service.获取日志列表(app_name=app_name)
         return {"success": True, "apps": apps, "logs": logs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
+
+
+@router.post("/api/v1/logs/mark")
+async def 写入日志标记(body: 日志标记请求 = 日志标记请求()) -> dict:
+    try:
+        tag = log_service.写入标记(body.message)
+        return {"success": True, "marker": tag}
     except Exception as e:
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e
 

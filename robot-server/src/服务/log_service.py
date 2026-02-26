@@ -142,6 +142,25 @@ class 日志服务:
             return value.astimezone()
         return value.astimezone()
 
+    def 写入标记(self, message: str = "") -> str:
+        """在日志中写入一条可见的标记行，便于后续定位问题时间点。
+
+        Args:
+            message: 可选的标记说明文字
+
+        Returns:
+            写入完成的标记内容
+        """
+        now = datetime.now().astimezone()
+        marker_dir = self.日志根目录 / "robot-server" / now.strftime("%Y-%m-%d")
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        marker_file = marker_dir / "markers.log"
+
+        tag = f"[{now.isoformat()}] [MARKER] {'=' * 20} {message or '手动标记'} {'=' * 20}\n"
+        with marker_file.open("a", encoding="utf-8") as f:
+            f.write(tag)
+        return tag.strip()
+
     def _生成压缩包文件名(self, start: datetime, end: datetime, app_name: str | None) -> str:
         app = app_name or "all"
         start_text = start.strftime("%Y%m%d_%H%M%S")

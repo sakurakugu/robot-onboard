@@ -186,6 +186,25 @@ def 构建配置响应消息(
         },
     }
 
+def 构建日志标记响应消息(
+    robot_uuid: str,        # 机器人 UUID
+    request_id: str,        # 请求ID
+    success: bool,          # 是否成功
+    marker: str | None = None,  # 写入的标记内容
+    error: str | None = None,  # 错误信息（失败时）
+) -> Dict[str, Any]:
+    """ build_log_mark_response """
+    return {
+        "type": "log_mark_response",
+        "robotId": robot_uuid,
+        "timestamp": int(time.time() * 1000),
+        "data": {
+            "requestId": request_id,
+            "success": success,
+            "marker": marker,
+            "error": error,
+        },
+    }
 
 def 构建SDK模式响应消息(
     robot_uuid: str,        # 机器人 UUID

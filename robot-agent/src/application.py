@@ -42,6 +42,7 @@ from modules.transport.protocol import (
     构建配置响应消息,
     构建音量响应消息,
     构建音频帧消息,
+    构建日志标记响应消息,
     构建音频开始消息,
     构建音频结束消息,
 )
@@ -131,6 +132,7 @@ class RobotClient:
             "config_update": self._处理配置更新,
             "sdk_mode_set": self._处理SDK模式设置,
             "sdk_mode_get": self._处理SDK模式获取,
+            "log_mark": self._处理日志标记,
         }
 
         """ 初始化动作执行函数 """
@@ -298,6 +300,15 @@ class RobotClient:
         """发送SDK模式响应消息"""
         message = 构建SDK模式响应消息(
             self.config["robot"]["uuid"], request_id, success, sdk_mode, error
+        )
+        await self.发送消息(message, channel="business")
+
+    async def 发送日志标记响应(
+        self, request_id: str, success: bool, marker: Optional[str] = None, error: Optional[str] = None
+    ) -> None:
+        """发送日志标记响应消息"""
+        message = 构建日志标记响应消息(
+            self.config["robot"]["uuid"], request_id, success, marker, error
         )
         await self.发送消息(message, channel="business")
 
@@ -519,6 +530,23 @@ class RobotClient:
         except Exception as e:
             logger.error(f"处理SDK模式获取请求时出错: {e}", exc_info=True)
             await self.发送SDK模式响应(request_id, False, None, str(e))
+
+    async def _处理日志标记(self, data: Dict[str, Any]) -> None:
+        """处理日志标记消息：在本地日志中写入一个可识别标记"""
+        request_id = data.get("requestId", "")
+        message = data.get("message", "")
+        logger.info(f"收到日志标记请求: {request_id}, 标记信息: {message}")
+        try:
+            result = await self._调用机器人服务器API("POST", "/api/v1/logs/mark", {"message": message})
+            if result.get("success"):
+                await self.发送日志标记响应(request_id, True, result.get("marker"))
+                logger.info(f"日志标记写入成功: {request_id}")
+            else:
+                await self.发送日志标记响应(request_id, False, None, result.get("error", "写入标记失败"))
+                logger.error(f"日志标记写入失败: {request_id}")
+        except Exception as e:
+            logger.error(f"处理日志标记请求时出错: {e}", exc_info=True)
+            await self.发送日志标记响应(request_id, False, None, str(e))
 
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
         """ 处理文本响应消息 """
