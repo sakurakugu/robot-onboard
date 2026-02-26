@@ -261,39 +261,23 @@ class WebSocketManager:
                 await self._发送心跳到所有通道(message)
 
     async def _发送心跳到所有通道(self, message: Dict[str, Any]) -> None:
-        """ 发送心跳到所有已连接的通道 """
+        """ 发送心跳到所有已连接的通道，确保每个通道的 lastActiveAt 都得到刷新 """
         sent_channels = []
 
-        # 优先使用 control 通道发送心跳
-        if self.connected_control:
-            try:
-                await self.发送消息(message, channel="control")
-                sent_channels.append("control")
-            except Exception as e:
-                self.logger.warning(f"发送心跳到 control 通道失败: {e}")
-        elif self.connected:
-            # 如果 control 通道不可用，使用 business 通道
-            try:
-                await self.发送消息(message, channel="business")
-                sent_channels.append("business")
-            except Exception as e:
-                self.logger.warning(f"发送心跳到 business 通道失败: {e}")
+        channel_checks = [
+            ("business", self.connected),
+            ("control", self.connected_control),
+            ("audio_upload", self.connected_audio_upload),
+            ("audio_download", self.connected_audio_download),
+        ]
 
-        # 为 audio_upload 通道也发送心跳
-        if self.connected_audio_upload:
-            try:
-                await self.发送消息(message, channel="audio_upload")
-                sent_channels.append("audio_upload")
-            except Exception as e:
-                self.logger.warning(f"发送心跳到 audio_upload 通道失败: {e}")
-
-        # 为 audio_download 通道也发送心跳
-        if self.connected_audio_download:
-            try:
-                await self.发送消息(message, channel="audio_download")
-                sent_channels.append("audio_download")
-            except Exception as e:
-                self.logger.warning(f"发送心跳到 audio_download 通道失败: {e}")
+        for channel, is_connected in channel_checks:
+            if is_connected:
+                try:
+                    await self.发送消息(message, channel=channel)
+                    sent_channels.append(channel)
+                except Exception as e:
+                    self.logger.warning(f"发送心跳到 {channel} 通道失败: {e}")
 
         if sent_channels:
             self.logger.debug(f"已发送心跳到通道: {', '.join(sent_channels)}")

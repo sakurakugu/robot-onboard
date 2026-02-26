@@ -3,7 +3,8 @@
 功能:
 - 配置管理（~/sparkrobot/config/config.toml）
 - 配置热更新（watchdog 监听）
-- WebSocket 通信
+- WebSocket 通信（云端服务器）
+- 本地直连 WebSocket 控制服务（端口 8082，手机同局域网时直接发送指令，无需经过云端）
 - 心跳保持
 - 接收音频回复（opus）
 - 执行动作指令
@@ -30,6 +31,7 @@ from modules.audio.playback import 停止当前音频播放, 处理音频响应�
 from modules.control.ipc import IpcServer
 from modules.control.joystick import JoystickController
 from modules.control.process import ProcessController
+from modules.control.ws_control_server import WsControlServer
 from modules.transport.protocol import (
     构建SDK模式响应消息,
     构建心跳消息,
@@ -102,6 +104,12 @@ class RobotClient:
 
         """ 初始化 IPC 服务器 """
         self.ipc_server = IpcServer(self.project_name, self._处理IPC状态)
+
+        """ 初始化本地直连 WebSocket 控制服务器（手机同局域网时绕过云端） """
+        self.ws_control_server = WsControlServer(
+            self._处理直连控制指令,
+            self._处理直连异步命令,
+        )
 
         """ 初始化消息处理函数 """
         self.message_handlers: Dict[str, Callable] = {
@@ -535,8 +543,109 @@ class RobotClient:
         await 处理动作指令(data, self.动作执行器, self._确保动作执行器())
 
     async def _处理控制指令(self, data: Dict[str, Any]) -> None:
-        """ 处理控制指令消息 """
+        """ 处理控制指令消息（来自云端服务器） """
         self.joystick_controller.处理命令(data)
+
+    def _处理直连控制指令(self, data: Dict[str, Any]) -> None:
+        """处理来自手机直连 WebSocket 的控制指令（同步，在 asyncio 线程安全地调用）
+
+        command 取值：
+          joystick / joystick_stop / estop → 交给摇杆控制器处理
+          action                           → 通过动作执行器执行（如 stand_up）
+        """
+        command = data.get("command", "")
+        if command in ("joystick", "joystick_stop", "estop"):
+            self.joystick_controller.处理命令(data)
+        elif command == "action":
+            action = data.get("action", "")
+            if action and self.动作执行器:
+                # 在独立线程执行，避免阻塞 asyncio 事件循环
+                self._确保动作执行器().submit(self.动作执行器, action, data.get("parameters", {}))
+        elif command == "mic_control":
+            enabled = bool(data.get("enabled", True))
+            self.audio_capture.audio_streaming_enabled = enabled
+            logger.info(f"[直连控制] 麦克风采集{'开启' if enabled else '关闭'}")
+        elif command == "switch_control_mode":
+            mode = data.get("mode", "move")
+            logger.info(f"[直连控制] 控制模式切换为: {mode}")
+        else:
+            logger.debug(f"[直连控制] 未知指令类型: {command}")
+
+    async def _处理直连异步命令(self, data: dict, send_fn) -> None:
+        """处理来自手机直连 WebSocket 的异步指令（需要回传响应）
+
+        command 取值：
+          camera_capture → 拍照，回传 base64 图像
+          sdk_mode       → 切换 SDK/遥控模式，回传结果
+        """
+        command = data.get("command", "")
+        request_id = data.get("requestId", "direct")
+
+        if command == "camera_capture":
+            logger.info(f"[直连控制] 收到拍照请求: {request_id}")
+            try:
+                loop = asyncio.get_event_loop()
+                rtsp_url = "rtsp://127.0.0.1:8554/test"
+                image_base64 = await loop.run_in_executor(
+                    None, capture_photo, rtsp_url, 5
+                )
+                await send_fn({
+                    "type": "camera_capture_response",
+                    "data": {
+                        "requestId": request_id,
+                        "success": bool(image_base64),
+                        "image": image_base64,
+                        "format": "jpeg",
+                    },
+                })
+                logger.info(f"[直连控制] 拍照完成: {request_id}, 有图={'是' if image_base64 else '否'}")
+            except Exception as e:
+                logger.error(f"[直连控制] 拍照失败: {e}", exc_info=True)
+                await send_fn({
+                    "type": "camera_capture_response",
+                    "data": {
+                        "requestId": request_id,
+                        "success": False,
+                        "error": str(e),
+                    },
+                })
+
+        elif command == "sdk_mode":
+            enabled = data.get("enabled")
+            logger.info(f"[直连控制] SDK 模式切换请求: {enabled}")
+            try:
+                if enabled is None:
+                    await send_fn({"type": "sdk_mode_response", "data": {"requestId": request_id, "success": False, "error": "enabled 参数不能为空"}})
+                    return
+                enabled = bool(enabled)
+                if self.sdk_mode_enabled == enabled:
+                    await send_fn({"type": "sdk_mode_response", "data": {"requestId": request_id, "success": True, "sdkMode": enabled}})
+                    return
+                if enabled:
+                    from pathlib import Path
+                    script_dir = Path(__file__).parent
+                    interactive_script = script_dir / "modules" / "actions" / "executor.py"
+                    if not interactive_script.exists():
+                        raise FileNotFoundError(f"找不到交互式脚本: {interactive_script}")
+                    if not self.交互式子进程控制器.启动(str(interactive_script)):
+                        raise RuntimeError("无法启动交互式子进程")
+                    self.sdk_mode_enabled = True
+                else:
+                    try:
+                        if self.交互式子进程控制器.process and self.交互式子进程控制器.process.poll() is None:
+                            self.交互式子进程控制器.发送命令("stand_up")
+                            await asyncio.sleep(2)
+                    except Exception as ex:
+                        logger.warning(f"[直连控制] 关闭 SDK 前执行站立失败: {ex}")
+                    self.交互式子进程控制器.关闭()
+                    self.sdk_mode_enabled = False
+                await send_fn({"type": "sdk_mode_response", "data": {"requestId": request_id, "success": True, "sdkMode": enabled}})
+                logger.info(f"[直连控制] SDK 模式已切换为: {'SDK' if enabled else '遥控'}")
+            except Exception as e:
+                logger.error(f"[直连控制] SDK 模式切换失败: {e}", exc_info=True)
+                await send_fn({"type": "sdk_mode_response", "data": {"requestId": request_id, "success": False, "error": str(e)}})
+        else:
+            logger.debug(f"[直连控制] 未知异步指令: {command}")
 
     async def _处理服务器错误(self, data: Dict[str, Any]) -> None:
         """ 处理服务器错误消息 """
@@ -576,6 +685,8 @@ class RobotClient:
         """ 运行机器狗客户端 """
         logger.info("机器狗客户端启动")
         await self.ipc_server.启动()
+        # 启动本地直连控制服务（独立运行，不受云端连接状态影响）
+        direct_control_task = asyncio.create_task(self.ws_control_server.服务循环(), name="direct-control-ws")
         try:
             while True:
                 try:
@@ -640,6 +751,11 @@ class RobotClient:
         except asyncio.CancelledError:
             logger.info("收到中断信号，正在退出...")
         finally:
+            direct_control_task.cancel()
+            try:
+                await direct_control_task
+            except (asyncio.CancelledError, Exception):
+                pass
             await self.断开连接到服务器(shutdown_resources=True)
             await self.ipc_server.关闭()
             try:
