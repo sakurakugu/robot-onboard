@@ -13,13 +13,11 @@ class WebSocketManager:
     # 通道名称 -> 连接状态属性名
     _CHANNEL_STATUS_ATTRS: Dict[str, str] = {
         "business": "connected",
-        "control": "connected_control",
         "audio_upload": "connected_audio_upload",
         "audio_download": "connected_audio_download",
     }
     # 二级通道配置（不含business）: 通道名称 -> (ws属性名, url配置键)
     _SECONDARY_CHANNEL_CONFIG: Dict[str, tuple] = {
-        "control": ("ws_control", "control"),
         "audio_upload": ("ws_audio_upload", "audio_upload"),
         "audio_download": ("ws_audio_download", "audio_download"),
     }
@@ -28,11 +26,9 @@ class WebSocketManager:
         self.config = config
         self.logger = get_logger("robot-agent")
         self.ws_business: Optional[ClientConnection] = None
-        self.ws_control: Optional[ClientConnection] = None
         self.ws_audio_upload: Optional[ClientConnection] = None
         self.ws_audio_download: Optional[ClientConnection] = None
         self.connected = False
-        self.connected_control = False
         self.connected_audio_upload = False
         self.connected_audio_download = False
         self.robot_uuid: Optional[str] = None
@@ -63,14 +59,11 @@ class WebSocketManager:
         """ _resolve_server_urls """
         server_cfg = self.config.get("server", {})
         business_url = server_cfg.get("business_url") or server_cfg.get("url")
-        control_url = server_cfg.get("control_url")
         audio_upload_url = server_cfg.get("audio_upload_url")
         audio_download_url = server_cfg.get("audio_download_url")
 
         # 如果未配置，使用business_url作为所有通道的URL
         if business_url:
-            if not control_url:
-                control_url = business_url
             if not audio_upload_url:
                 audio_upload_url = business_url
             if not audio_download_url:
@@ -78,7 +71,6 @@ class WebSocketManager:
 
         return {
             "business": business_url or "",
-            "control": control_url or "",
             "audio_upload": audio_upload_url or "",
             "audio_download": audio_download_url or "",
         }
@@ -104,17 +96,6 @@ class WebSocketManager:
             self.connected = True
             self.logger.info("✓ 业务通道连接成功")
 
-            control_url = urls.get("control")
-            if control_url:
-                control_full = self._为URL添加机器人参数(control_url, robot_uuid)
-                try:
-                    self.logger.info(f"正在连接控制通道: {control_full}")
-                    self.ws_control = await websockets.connect(control_full)
-                    self.connected_control = True
-                    self.logger.info("✓ 控制通道连接成功")
-                except Exception as e:
-                    self.logger.warning(f"✗ 控制通道连接失败: {e}")
-
             audio_upload_url = urls.get("audio_upload")
             if audio_upload_url:
                 audio_upload_full = self._为URL添加机器人参数(audio_upload_url, robot_uuid)
@@ -139,11 +120,10 @@ class WebSocketManager:
 
             connected_count = sum([
                 self.connected,
-                self.connected_control,
                 self.connected_audio_upload,
                 self.connected_audio_download
             ])
-            self.logger.info(f"已连接到服务器，机器狗UUID: {robot_uuid}，成功通道: {connected_count}/4")
+            self.logger.info(f"已连接到服务器，机器狗UUID: {robot_uuid}，成功通道: {connected_count}/3")
             return True
         except Exception as e:
             self.logger.error(f"连接失败: {e}")
@@ -154,7 +134,6 @@ class WebSocketManager:
         """ 断开所有WebSocket通道 """
         _ws_attrs = [
             ("ws_business", "connected"),
-            ("ws_control", "connected_control"),
             ("ws_audio_upload", "connected_audio_upload"),
             ("ws_audio_download", "connected_audio_download"),
         ]
@@ -172,7 +151,6 @@ class WebSocketManager:
         """ 发送消息到指定通道 """
         ws_map = {
             "business": (self.ws_business, self.connected),
-            "control": (self.ws_control, self.connected_control),
             "audio_upload": (self.ws_audio_upload, self.connected_audio_upload),
             "audio_download": (self.ws_audio_download, self.connected_audio_download),
         }
@@ -187,7 +165,6 @@ class WebSocketManager:
                 ws, is_connected = ws_map.get(channel, (None, False))
                 ws_map = {
                     "business": (self.ws_business, self.connected),
-                    "control": (self.ws_control, self.connected_control),
                     "audio_upload": (self.ws_audio_upload, self.connected_audio_upload),
                     "audio_download": (self.ws_audio_download, self.connected_audio_download),
                 }
@@ -211,7 +188,6 @@ class WebSocketManager:
         # 获取通道状态的引用
         status_map = {
             "business": lambda: self.connected,
-            "control": lambda: self.connected_control,
             "audio_upload": lambda: self.connected_audio_upload,
             "audio_download": lambda: self.connected_audio_download,
         }
@@ -266,7 +242,6 @@ class WebSocketManager:
 
         channel_checks = [
             ("business", self.connected),
-            ("control", self.connected_control),
             ("audio_upload", self.connected_audio_upload),
             ("audio_download", self.connected_audio_download),
         ]

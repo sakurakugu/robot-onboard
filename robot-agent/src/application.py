@@ -255,17 +255,14 @@ class RobotClient:
     async def 发送心跳(self) -> None:
         """ 发送心跳消息 """
         message = 构建心跳消息(self.config["robot"]["uuid"])
-        if self.ws_manager.connected_control:
-            await self.发送消息(message, channel="control")
-        else:
-            await self.发送消息(message, channel="business")
+        await self.发送消息(message, channel="business")
 
     async def 发送状态(self, status_msg: Dict[str, Any]) -> None:
         """ 发送状态消息 """
         message = 构建状态消息(
             self.config["robot"]["uuid"], status_msg.get("seq"), status_msg.get("data", {})
         )
-        await self.发送消息(message, channel="control")
+        await self.发送消息(message, channel="business")
 
     async def 发送拍照响应(
         self, request_id: str, success: bool, image: Optional[str] = None, error: Optional[str] = None
@@ -337,7 +334,7 @@ class RobotClient:
     async def _发送IPC状态循环(self) -> None:
         while True:
             status_msg = await self._ipc_status_queue.get()
-            if not self.ws_manager.connected and not self.ws_manager.connected_control:
+            if not self.ws_manager.connected:
                 continue
             await self.发送状态(status_msg)
 
@@ -828,12 +825,6 @@ class RobotClient:
                     self.ws_manager.接受消息循环("business", self.ws_manager.ws_business, self._处理收到的消息)
                 )
             )
-        if self.ws_manager.ws_control and self.ws_manager.connected_control:
-            tasks.append(
-                asyncio.create_task(
-                    self.ws_manager.接受消息循环("control", self.ws_manager.ws_control, self._处理收到的消息)
-                )
-            )
         if self.ws_manager.ws_audio_download and self.ws_manager.connected_audio_download:
             tasks.append(
                 asyncio.create_task(
@@ -862,7 +853,6 @@ class RobotClient:
         """ 检查是否有活动的 WebSocket 连接 """
         return bool(
             self.ws_manager.ws_business
-            or self.ws_manager.ws_control
             or self.ws_manager.ws_audio_download
             or self.ws_manager.ws_audio_upload
         )

@@ -312,10 +312,6 @@ class Config:
         return self.get("robot.version") or "0.0.0"
 
     @property
-    def server_control_url(self) -> str:
-        return self.get("server.control_url") or ""
-
-    @property
     def server_business_url(self) -> str:
         return self.get("server.business_url") or ""
 
