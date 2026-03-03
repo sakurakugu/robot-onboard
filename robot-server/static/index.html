@@ -120,15 +120,28 @@
           </div>
           <div class="collapse-content expanded" id="wifi-content">
             <div class="collapse-body">
-              <div class="card-title">
-                可用WiFi网络
-                <button
-                  class="refresh-btn secondary"
-                  id="refreshWifi"
-                  onclick="scanWifi()"
-                >
-                  刷新
-                </button>
+              <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>可用WiFi网络</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <label
+                    style="font-size: 13px; font-weight: normal; display: flex; align-items: center; gap: 4px; cursor: pointer; color: #666;"
+                  >
+                    <input
+                      type="checkbox"
+                      id="wifiGroupToggle"
+                      checked
+                      onchange="toggleWifiGrouping(this)"
+                    />
+                    聚合展示
+                  </label>
+                  <button
+                    class="refresh-btn secondary"
+                    id="refreshWifi"
+                    onclick="scanWifi()"
+                  >
+                    刷新
+                  </button>
+                </div>
               </div>
               <div id="wifiList" class="wifi-list">
                 <div class="loading">正在扫描WiFi...</div>

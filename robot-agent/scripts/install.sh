@@ -69,7 +69,7 @@ if systemctl is-active --quiet $SERVICE_NAME; then
     echo -e "${BLUE}服务名称: $SERVICE_NAME${NC}"
     echo -e "${BLUE}查看日志: sudo journalctl -u $SERVICE_NAME -f${NC}"
     echo -e "${BLUE}停止服务: sudo systemctl stop $SERVICE_NAME${NC}"
-    
+
     # 显示当前状态
     systemctl status $SERVICE_NAME --no-pager | head -n 10
 else

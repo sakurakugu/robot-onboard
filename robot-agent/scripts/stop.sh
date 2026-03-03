@@ -21,7 +21,7 @@ if systemctl is-active --quiet "$SERVICE_NAME"; then
     echo -e "${BLUE}检测到 $SERVICE_NAME 正在运行，请先停止它: sudo systemctl stop $SERVICE_NAME${NC}"
     exit 1
 fi
-    
+
 # 检查 PID 文件
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")

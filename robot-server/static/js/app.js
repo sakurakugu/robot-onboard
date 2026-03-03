@@ -302,6 +302,9 @@ function showVolumeMessage(text, type) {
 
 // ==================== WiFi功能 ====================
 
+let currentWifiList = [];
+let groupBySSID = true;
+
 function scanWifi() {
   const wifiListDiv = document.getElementById("wifiList");
   const refreshBtn = document.getElementById("refreshWifi");
@@ -313,25 +316,9 @@ function scanWifi() {
   return fetch("/api/v1/wifi/scan")
     .then((response) => response.json())
     .then((data) => {
-      if (data.success && data.networks.length > 0) {
-        wifiListDiv.innerHTML = "";
-        data.networks.forEach((network) => {
-          const item = document.createElement("div");
-          item.className =
-            "wifi-item" + (network.in_use ? " connected" : "");
-          item.onclick = () => selectWifi(network.ssid, item);
-
-          const badge = network.in_use
-            ? '<span class="badge connected">已连接</span>'
-            : "";
-          item.innerHTML = `
-                                <div>
-                                    <strong>${network.ssid}</strong>${badge}
-                                    <br><small style="color: #888;">信号: ${network.signal}% | 频道: ${network.channel} | ${network.security}</small>
-                                </div>
-                            `;
-          wifiListDiv.appendChild(item);
-        });
+      if (data.success && data.networks) {
+        currentWifiList = data.networks;
+        renderWifiList();
       } else {
         wifiListDiv.innerHTML =
           '<div class="loading">未找到可用WiFi网络</div>';
@@ -344,6 +331,74 @@ function scanWifi() {
       refreshBtn.disabled = false;
       refreshBtn.textContent = "刷新";
     });
+}
+
+function renderWifiList() {
+  const wifiListDiv = document.getElementById("wifiList");
+
+  if (!currentWifiList || currentWifiList.length === 0) {
+    wifiListDiv.innerHTML = '<div class="loading">未找到可用WiFi网络</div>';
+    return;
+  }
+
+  let displayList = [...currentWifiList];
+
+  if (groupBySSID) {
+    const groups = {};
+    displayList.forEach((net) => {
+      // 如果没有这个SSID或者当前信号更强且未连接（优先保留已连接的）
+      if (!groups[net.ssid]) {
+        groups[net.ssid] = net;
+      } else {
+        const existing = groups[net.ssid];
+        // 如果现有的是已连接的，不替换
+        if (existing.in_use) return;
+        // 如果新的是已连接的，替换
+        if (net.in_use) {
+          groups[net.ssid] = net;
+          return;
+        }
+        // 比较信号强度
+        if (parseInt(net.signal) > parseInt(existing.signal)) {
+          groups[net.ssid] = net;
+        }
+      }
+    });
+    displayList = Object.values(groups);
+  }
+
+  // 排序：已连接优先，然后按信号强度降序
+  displayList.sort((a, b) => {
+    if (a.in_use) return -1;
+    if (b.in_use) return 1;
+    return parseInt(b.signal) - parseInt(a.signal);
+  });
+
+  wifiListDiv.innerHTML = "";
+  displayList.forEach((network) => {
+    const item = document.createElement("div");
+    item.className = "wifi-item" + (network.in_use ? " connected" : "");
+    item.onclick = () => selectWifi(network.ssid, item);
+
+    const badge = network.in_use
+      ? '<span class="badge connected">已连接</span>'
+      : "";
+
+    // 如果是聚合模式，可能不显示具体的BSSID信息（虽然原API也不返回BSSID，只返回SSID/CHAN/SIGNAL/SECURITY）
+    // 这里我们保持原样显示
+    item.innerHTML = `
+      <div>
+          <strong>${network.ssid}</strong>${badge}
+          <br><small style="color: #888;">信号: ${network.signal}% | 频道: ${network.channel} | ${network.security}</small>
+      </div>
+    `;
+    wifiListDiv.appendChild(item);
+  });
+}
+
+function toggleWifiGrouping(checkbox) {
+  groupBySSID = checkbox.checked;
+  renderWifiList();
 }
 
 function selectWifi(ssid, element) {
