@@ -72,9 +72,9 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
 
 
     # 服务器配置 [server]
-    配置字段("server", "business_url", f"ws://{DEFAULT_SERVER_ADDR}:9000/api/v1/interaction/connect/business", "业务连接URL", "string"),
-    配置字段("server", "audio_upload_url", f"ws://{DEFAULT_SERVER_ADDR}:9000/api/v1/interaction/connect/audio_upload", "音频上传URL", "string"),
-    配置字段("server", "audio_download_url", f"ws://{DEFAULT_SERVER_ADDR}:9000/api/v1/interaction/connect/audio_download", "音频下载URL", "string"),
+    配置字段("server", "business_url", f"ws://{DEFAULT_SERVER_ADDR}:9000/api/v1/robot/business", "业务连接URL", "string"),
+    配置字段("server", "audio_upload_url", f"ws://{DEFAULT_SERVER_ADDR}:9000/api/v1/robot/audio_upload", "音频上传URL", "string"),
+    配置字段("server", "audio_download_url", f"ws://{DEFAULT_SERVER_ADDR}:9000/api/v1/robot/audio_download", "音频下载URL", "string"),
     配置字段("server", "reconnect_interval", 5, "重连间隔（秒）", "int"),
     配置字段("server", "heartbeat_interval", 30, "心跳间隔（秒）", "int"),
 
