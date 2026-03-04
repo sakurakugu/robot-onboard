@@ -2,10 +2,10 @@ import asyncio
 import json
 import re
 from typing import Any, Awaitable, Callable, Dict, Optional
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse, urlunparse, urljoin
 
 import websockets
-from sparkrobot_common import get_logger
+from sparkrobot_common import get_logger, DEFAULT_SERVER_ADDR
 from websockets import ClientConnection
 
 
@@ -58,9 +58,19 @@ class WebSocketManager:
     def _解析服务器URL配置(self) -> Dict[str, str]:
         """ _resolve_server_urls """
         server_cfg = self.config.get("server", {})
+        server_url = server_cfg.get("server_url") or f"ws://{DEFAULT_SERVER_ADDR}:9000"
+
         business_url = server_cfg.get("business_url") or server_cfg.get("url")
+        if business_url and business_url.startswith("/"):
+            business_url = urljoin(server_url, business_url)
+
         audio_upload_url = server_cfg.get("audio_upload_url")
+        if audio_upload_url and audio_upload_url.startswith("/"):
+            audio_upload_url = urljoin(server_url, audio_upload_url)
+
         audio_download_url = server_cfg.get("audio_download_url")
+        if audio_download_url and audio_download_url.startswith("/"):
+            audio_download_url = urljoin(server_url, audio_download_url)
 
         # 如果未配置，使用business_url作为所有通道的URL
         if business_url:

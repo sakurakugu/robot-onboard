@@ -15,6 +15,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urljoin
 from pathlib import Path
 from typing import Any, Callable
 
@@ -312,16 +313,29 @@ class Config:
         return self.get("robot.version") or "0.0.0"
 
     @property
+    def server_url(self) -> str:
+        return self.get("server.server_url") or ""
+
+    @property
     def server_business_url(self) -> str:
-        return self.get("server.business_url") or ""
+        url = self.get("server.business_url") or ""
+        if url.startswith("/"):
+            return urljoin(self.server_url, url)
+        return url
 
     @property
     def server_audio_upload_url(self) -> str:
-        return self.get("server.audio_upload_url") or ""
+        url = self.get("server.audio_upload_url") or ""
+        if url.startswith("/"):
+            return urljoin(self.server_url, url)
+        return url
 
     @property
     def server_audio_download_url(self) -> str:
-        return self.get("server.audio_download_url") or ""
+        url = self.get("server.audio_download_url") or ""
+        if url.startswith("/"):
+            return urljoin(self.server_url, url)
+        return url
 
     @property
     def server_reconnect_interval(self) -> int:
