@@ -3,6 +3,34 @@
 let isLoggedIn = false;
 let currentUsername = "";
 
+// 全局消息提示
+function showMessage(message, type = 'info', duration = 3000) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+
+  // 图标映射
+  let icon = '';
+  if (type === 'success') icon = '✅';
+  else if (type === 'error') icon = '❌';
+  else if (type === 'warning') icon = '⚠️';
+  else icon = 'ℹ️';
+
+  toast.innerHTML = `<span style="font-size: 1.2em;">${icon}</span> <span>${message}</span>`;
+
+  container.appendChild(toast);
+
+  // 自动移除
+  setTimeout(() => {
+    toast.classList.add('hiding');
+    toast.addEventListener('animationend', () => {
+      toast.remove();
+    });
+  }, duration);
+}
+
 // 检查登录状态
 async function checkLoginStatus() {
   try {
@@ -84,14 +112,7 @@ async function handleLogout() {
 
 // 显示登录消息
 function showLoginMessage(message, isSuccess) {
-  const el = document.getElementById("loginMessage");
-  el.textContent = message;
-  el.className = "message " + (isSuccess ? "success" : "error");
-  el.style.display = "block";
-
-  setTimeout(() => {
-    el.style.display = "none";
-  }, 3000);
+  showMessage(message, isSuccess ? "success" : "error");
 }
 
 // 显示/隐藏登录界面
@@ -187,9 +208,6 @@ function updateVolumeDisplay(value) {
 }
 
 async function loadVolume() {
-  const messageDiv = document.getElementById("volumeMessage");
-  messageDiv.style.display = "none";
-
   try {
     const response = await fetch("/api/v1/volume");
     const data = await response.json();
@@ -214,9 +232,6 @@ async function loadVolume() {
 }
 
 async function setVolume() {
-  const messageDiv = document.getElementById("volumeMessage");
-  messageDiv.style.display = "none";
-
   try {
     const response = await fetch("/api/v1/volume", {
       method: "POST",
@@ -243,9 +258,6 @@ async function setVolume() {
 }
 
 async function toggleMute() {
-  const messageDiv = document.getElementById("volumeMessage");
-  messageDiv.style.display = "none";
-
   isMuted = !isMuted;
 
   try {
@@ -291,13 +303,7 @@ function updateMuteButton() {
 }
 
 function showVolumeMessage(text, type) {
-  const messageDiv = document.getElementById("volumeMessage");
-  messageDiv.className = `message ${type}`;
-  messageDiv.textContent = text;
-  messageDiv.style.display = "block";
-  setTimeout(() => {
-    messageDiv.style.display = "none";
-  }, 3000);
+  showMessage(text, type);
 }
 
 // ==================== WiFi功能 ====================
@@ -413,11 +419,8 @@ function connectWifi(e) {
   e.preventDefault();
   const ssid = document.getElementById("ssid").value;
   const password = document.getElementById("password").value;
-  const messageDiv = document.getElementById("wifiMessage");
 
-  messageDiv.className = "message";
-  messageDiv.style.display = "block";
-  messageDiv.textContent = "正在连接WiFi...";
+  showMessage("正在连接WiFi...", "info");
 
   fetch("/api/v1/wifi/connect", {
     method: "POST",
@@ -437,18 +440,14 @@ function connectWifi(e) {
     })
     .then((data) => {
       if (data.success) {
-        messageDiv.className = "message success";
-        messageDiv.textContent = "WiFi连接成功！";
+        showMessage("WiFi连接成功！", "success");
         setTimeout(() => scanWifi(), 2000);
       } else {
-        messageDiv.className = "message error";
-        messageDiv.textContent =
-          "WiFi连接失败：" + (data.error || "未知错误");
+        showMessage("WiFi连接失败：" + (data.error || "未知错误"), "error");
       }
     })
     .catch((error) => {
-      messageDiv.className = "message error";
-      messageDiv.textContent = "请求失败：" + error.message;
+      showMessage("请求失败：" + error.message, "error");
     });
 }
 
@@ -482,13 +481,7 @@ function formatFileSize(bytes) {
 }
 
 function showLogMessage(text, type) {
-  const messageDiv = document.getElementById("logMessage");
-  messageDiv.className = `message ${type}`;
-  messageDiv.textContent = text;
-  messageDiv.style.display = "block";
-  setTimeout(() => {
-    messageDiv.style.display = "none";
-  }, 4000);
+  showMessage(text, type);
 }
 
 function renderLogAppOptions(apps, selectedValue) {
@@ -784,7 +777,6 @@ function renderInput(section, key, value, field) {
 }
 
 async function saveConfig() {
-  const messageDiv = document.getElementById("configMessage");
   const updates = {};
 
   // 只收集非只读字段
@@ -826,32 +818,22 @@ async function saveConfig() {
     if (handleApiError(response, data)) return;
 
     if (data.success) {
-      messageDiv.className = "message success";
-      messageDiv.textContent = "配置保存成功！";
-      messageDiv.style.display = "block";
+      showMessage("配置保存成功！", "success");
     } else {
-      messageDiv.className = "message error";
-      messageDiv.textContent =
-        "保存失败: " + (data.message || "未知错误");
-      messageDiv.style.display = "block";
+      showMessage(
+        "保存失败: " + (data.message || "未知错误"),
+        "error",
+      );
     }
   } catch (error) {
-    messageDiv.className = "message error";
-    messageDiv.textContent = "请求失败: " + error.message;
-    messageDiv.style.display = "block";
+    showMessage("请求失败: " + error.message, "error");
   }
-
-  setTimeout(() => {
-    messageDiv.style.display = "none";
-  }, 3000);
 }
 
 async function resetConfig() {
   if (!confirm("确定要重置所有配置为默认值吗？\n（UUID将保持不变）")) {
     return;
   }
-
-  const messageDiv = document.getElementById("configMessage");
 
   try {
     const response = await fetch("/api/v1/config/reset", {
@@ -866,22 +848,17 @@ async function resetConfig() {
     if (handleApiError(response, data)) return;
 
     if (data.success) {
-      messageDiv.className = "message success";
-      messageDiv.textContent = "配置已重置为默认值！";
+      showMessage("配置已重置为默认值！", "success");
       await loadConfig();
     } else {
-      messageDiv.className = "message error";
-      messageDiv.textContent =
-        "重置失败: " + (data.message || "未知错误");
+      showMessage(
+        "重置失败: " + (data.message || "未知错误"),
+        "error",
+      );
     }
   } catch (error) {
-    messageDiv.className = "message error";
-    messageDiv.textContent = "请求失败: " + error.message;
+    showMessage("请求失败: " + error.message, "error");
   }
-
-  setTimeout(() => {
-    messageDiv.style.display = "none";
-  }, 3000);
 }
 
 // ==================== SDK 配置和运控管理功能 ====================
@@ -890,14 +867,7 @@ const SDK_API_BASE = "/api/v1/sdk";
 
 // 显示 SDK 相关消息
 function showSdkMessage(elementId, message, isSuccess) {
-  const el = document.getElementById(elementId);
-  el.textContent = message;
-  el.className = "message " + (isSuccess ? "success" : "error");
-  el.style.display = "block";
-
-  setTimeout(() => {
-    el.style.display = "none";
-  }, 5000);
+  showMessage(message, isSuccess ? "success" : "error");
 }
 
 // 加载 SDK 配置
@@ -1090,7 +1060,7 @@ async function restartMotion() {
   }
 
   try {
-    showSdkMessage("restartMessage", "正在重启运控服务，请稍候...", true);
+    showMessage("正在重启运控服务，请稍候...", "info");
 
     const response = await fetch(`${SDK_API_BASE}/motion/restart`, {
       method: "POST",
@@ -1149,10 +1119,10 @@ async function loadTelemetry() {
     const devDividerEl = document.getElementById("telemetryDevDivider");
     if (d.dev_name || d.model) {
       devEl.textContent = `🐕 ${d.dev_name || d.model}`;
-      devDividerEl.style.display = "";
+      devDividerEl.classList.remove("hidden");
     } else {
       devEl.textContent = "";
-      devDividerEl.style.display = "none";
+      devDividerEl.classList.add("hidden");
     }
   } catch (e) {
     // 静默失败
@@ -1169,3 +1139,26 @@ window.onload = function () {
   loadTelemetry();
   setInterval(loadTelemetry, 5000);
 };
+
+// ==================== 全局快捷键 ====================
+document.addEventListener("keydown", function (e) {
+  // Ctrl+S (Windows/Linux) 或 Command+S (Mac)
+  if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+    e.preventDefault();
+    console.log("按下“Ctrl+S”键，触发了保存操作……");
+
+    const activeTab = document.querySelector(".tab-content.active");
+    if (!activeTab) return;
+
+    if (activeTab.id === "config-tab") {
+      saveConfig();
+    } else if (activeTab.id === "sdk-tab") {
+      // 在 SDK 页面，尝试保存所有配置
+      updateSdkConfig();
+      updateMotionConfig();
+    } else if (activeTab.id === "system-tab") {
+      // 在系统设置页面，保存音量设置
+      setVolume();
+    }
+  }
+});

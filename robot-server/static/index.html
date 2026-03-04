@@ -9,6 +9,9 @@
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
+    <!-- 全局消息弹窗容器 -->
+    <div id="toast-container"></div>
+
     <!-- 登录界面 -->
     <div id="loginOverlay" class="login-overlay">
       <div class="login-box">
@@ -36,7 +39,6 @@
           </div>
           <button type="submit" class="btn-full">登录</button>
         </form>
-        <div id="loginMessage" class="message"></div>
       </div>
     </div>
 
@@ -58,9 +60,8 @@
         <span class="telemetry-divider">|</span>
         <span class="telemetry-item" id="telemetryTemp">🌡️ --</span>
         <span
-          class="telemetry-divider"
+          class="telemetry-divider hidden"
           id="telemetryDevDivider"
-          style="display: none"
           >|</span
         >
         <span class="telemetry-item" id="telemetryDev"></span>
@@ -107,7 +108,6 @@
                 <button onclick="loadVolume()">🔄 刷新</button>
                 <button onclick="setVolume()">💾 应用</button>
               </div>
-              <div id="volumeMessage" class="message"></div>
             </div>
           </div>
         </div>
@@ -120,12 +120,10 @@
           </div>
           <div class="collapse-content expanded" id="wifi-content">
             <div class="collapse-body">
-              <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="card-title wifi-card-header">
                 <span>可用WiFi网络</span>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <label
-                    style="font-size: 13px; font-weight: normal; display: flex; align-items: center; gap: 4px; cursor: pointer; color: #666;"
-                  >
+                <div class="wifi-controls">
+                  <label class="wifi-group-label">
                     <input
                       type="checkbox"
                       id="wifiGroupToggle"
@@ -172,7 +170,6 @@
                   </div>
                   <button type="submit">🔗 连接WiFi</button>
                 </form>
-                <div id="wifiMessage" class="message"></div>
               </div>
             </div>
           </div>
@@ -214,7 +211,6 @@
               <div id="logList" class="log-list">
                 <div class="loading">正在加载日志列表...</div>
               </div>
-              <div id="logMessage" class="message"></div>
             </div>
           </div>
         </div>
@@ -231,8 +227,6 @@
         <div id="configContainer">
           <div class="loading">正在加载配置...</div>
         </div>
-
-        <div id="configMessage" class="message"></div>
       </div>
 
       <!-- 群控配置页面 -->
@@ -277,8 +271,6 @@
                   ↩️ 重置
                 </button>
               </div>
-
-              <div id="sdkMessage" class="message"></div>
             </div>
           </div>
         </div>
@@ -315,8 +307,6 @@
                   ↩️ 重置
                 </button>
               </div>
-
-              <div id="motionMessage" class="message"></div>
             </div>
           </div>
         </div>
@@ -342,8 +332,6 @@
               <button class="btn-success btn-full" onclick="restartMotion()">
                 🔄 重启运控服务
               </button>
-
-              <div id="restartMessage" class="message"></div>
             </div>
           </div>
         </div>
