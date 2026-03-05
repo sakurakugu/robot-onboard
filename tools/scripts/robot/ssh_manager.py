@@ -95,7 +95,7 @@ class SSH管理器:
 
         return True
 
-    def 上传目录(self, local_path: str, remote_path: str, ignore_patterns: list = None) -> bool:
+    def 上传目录(self, local_path: str, remote_path: str, ignore_patterns: Optional[list[str]] = None) -> bool:
         """递归上传目录到远程机器狗
 
         Args:

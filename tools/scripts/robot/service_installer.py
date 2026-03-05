@@ -107,7 +107,11 @@ class 服务安装管理器:
             print(output)
             return True
 
-        print(f"✗ 安装失败: {error}")
+        details = (error or "").strip() or (output or "").strip()
+        if details:
+            print(f"✗ 安装失败: {details}")
+        else:
+            print("✗ 安装失败: 未返回错误信息")
         return False
 
     def 安装RobotAgent(self, package_ext: str | None = None) -> bool:
@@ -129,6 +133,16 @@ class 服务安装管理器:
             return False
 
         print("✓ Robot Agent 已解压")
+
+        # 赋予执行权限
+        print("正在设置权限...")
+        # 尝试检测 start.sh 位置
+        start_script = f"{remote_path}/scripts/start.sh"
+        stop_script = f"{remote_path}/scripts/stop.sh"
+
+        # 确保脚本有执行权限
+        self.ssh.执行命令(f"chmod +x {start_script}")
+        self.ssh.执行命令(f"chmod +x {stop_script}")
         return True
 
     def _获取本地项目路径(self, project_name: str) -> Path | None:
@@ -225,8 +239,8 @@ class 服务安装管理器:
                     file_path = root_path / file_name
                     if self._是否忽略路径(file_path):
                         continue
-                    arcname = file_path.relative_to(source_dir).as_posix()
-                    tar_file.add(file_path, arcname=arcname)
+                arcname = file_path.relative_to(source_dir).as_posix()
+                tar_file.add(file_path, arcname=arcname)
         return output_path
 
     def _上传并解压(self, archive_path: Path, remote_path: str) -> bool:
@@ -259,4 +273,5 @@ class 服务安装管理器:
         if not success:
             print(f"✗ 解压失败: {error}")
             return False
+        self.ssh.执行命令(f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_path}", use_sudo=True)
         return True

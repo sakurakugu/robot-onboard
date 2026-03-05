@@ -9,7 +9,7 @@ import subprocess
 import configparser
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 # 配置
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -162,7 +162,7 @@ def 连接机器狗(name: str, ip: str):
 def 获取当前时间戳() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
 
-def 备份文件(source_dir: Path, dest_dir: Path, ignore_patterns: List[str] = None):
+def 备份文件(source_dir: Path, dest_dir: Path, ignore_patterns: Optional[List[str]] = None):
     """使用 shutil.copytree 进行备份"""
     try:
         if ignore_patterns:

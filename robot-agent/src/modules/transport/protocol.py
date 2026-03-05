@@ -226,3 +226,24 @@ def 构建SDK模式响应消息(
             "error": error,
         },
     }
+
+
+def 构建安装包下载响应消息(
+    robot_uuid: str,           # 机器人 UUID
+    request_id: str,           # 请求ID
+    success: bool,             # 是否成功
+    downloaded: list[str] | None = None,  # 成功下载的包类型列表
+    error: str | None = None,  # 错误信息（失败时）
+) -> Dict[str, Any]:
+    """ build_package_download_response """
+    return {
+        "type": "package_download_response",
+        "robotId": robot_uuid,
+        "timestamp": int(time.time() * 1000),
+        "data": {
+            "requestId": request_id,
+            "success": success,
+            "downloaded": downloaded or [],
+            "error": error,
+        },
+    }

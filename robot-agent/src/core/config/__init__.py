@@ -301,6 +301,10 @@ class Config:
         return self.get("robot.uuid") or ""
 
     @property
+    def workspace(self) -> Path:
+        return self.base_dir
+
+    @property
     def robot_name(self) -> str:
         return self.get("robot.name") or ""
 

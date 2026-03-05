@@ -33,6 +33,7 @@ from modules.control.process import ProcessController
 from modules.control.ws_control_server import WsControlServer
 from modules.transport.protocol import (
     构建SDK模式响应消息,
+    构建安装包下载响应消息,
     构建心跳消息,
     构建拍照响应消息,
     构建文本输入消息,
@@ -134,6 +135,7 @@ class RobotClient:
             "sdk_mode_set": self._处理SDK模式设置,
             "sdk_mode_get": self._处理SDK模式获取,
             "log_mark": self._处理日志标记,
+            "package_download": self._处理安装包下载,
         }
 
         """ 初始化动作执行函数 """
@@ -333,6 +335,15 @@ class RobotClient:
         """发送日志标记响应消息"""
         message = 构建日志标记响应消息(
             self.config["robot"]["uuid"], request_id, success, marker, error
+        )
+        await self.发送消息(message, channel="business")
+
+    async def 发送安装包下载响应(
+        self, request_id: str, success: bool, downloaded: list[str] | None = None, error: Optional[str] = None
+    ) -> None:
+        """发送安装包下载响应消息"""
+        message = 构建安装包下载响应消息(
+            self.config["robot"]["uuid"], request_id, success, downloaded, error
         )
         await self.发送消息(message, channel="business")
 
@@ -571,6 +582,87 @@ class RobotClient:
         except Exception as e:
             logger.error(f"处理日志标记请求时出错: {e}", exc_info=True)
             await self.发送日志标记响应(request_id, False, None, str(e))
+
+    async def _处理安装包下载(self, data: Dict[str, Any]) -> None:
+        """处理安装包下载消息：从云端 HTTP 下载安装包并放到 ~/sparkrobot/packages/"""
+        import hashlib
+        import re
+
+        request_id = data.get("requestId", "")
+        download_paths: Dict[str, str] = data.get("downloadPaths", {})
+        hashes: Dict[str, str] = data.get("hashes", {})
+
+        # 包类型到目标文件名的映射
+        package_filenames = {
+            "agent": "robot-agent.tar.gz",
+            "server": "robot-server.tar.gz",
+            "common": "sparkrobot-common.tar.gz",
+        }
+
+        logger.info(f"收到安装包下载请求: {request_id}, 包含: {list(download_paths.keys())}")
+
+        # 从 ws URL 推导 HTTP 基础 URL
+        server_cfg = self.config.get("server", {})
+        server_url: str = server_cfg.get("server_url", "")
+        if server_url.startswith("wss://"):
+            http_base = "https://" + server_url[6:]
+        elif server_url.startswith("ws://"):
+            http_base = "http://" + server_url[5:]
+        else:
+            # 去掉路径部分，保留 scheme+host+port
+            http_base = re.sub(r"^ws://", "http://", server_url)
+
+        # 去掉末尾路径（只保留 scheme://host:port）
+        from urllib.parse import urlparse
+        parsed = urlparse(http_base)
+        http_base = f"{parsed.scheme}://{parsed.netloc}"
+
+        packages_dir = self.config_store.workspace / "packages"
+        packages_dir.mkdir(parents=True, exist_ok=True)
+
+        downloaded: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                for pkg_type, rel_path in download_paths.items():
+                    if pkg_type not in package_filenames:
+                        logger.warning(f"未知包类型: {pkg_type}，跳过")
+                        continue
+
+                    download_url = http_base + rel_path
+                    target_path = packages_dir / package_filenames[pkg_type]
+                    expected_hash = hashes.get(pkg_type, "")
+
+                    logger.info(f"开始下载 {pkg_type}: {download_url}")
+                    try:
+                        async with client.stream("GET", download_url) as response:
+                            response.raise_for_status()
+                            sha256 = hashlib.sha256()
+                            with open(target_path, "wb") as f:
+                                async for chunk in response.aiter_bytes(chunk_size=65536):
+                                    f.write(chunk)
+                                    sha256.update(chunk)
+
+                        # 校验哈希
+                        if expected_hash:
+                            actual_hash = sha256.hexdigest()
+                            if actual_hash.lower() != expected_hash.lower():
+                                raise ValueError(
+                                    f"{pkg_type} 哈希校验失败: 期望 {expected_hash}，实际 {actual_hash}"
+                                )
+
+                        downloaded.append(pkg_type)
+                        logger.info(f"{pkg_type} 下载完成: {target_path}")
+
+                    except Exception as e:
+                        logger.error(f"下载 {pkg_type} 失败: {e}")
+                        raise RuntimeError(f"下载 {pkg_type} 失败: {e}") from e
+
+            await self.发送安装包下载响应(request_id, True, downloaded)
+            logger.info(f"安装包下载全部完成: {downloaded}")
+
+        except Exception as e:
+            logger.error(f"处理安装包下载请求时出错: {e}", exc_info=True)
+            await self.发送安装包下载响应(request_id, False, downloaded or None, str(e))
 
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
         """ 处理文本响应消息 """
