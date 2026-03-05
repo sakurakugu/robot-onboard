@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sparkrobot_common import 获取配置分组信息, 获取配置项字段信息
 
-from ..认证 import 需要认证
 from ..服务.config_service import 获取配置管理器单例
+from ..认证 import 需要认证
 
 router = APIRouter()
 config_manager = 获取配置管理器单例()

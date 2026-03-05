@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from ..认证 import 需要认证_含查询参数
 from ..服务.log_service import 获取日志服务单例
+from ..认证 import 需要认证_含查询参数
 
 router = APIRouter()
 log_service = 获取日志服务单例()
@@ -27,9 +27,10 @@ async def 获取日志列表(app_name: str | None = Query(default=None, descript
 
 
 @router.post("/api/v1/logs/mark")
-async def 写入日志标记(body: 日志标记请求 = 日志标记请求()) -> dict:
+async def 写入日志标记(body: 日志标记请求 | None = None) -> dict:
     try:
-        tag = log_service.写入标记(body.message)
+        payload = body or 日志标记请求()
+        tag = log_service.写入标记(payload.message)
         return {"success": True, "marker": tag}
     except Exception as e:
         raise HTTPException(status_code=500, detail={"success": False, "error": str(e)}) from e

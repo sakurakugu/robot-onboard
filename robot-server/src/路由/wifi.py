@@ -2,8 +2,8 @@ import subprocess
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..认证 import 需要认证
 from ..服务.wifi_service import 扫描WiFi, 连接WiFi
+from ..认证 import 需要认证
 
 router = APIRouter()
 

@@ -161,6 +161,26 @@ class SSH管理器:
         finally:
             sftp.close()
 
+    def 上传文件(self, local_path: str, remote_path: str) -> bool:
+        """上传单个文件到远程机器狗"""
+        if not self.SSH客户端:
+            print("未连接到机器狗")
+            return False
+
+        sftp = self.SSH客户端.open_sftp()
+        try:
+            remote_dir = os.path.dirname(remote_path).replace("\\", "/")
+            self.执行命令(f"mkdir -p {remote_dir}")
+            print(f"正在上传文件: {local_path} ...")
+            sftp.put(local_path, remote_path)
+            print("✓ 文件上传完成")
+            return True
+        except Exception as e:
+            print(f"✗ 上传失败: {e}")
+            return False
+        finally:
+            sftp.close()
+
     def SSH登录(self):
         """SSH 登录到机器狗"""
         print("\n" + "="*50)

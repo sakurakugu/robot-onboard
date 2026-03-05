@@ -77,13 +77,17 @@ class 机器狗配置器:
         return self.sdk.重启运动控制()
 
     # ========== 服务安装相关方法（委托给服务管理器）==========
-    def 安装SparkRobotCommon(self) -> bool:
+    def 安装SparkRobotCommon(self, package_ext: str | None = None) -> bool:
         """安装 SparkRobot Common"""
-        return self.服务.安装SparkRobotCommon()
+        return self.服务.安装SparkRobotCommon(package_ext)
 
-    def 安装RobotServer(self) -> bool:
+    def 安装RobotServer(self, package_ext: str | None = None) -> bool:
         """安装 Robot Server"""
-        return self.服务.安装RobotServer()
+        return self.服务.安装RobotServer(package_ext)
+
+    def 安装RobotAgent(self, package_ext: str | None = None) -> bool:
+        """安装 Robot Agent"""
+        return self.服务.安装RobotAgent(package_ext)
 
     # ========== 用户交互方法 ==========
     def 获取用户输入的IP(self, prompt_prefix: str = "本机", show_network_info: bool = True) -> Optional[str]:

@@ -4,9 +4,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from .服务 import telemetry_service
 from .服务.config_service import 获取配置管理器单例
 from .服务.mdns_service import 初始化并启动_mDNS_服务
-from .服务 import telemetry_service
 from .路由 import auth as auth_router
 from .路由 import config as config_router
 from .路由 import logs as logs_router

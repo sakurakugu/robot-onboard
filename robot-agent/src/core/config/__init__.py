@@ -15,9 +15,9 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from urllib.parse import urljoin
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urljoin
 
 from sparkrobot_common import (
     READONLY_FIELDS,  # 只读字段

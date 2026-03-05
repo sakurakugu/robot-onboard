@@ -2,10 +2,10 @@ import asyncio
 import json
 import re
 from typing import Any, Awaitable, Callable, Dict, Optional
-from urllib.parse import urlparse, urlunparse, urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import websockets
-from sparkrobot_common import get_logger, DEFAULT_SERVER_ADDR
+from sparkrobot_common import DEFAULT_SERVER_ADDR, get_logger
 from websockets import ClientConnection
 
 

@@ -36,17 +36,18 @@ from modules.transport.protocol import (
     构建心跳消息,
     构建拍照响应消息,
     构建文本输入消息,
+    构建日志标记响应消息,
     构建机器人注册消息,
     构建状态消息,
     构建配置响应消息,
     构建音量响应消息,
     构建音频帧消息,
-    构建日志标记响应消息,
     构建音频开始消息,
     构建音频结束消息,
 )
 from modules.transport.ws_manager import WebSocketManager
 from modules.vision.camera import capture_photo
+
 from . import __version__ as ROBOT_AGENT_VERSION
 
 APP_NAME = "robot-agent"
