@@ -111,6 +111,7 @@ def execute_task(choice: str, robot_ip: str, robot_port: int) -> bool:
 
 
 def main():
+    print("\033]0;配置机器狗\007")
     """主函数"""
     print("="*50)
     print("机器狗配置脚本")

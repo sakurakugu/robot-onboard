@@ -16,12 +16,11 @@ import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 import httpx
-from sparkrobot_common import WORKSPACE_DIR, configure_logger, get_logger, 检测机器人运控版本
+from sparkrobot_common import WORKSPACE_DIR, configure_logger, get_logger, 检测机器人运控版本, 获取项目版本
 
 from core.auth_client import get_auth_client
 from core.config import Config
@@ -48,6 +47,7 @@ from modules.transport.protocol import (
 )
 from modules.transport.ws_manager import WebSocketManager
 from modules.vision.camera import capture_photo
+from . import __version__ as ROBOT_AGENT_VERSION
 
 APP_NAME = "robot-agent"
 logger = get_logger(APP_NAME)
@@ -144,15 +144,16 @@ class RobotClient:
 
         """ 初始化机器人版本 """
         version = 检测机器人运控版本()
+        self._motion_control_version = version or "unknown"
         if version:
             # 使用扁平化配置格式
             self.config_store.设置("robot.motion_control_version", version)
 
-        try:
-            agent_ver = pkg_version("robot-agent")
-        except Exception:
-            agent_ver = "unknown"
+        agent_ver = ROBOT_AGENT_VERSION or "unknown"
+        self._agent_version = agent_ver
         self.config_store.设置("robot.agent_version", agent_ver)
+        self._robot_server_version = self._获取robot_server版本()
+        self.config_store.设置("robot.server_version", self._robot_server_version)
 
         self.config = self.config_store.get()
 
@@ -185,6 +186,25 @@ class RobotClient:
             max_file_size_mb=max_file_size_mb,
             log_file_prefix="application",
         )
+
+    def _获取robot_server版本(self) -> str:
+        """获取本地 robot-server 版本号（优先 HTTP API，失败后读取包版本）"""
+        try:
+            token = get_auth_client().获取_token()
+            cookies = {"session_token": token} if token else None
+            with httpx.Client(timeout=2.0) as client:
+                response = client.get("http://127.0.0.1:8080/api/v1/system/info", cookies=cookies)
+                if response.status_code == 200:
+                    payload = response.json()
+                    info = payload.get("info", {}) if isinstance(payload, dict) else {}
+                    ver = info.get("robot_server_version")
+                    if isinstance(ver, str) and ver.strip():
+                        return ver.strip()
+        except Exception:
+            pass
+
+        project_root = Path(__file__).resolve().parents[1]
+        return 获取项目版本(project_root.parent / "robot-server", "robot-server", "unknown")
 
     async def 连接到服务器(self) -> bool:
         """连接到服务器"""
@@ -244,11 +264,17 @@ class RobotClient:
 
     async def 发送注册(self) -> None:
         """ 发送注册消息 """
+        robot_cfg = self.config["robot"]
         message = 构建机器人注册消息(
-            self.config["robot"]["uuid"],
-            self.config["robot"]["name"],
-            self.config["robot"]["model"],
-            self.config["robot"]["agent_version"],
+            robot_cfg["uuid"],
+            robot_cfg["name"],
+            robot_cfg["model"],
+            self._agent_version,
+            {
+                "agent_version": self._agent_version,
+                "motion_control_version": self._motion_control_version,
+                "robot_server_version": self._robot_server_version,
+            },
         )
         await self.发送消息(message, channel="business")
 

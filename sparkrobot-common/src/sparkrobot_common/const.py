@@ -68,6 +68,7 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     配置字段("robot", "name", "", "机器人名称", "string"),
     配置字段("robot", "model", "agibot-d1", "机器人型号", "string", readonly=True),
     配置字段("robot", "agent_version", "0.0.0", "机器人代理版本", "string", readonly=True),
+    配置字段("robot", "server_version", "0.0.0", "robot-server 版本", "string", readonly=True),
     配置字段("robot", "motion_control_version", "0.0.0", "机器人运控版本", "string", readonly=True),
 
 

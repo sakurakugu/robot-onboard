@@ -33,6 +33,7 @@ from sparkrobot_common.logger import (
 from sparkrobot_common.toml_parser import TomlParser
 from sparkrobot_common.utils import (
     生成UUID,
+    获取项目版本,
     获取IPC路径,
     获取本机IP,
     检测机器人运控版本,
@@ -75,4 +76,5 @@ __all__ = [
     "获取本机IP",
     "获取IPC路径",
     "检测机器人运控版本",
+    "获取项目版本",
 ]

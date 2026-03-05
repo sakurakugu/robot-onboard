@@ -47,7 +47,7 @@ class MDNSService:
             "uuid": robot_config.get("uuid", ""),
             "name": robot_config.get("name", ""),
             "model": robot_config.get("model", "agibot-d1"),
-            "version": robot_config.get("version", "0.0.0"),
+            "version": robot_config.get("agent_version", "0.0.0"),
         }
 
     def 启动(self) -> bool:

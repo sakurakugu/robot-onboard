@@ -4,6 +4,7 @@
 import re
 import socket
 import subprocess
+from importlib.metadata import PackageNotFoundError, version as pkg_version
 from pathlib import Path
 
 
@@ -100,6 +101,31 @@ def 获取AP的Wifi名称():
                 return line.strip().split("=", 1)[1]
 
 
+def 获取项目版本(项目目录: Path, 包名: str | None = None, 默认版本: str = "0.1.0") -> str:
+    """优先读取项目根目录 pyproject.toml 的版本号，失败后可回退到已安装包版本。"""
+    pyproject = 项目目录 / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            content = pyproject.read_text(encoding="utf-8")
+            match = re.search(r'(?m)^\s*version\s*=\s*"([^"]+)"\s*$', content)
+            if match:
+                ver = match.group(1).strip()
+                if ver:
+                    return ver
+        except Exception:
+            pass
+
+    if 包名:
+        try:
+            return pkg_version(包名)
+        except PackageNotFoundError:
+            pass
+        except Exception:
+            pass
+
+    return 默认版本
+
+
 __all__ = [
     "生成UUID",
     "生成机器人名称",
@@ -107,4 +133,5 @@ __all__ = [
     "获取本机IP",
     "检测机器人运控版本",
     "获取AP的Wifi名称",
+    "获取项目版本",
 ]

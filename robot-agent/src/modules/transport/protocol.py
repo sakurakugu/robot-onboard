@@ -83,6 +83,7 @@ def 构建机器人注册消息(
     name: str,                      # 机器人名称
     model: str,                     # 机器人模型
     agent_version: str,             # Agent 版本（robot-agent 软件版本）
+    metadata: Dict[str, Any] | None = None,  # 扩展元数据（运控版本、robot-server版本等）
 ) -> Dict[str, Any]:
     """ build_robot_register """
     return {
@@ -93,7 +94,7 @@ def 构建机器人注册消息(
             "name": name,
             "model": model,
             "version": agent_version,
-            "metadata": {},
+            "metadata": metadata or {},
         },
     }
 
