@@ -41,12 +41,14 @@ echo -e "${BLUE}正在生成服务配置文件 $SERVICE_FILE ...${NC}"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=机器人客户端
-After=network.target
+After=network.target robot-server.service
+Requires=robot-server.service
 
 [Service]
 Type=simple
 User=firefly
 WorkingDirectory=$BASE_DIR
+ExecStartPre=/bin/bash -c 'until nc -z 127.0.0.1 8080; do sleep 1; done'
 ExecStart=/usr/bin/python3 $BASE_DIR/main.py
 Restart=always
 RestartSec=10
