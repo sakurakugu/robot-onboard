@@ -14,7 +14,7 @@ dependencies = [
     "uvicorn>=0.32.0",
     "zeroconf>=0.131.0",
     "ruamel.yaml>=0.19.1",
-    "python-multipart>=0.0.22",
+    "python-multipart>=0.0.22", # TODO: 这个在哪个版本不用安装来着
 ]
 
 [tool.setuptools]

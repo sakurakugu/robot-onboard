@@ -49,6 +49,7 @@ class 配置字段:
     description: str  # 描述
     value_type: str   # "string", "int", "float", "bool", "list"
     readonly: bool = False  # 是否只读
+    options: list[str] | None = None  # 可选项
 
 # 配置分组标题映射
 CONFIG_SECTION_TITLES: dict[str, str] = {
@@ -81,6 +82,7 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     配置字段("server", "heartbeat_interval", 30, "心跳间隔（秒）", "int"),
 
     # SDK配置 [sdk]
+    配置字段("sdk", "enable_sdk_on_startup", True, "启动时是否开启SDK模式", "bool"),
     配置字段("sdk", "robot_ip", "127.0.0.1", "机器人SDK IP地址", "string", readonly=True),
     配置字段("sdk", "local_port", 43988, "本地SDK端口", "int", readonly=True),
 
@@ -95,10 +97,11 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     配置字段("audio", "input_device", "", "音频输入设备（空表示默认）", "string"),
 
     # 动作配置 [actions]
-    配置字段("actions", "exit_behavior", "lie_down", "退出后行为：lie_down|stand_up|stop", "string"),
+    配置字段("actions", "startup_behavior", "stop", "启动后状态：stop|lie_down|stand_up", "string", options=["stop", "lie_down", "stand_up"]),
+    配置字段("actions", "exit_behavior", "lie_down", "退出后行为：lie_down|stand_up|stop", "string", options=["lie_down", "stand_up", "stop"]),
 
     # 日志配置 [logging]
-    配置字段("logging", "level", "INFO", "日志级别：DEBUG|INFO|WARNING|ERROR", "string"),
+    配置字段("logging", "level", "INFO", "日志级别：DEBUG|INFO|WARNING|ERROR", "string", options=["DEBUG", "INFO", "WARNING", "ERROR"]),
     配置字段("logging", "max_file_size_mb", 10, "日志文件最大大小（MB）", "int"),
 
     # 认证配置 [auth]
@@ -175,6 +178,7 @@ def 获取配置项字段信息() -> list[dict[str, Any]]:
             "description": f.description,
             "type": f.value_type,
             "readonly": f.readonly,
+            "options": f.options,
         }
         for f in DEFAULT_CONFIG_FIELDS
     ]

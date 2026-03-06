@@ -53,10 +53,21 @@ def _循环发送机器人状态(app, robot_uuid, ipc_path):
             logger.exception("状态发送错误: %s", e)
         time.sleep(1) # 1秒发送一次状态
 
-def _启动机器人(app) -> None:
-    logger.info("机器人正在站立...")
-    app.standUp()
-    time.sleep(3)
+def _启动机器人(app, config: dict) -> None:
+    startup_behavior = (
+        config.get("actions", {})
+        .get("startup_behavior", "stop")
+    )
+    if startup_behavior == "stand_up":
+        logger.info("机器人启动后将站立...")
+        _执行站立动作(app)
+    elif startup_behavior == "lie_down":
+        logger.info("机器人启动后将趴下...")
+        _执行趴下动作(app)
+    else:
+        logger.info("机器人启动后将深度趴下（急停）...")
+        _执行退出_停止动作(app)
+        time.sleep(1)
     logger.info("机器人准备好接收命令。")
 
 def _处理控制指令(app, payload: dict) -> None:
@@ -167,8 +178,10 @@ def _执行退出_站立动作(app) -> None:
 # 执行退出动作（先趴下后急停）
 def _执行退出_停止动作(app) -> None:
     logger.info("退出演示。机器人将先趴下再急停。")
-    app.lieDown()
-    time.sleep(2)
+    current_mode = app.getCurrentCtrlmode()
+    if current_mode != 机器人控制模式.设备趴下_电机阻尼:
+        app.lieDown()
+        time.sleep(2)
     app.passive()
     time.sleep(1)
 
@@ -262,7 +275,7 @@ def main():
         # 启动一个线程，循环发送机器人状态到IPC路径
         threading.Thread(target=_循环发送机器人状态, args=(app, robot_uuid, ipc_path), daemon=True).start()
 
-        _启动机器人(app)
+        _启动机器人(app, config)
         _循环处理用户输入(app, config)
 
     except Exception as e:

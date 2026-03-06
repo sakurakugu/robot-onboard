@@ -132,18 +132,37 @@ class 服务安装管理器:
         if not self._上传并解压(archive_path, remote_path):
             return False
 
-        print("✓ Robot Agent 已解压")
+        # 2. 安装 robot-agent 依赖
+        print("正在安装 robot-agent 依赖...")
+        cmd_install_deps = f"python3 -m pip install {remote_path}"
+        success, _, error = self.ssh.执行命令(cmd_install_deps, use_sudo=True)
+        if not success:
+            print(f"✗ robot-agent 依赖安装失败: {error}")
+            return False
+        print("✓ robot-agent 依赖安装完成")
 
-        # 赋予执行权限
+        # 3. 赋予执行权限
         print("正在设置权限...")
-        # 尝试检测 start.sh 位置
-        start_script = f"{remote_path}/scripts/start.sh"
-        stop_script = f"{remote_path}/scripts/stop.sh"
+        # 尝试检测 install.sh 位置
+        install_script = f"{remote_path}/scripts/install.sh"
 
+        # 4. 执行安装脚本
+        print("正在运行安装脚本...")
         # 确保脚本有执行权限
-        self.ssh.执行命令(f"chmod +x {start_script}")
-        self.ssh.执行命令(f"chmod +x {stop_script}")
-        return True
+        self.ssh.执行命令(f"chmod +x {install_script}")
+        success, output, error = self.ssh.执行命令(f"bash {install_script}", use_sudo=True)
+
+        if success:
+            print("✓ Robot Agent 安装并启动成功")
+            print(output)
+            return True
+
+        details = (error or "").strip() or (output or "").strip()
+        if details:
+            print(f"✗ 安装失败: {details}")
+        else:
+            print("✗ 安装失败: 未返回错误信息")
+        return False
 
     def _获取本地项目路径(self, project_name: str) -> Path | None:
         script_dir = Path(__file__).resolve()

@@ -748,21 +748,9 @@ function renderInput(section, key, value, field) {
     return `<input type="checkbox" id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" ${checked} ${disabledAttr} style="width: auto; margin-top: 10px; ${readonlyStyle}">`;
   }
 
-  if (key === "level" && section === "logging") {
-    const options = ["DEBUG", "INFO", "WARNING", "ERROR"];
+  if (Array.isArray(field.options) && field.options.length) {
     let html = `<select id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" ${disabledAttr} style="${readonlyStyle}">`;
-    options.forEach((opt) => {
-      const selected = value === opt ? "selected" : "";
-      html += `<option value="${opt}" ${selected}>${opt}</option>`;
-    });
-    html += "</select>";
-    return html;
-  }
-
-  if (key === "exit_behavior" && section === "actions") {
-    const options = ["lie_down", "stand_up", "stop"];
-    let html = `<select id="config_${fullKey}" data-section="${section}" data-key="${key}" data-type="${type}" ${disabledAttr} style="${readonlyStyle}">`;
-    options.forEach((opt) => {
+    field.options.forEach((opt) => {
       const selected = value === opt ? "selected" : "";
       html += `<option value="${opt}" ${selected}>${opt}</option>`;
     });

@@ -159,6 +159,7 @@ class RobotClient:
         self.config_store.设置("robot.server_version", self._robot_server_version)
 
         self.config = self.config_store.get()
+        self.sdk_mode_enabled = bool(self.config.get("sdk", {}).get("enable_sdk_on_startup", True))
 
         # 重连策略配置
         self.initial_reconnect_interval = self.config["server"].get("reconnect_interval", 5)
@@ -1174,12 +1175,12 @@ async def main():
         logger.error(f"找不到交互式脚本: {interactive_script}")
         return
 
-    # 启动交互式子进程
-    if not client.交互式子进程控制器.启动(str(interactive_script)):
-        logger.error("无法启动交互式子进程")
-        return
-
-    client.动作执行器 = 动作执行器(client).执行动作
+    # 如果启用了SDK模式，启动交互式脚本
+    if client.sdk_mode_enabled:
+        if not client.交互式子进程控制器.启动(str(interactive_script)):
+            logger.error("无法启动交互式子进程")
+            return
+        client.动作执行器 = 动作执行器(client).执行动作
 
     # 运行客户端
     try:
