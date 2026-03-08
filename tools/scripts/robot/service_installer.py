@@ -5,6 +5,7 @@ import os
 import tarfile
 import zipfile
 from pathlib import Path
+from typing import Literal
 
 
 class 服务安装管理器:
@@ -239,7 +240,7 @@ class 服务安装管理器:
                         zip_file.write(file_path, arcname)
             return output_path
 
-        mode_mapping = {
+        mode_mapping: dict[str, Literal["w", "w:gz", "w:bz2", "w:xz"]] = {
             "gztar": "w:gz",
             "tar": "w",
             "bztar": "w:bz2",

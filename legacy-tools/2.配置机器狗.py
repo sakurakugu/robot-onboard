@@ -11,6 +11,7 @@ import tarfile
 import traceback
 import zipfile
 from pathlib import Path
+from typing import Literal
 from scripts.robot.utils import (
     确保存在包,
     是否禁止IP,
@@ -95,7 +96,7 @@ def 写入压缩包(output_path: Path, source_dir: Path, archive_format: str) ->
                     zip_file.write(file_path, arcname)
         return
 
-    mode_mapping = {
+    mode_mapping: dict[str, Literal["w", "w:gz", "w:bz2", "w:xz"]] = {
         "gztar": "w:gz",
         "tar": "w",
         "bztar": "w:bz2",
