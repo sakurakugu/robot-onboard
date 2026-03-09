@@ -1,7 +1,7 @@
 import asyncio
 import json
 import re
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional, cast
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import websockets
@@ -219,12 +219,17 @@ class WebSocketManager:
                 self._设置通道连接状态(channel, False)
                 if channel == "business":
                     self.logger.info("业务通道断开，主连接将触发重连")
+                    return
 
-                # 如果不是主连接断开，尝试重连该通道（不阻塞当前循环）
-                if channel != "business" and self.connected and self.robot_uuid:
-                    self.logger.info(f"尝试后台重连通道: {channel}")
-                    asyncio.create_task(self._自动重连通道(channel, on_message))
-                # 不要 break，让任务正常结束但不触发外层重连
+                if self.connected and self.robot_uuid:
+                    self.logger.info(f"尝试重连通道: {channel}")
+                    await self._自动重连通道(channel, on_message)
+                    ws_attr = self._SECONDARY_CHANNEL_CONFIG.get(channel, ("",))[0]
+                    new_ws = getattr(self, ws_attr, None) if ws_attr else None
+                    if new_ws and get_status():
+                        ws = cast(ClientConnection, new_ws)
+                        self.logger.info(f"通道 {channel} 已恢复，继续接收消息")
+                        continue
                 return
             except Exception as e:
                 self.logger.error(f"接收消息失败({channel}): {e}")
@@ -346,13 +351,7 @@ class WebSocketManager:
 
                 success = await self._重连单个通道(channel)
                 if success:
-                    # 重连成功，重启接收循环
-                    ws_attr = self._SECONDARY_CHANNEL_CONFIG.get(channel, ("",))[0]
-                    ws = getattr(self, ws_attr, None) if ws_attr else None
-                    if ws:
-                        self.logger.info(f"✓ 通道 {channel} 重连成功，重启接收循环")
-                        # 创建新的接收循环任务
-                        asyncio.create_task(self.接受消息循环(channel, ws, on_message))
+                    self.logger.info(f"✓ 通道 {channel} 重连成功")
                     return
 
                 if attempt < max_retries:

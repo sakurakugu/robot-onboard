@@ -165,6 +165,7 @@ class RobotClient:
         self.initial_reconnect_interval = self.config["server"].get("reconnect_interval", 5)
         self.max_reconnect_interval = 60
         self.current_reconnect_interval = self.initial_reconnect_interval
+        self._音频设备缺失已告警 = False
 
     def _处理配置变化(self, new_config: Dict[str, Any]) -> None:
         """配置变更回调"""
@@ -847,18 +848,7 @@ class RobotClient:
                     # 这样可以更快检测到断连并触发重连
                     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
-                    # 检查是否有任务因异常退出或主连接断开
-                    should_reconnect = False
-                    for task in done:
-                        try:
-                            if not task.cancelled():
-                                exc = task.exception()
-                                if exc:
-                                    logger.warning(f"子任务异常退出: {exc}")
-                                    should_reconnect = True
-                        except Exception as e:
-                            logger.warning(f"子任务退出: {e}")
-                            should_reconnect = True
+                    should_reconnect = self._是否需要重连(done)
 
                     # 只有主连接（business）断开才需要完全重连
                     if not self.ws_manager.connected:
@@ -866,22 +856,14 @@ class RobotClient:
                         logger.info("主连接已断开，准备重连...")
 
                     if should_reconnect:
-                        # 取消剩余任务
-                        for task in pending:
-                            task.cancel()
-
-                        # 等待剩余任务取消完成
-                        if pending:
-                            await asyncio.gather(*pending, return_exceptions=True)
-
+                        await self._取消并等待任务(pending)
+                        if self._是否有活跃的WebSocket连接():
+                            await self.断开连接到服务器(shutdown_resources=False)
                         logger.info("任务组结束，准备重连...")
                     else:
                         # 某个任务正常结束(非异常),可能是次要通道断开
                         # 取消其他任务后重新构建任务组
-                        for task in pending:
-                            task.cancel()
-                        if pending:
-                            await asyncio.gather(*pending, return_exceptions=True)
+                        await self._取消并等待任务(pending)
                         logger.debug("部分任务结束，重建任务组")
 
                 except KeyboardInterrupt:
@@ -890,7 +872,6 @@ class RobotClient:
                 except Exception as e:
                     logger.error(f"运行时错误: {e}")
                     self.ws_manager.connected = False
-                finally:
                     if self._是否有活跃的WebSocket连接():
                         await self.断开连接到服务器(shutdown_resources=False)
         except asyncio.CancelledError:
@@ -936,6 +917,55 @@ class RobotClient:
             logger.info(f"重连间隔已调整: {old_interval}秒 → {self.current_reconnect_interval}秒")
         return False
 
+    def _是否需要重连(self, done_tasks: set[asyncio.Task]) -> bool:
+        for task in done_tasks:
+            try:
+                if task.cancelled():
+                    continue
+                exc = task.exception()
+                if exc:
+                    logger.warning(f"子任务异常退出: {exc}")
+                    return True
+            except Exception as e:
+                logger.warning(f"子任务退出: {e}")
+                return True
+        return False
+
+    async def _取消并等待任务(self, tasks: set[asyncio.Task]) -> None:
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _运行音频采集任务(self) -> None:
+        while self.ws_manager.connected:
+            try:
+                await self.audio_capture.开始采集()
+                self._音频设备缺失已告警 = False
+            except Exception as e:
+                if self._是否是音频设备异常(e):
+                    if not self._音频设备缺失已告警:
+                        logger.error("未检测到可用音频设备，音频采集将持续重试，不影响云端连接")
+                        self._音频设备缺失已告警 = True
+                    logger.warning(f"音频设备异常: {e}")
+                    await asyncio.sleep(5)
+                    continue
+                logger.warning(f"音频采集任务异常: {e}")
+                await asyncio.sleep(2)
+                continue
+            await asyncio.sleep(0.5)
+
+    def _是否是音频设备异常(self, error: Exception) -> bool:
+        message = str(error).lower()
+        patterns = (
+            "error querying device -1",
+            "invalid input device",
+            "no default input device",
+            "device unavailable",
+            "device not found",
+        )
+        return any(p in message for p in patterns)
+
     def _构建异步任务(self) -> list[asyncio.Task]:
         """ 构建要运行的异步任务 """
         tasks: list[asyncio.Task] = []
@@ -954,7 +984,7 @@ class RobotClient:
                 )
             )
         if not self.audio_task or self.audio_task.done():
-            self.audio_task = asyncio.create_task(self.audio_capture.开始采集())
+            self.audio_task = asyncio.create_task(self._运行音频采集任务())
         tasks.append(self.audio_task)
         if not self._ipc_status_task or self._ipc_status_task.done():
             self._ipc_status_task = asyncio.create_task(self._发送IPC状态循环())

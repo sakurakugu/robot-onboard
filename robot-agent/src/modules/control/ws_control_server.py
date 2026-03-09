@@ -57,7 +57,7 @@ class WsControlServer:
         """
         self._on_command = on_command
         self._on_async_command = on_async_command
-        self._server = None
+        self._server: Optional[Any] = None
         self._connected: Set = set()
 
     async def 广播(self, message: Dict[str, Any]) -> None:
@@ -117,12 +117,8 @@ class WsControlServer:
 
     async def 服务循环(self) -> None:
         """启动 WebSocket 服务并持续运行，直到协程被取消"""
-        try:
-            from websockets.asyncio.server import serve  # websockets >= 14
-        except ImportError:
-            from websockets.server import serve  # type: ignore[no-redef]
-
-        async with serve(self._处理连接, "0.0.0.0", DIRECT_CONTROL_PORT) as server:
+        serve_fn = self._获取serve函数()
+        async with serve_fn(self._处理连接, "0.0.0.0", DIRECT_CONTROL_PORT) as server:
             self._server = server
             logger.info(f"[直连控制] 本地控制服务已启动，端口: {DIRECT_CONTROL_PORT}")
             try:
@@ -131,3 +127,11 @@ class WsControlServer:
                 pass
             finally:
                 logger.info("[直连控制] 本地控制服务已停止")
+
+    def _获取serve函数(self) -> Any:
+        try:
+            import websockets.asyncio.server as ws_server
+            return ws_server.serve
+        except ImportError:
+            import websockets.legacy.server as ws_legacy_server
+            return ws_legacy_server.serve
