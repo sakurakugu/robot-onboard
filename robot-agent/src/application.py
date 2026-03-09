@@ -74,7 +74,7 @@ class RobotClient:
 
         # 初始化配置
         self.config_store = Config.instance(workspace)
-        self.config = self.config_store.get()
+        self.config = self.config_store.获取()
 
         # 设置日志
         self._初始化日志()
@@ -158,7 +158,7 @@ class RobotClient:
         self._robot_server_version = self._获取robot_server版本()
         self.config_store.设置("robot.server_version", self._robot_server_version)
 
-        self.config = self.config_store.get()
+        self.config = self.config_store.获取()
         self.sdk_mode_enabled = bool(self.config.get("sdk", {}).get("enable_sdk_on_startup", True))
 
         # 重连策略配置

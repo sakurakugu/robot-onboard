@@ -252,7 +252,7 @@ def main():
     try:
         # 初始化配置
         config_store = Config.instance()
-        config = config_store.get()
+        config = config_store.获取()
         logging_cfg = config.get("logging", {})
         configure_logger(
             app_name=APP_NAME,

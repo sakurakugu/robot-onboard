@@ -180,7 +180,7 @@ class Config:
 
     # ==================== 配置访问接口 ====================
 
-    def get(self, key: str | None = None) -> Any:
+    def 获取(self, key: str | None = None) -> Any:
         """获取配置
 
         Args:
@@ -298,7 +298,7 @@ class Config:
 
     @property
     def robot_uuid(self) -> str:
-        return self.get("robot.uuid") or ""
+        return self.获取("robot.uuid") or ""
 
     @property
     def workspace(self) -> Path:
@@ -306,100 +306,100 @@ class Config:
 
     @property
     def robot_name(self) -> str:
-        return self.get("robot.name") or ""
+        return self.获取("robot.name") or ""
 
     @property
     def robot_model(self) -> str:
-        return self.get("robot.model") or "agibot-d1"
+        return self.获取("robot.model") or "agibot-d1"
 
     @property
     def robot_version(self) -> str:
-        return self.get("robot.version") or "0.0.0"
+        return self.获取("robot.version") or "0.0.0"
 
     @property
     def server_url(self) -> str:
-        return self.get("server.server_url") or ""
+        return self.获取("server.server_url") or ""
 
     @property
     def server_business_url(self) -> str:
-        url = self.get("server.business_url") or ""
+        url = self.获取("server.business_url") or ""
         if url.startswith("/"):
             return urljoin(self.server_url, url)
         return url
 
     @property
     def server_audio_upload_url(self) -> str:
-        url = self.get("server.audio_upload_url") or ""
+        url = self.获取("server.audio_upload_url") or ""
         if url.startswith("/"):
             return urljoin(self.server_url, url)
         return url
 
     @property
     def server_audio_download_url(self) -> str:
-        url = self.get("server.audio_download_url") or ""
+        url = self.获取("server.audio_download_url") or ""
         if url.startswith("/"):
             return urljoin(self.server_url, url)
         return url
 
     @property
     def server_reconnect_interval(self) -> int:
-        return self.get("server.reconnect_interval") or 5
+        return self.获取("server.reconnect_interval") or 5
 
     @property
     def server_heartbeat_interval(self) -> int:
-        return self.get("server.heartbeat_interval") or 30
+        return self.获取("server.heartbeat_interval") or 30
 
     @property
     def sdk_robot_ip(self) -> str:
-        return self.get("sdk.robot_ip") or "127.0.0.1"
+        return self.获取("sdk.robot_ip") or "127.0.0.1"
 
     @property
     def sdk_local_port(self) -> int:
-        return self.get("sdk.local_port") or 43988
+        return self.获取("sdk.local_port") or 43988
 
     @property
     def audio_sample_rate(self) -> int:
-        return self.get("audio.sample_rate") or 16000
+        return self.获取("audio.sample_rate") or 16000
 
     @property
     def audio_channels(self) -> int:
-        return self.get("audio.channels") or 1
+        return self.获取("audio.channels") or 1
 
     @property
     def audio_frame_duration_ms(self) -> int:
-        return self.get("audio.frame_duration_ms") or 20
+        return self.获取("audio.frame_duration_ms") or 20
 
     @property
     def audio_vad_threshold(self) -> float:
-        return self.get("audio.vad_threshold") or 0.015
+        return self.获取("audio.vad_threshold") or 0.015
 
     @property
     def audio_vad_silence_ms(self) -> int:
-        return self.get("audio.vad_silence_ms") or 800
+        return self.获取("audio.vad_silence_ms") or 800
 
     @property
     def audio_max_segment_ms(self) -> int:
-        return self.get("audio.max_segment_ms") or 10000
+        return self.获取("audio.max_segment_ms") or 10000
 
     @property
     def audio_enable_streaming(self) -> bool:
-        return self.get("audio.enable_streaming") or True
+        return self.获取("audio.enable_streaming") or True
 
     @property
     def audio_input_device(self) -> str:
-        return self.get("audio.input_device") or ""
+        return self.获取("audio.input_device") or ""
 
     @property
     def actions_exit_behavior(self) -> str:
-        return self.get("actions.exit_behavior") or "lie_down"
+        return self.获取("actions.exit_behavior") or "lie_down"
 
     @property
     def logging_level(self) -> str:
-        return self.get("logging.level") or "INFO"
+        return self.获取("logging.level") or "INFO"
 
     @property
     def logging_max_file_size_mb(self) -> int:
-        return self.get("logging.max_file_size_mb") or 10
+        return self.获取("logging.max_file_size_mb") or 10
 
     # ==================== watchdog 文件监听 ====================
 
