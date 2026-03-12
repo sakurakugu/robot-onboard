@@ -14,6 +14,7 @@
 
 import asyncio
 import json
+import math
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -1020,6 +1021,27 @@ class RobotClient:
         except Exception:
             pass
 
+# 姿态动作 → 控制参数映射（对应 TrickRobotDog 的姿态方法）
+# TODO: 这个映射是为了兼容前端动作命名和后端执行器方法命名不一致的情况，后续可以逐步统一命名后移除
+_ATTITUDE_ACTION_MAP: dict[str, dict[str, float]] = {
+    "lean_left": {"roll_rate": -0.59},
+    "lean_right": {"roll_rate": 0.59},
+    "nod_up": {"pitch_rate": -0.59},
+    "nod_down": {"pitch_rate": 0.59},
+    "rotate_clockwise": {"yaw_rate": -0.59},
+    "rotate_counterclockwise": {"yaw_rate": 0.59},
+    "max_height": {"height_vel": 0.3},
+    "min_height": {"height_vel": -0.3},
+    "attitude_rest": {},
+}
+
+# 前端动作名 → executor ACTION_HANDLERS 键名映射
+# TODO: 这个映射是为了兼容前端动作命名和后端执行器方法命名不一致的情况，后续可以逐步统一命名后移除
+_ACTION_NAME_REMAP: dict[str, str] = {
+    "lie_down": "sit_down"
+}
+
+
 class 动作执行器:
     def __init__(self, client: "RobotClient") -> None:
         self.client = client
@@ -1066,7 +1088,6 @@ class 动作执行器:
         将距离/步数/角度参数转换为速度和持续时间
         返回: (vx, vy, yaw_rate, duration)
         """
-        import math
 
         vx = 0.0
         vy = 0.0
@@ -1172,9 +1193,72 @@ class 动作执行器:
                     })
                     wait_time = float(duration)
                     logger.info(f"移动控制 (速度模式): vx={vx}, vy={vy}, yaw_rate={yaw_rate}, duration={duration}秒")
+            # TODO: 后续可以逐步废弃 move_by_distance 和 turn_around，统一使用 move + 参数的方式来控制移动和转向，让前端/手机端就换算好，而不是改机器狗本体来适配不同的控制方式
+            elif action == "move_by_distance":
+                # 按距离移动：将 axis/distance/speed 转换为 vx/vy + duration
+                axis = parameters.get("axis", "x")
+                distance = float(parameters.get("distance", 1.0))
+                speed = float(parameters.get("speed", 0.5))
+                vx, vy = 0.0, 0.0
+                if axis == "x":
+                    vx = speed
+                elif axis == "-x":
+                    vx = -speed
+                elif axis == "y":
+                    vy = speed
+                elif axis == "-y":
+                    vy = -speed
+                duration = abs(distance) / speed
+                command = json.dumps({"type": "ai_move", "vx": vx, "vy": vy, "yaw_rate": 0.0, "duration": duration})
+                wait_time = duration
+                logger.info(f"按距离移动: axis={axis}, distance={distance}m, speed={speed}m/s, duration={duration:.2f}s")
+            elif action == "turn_around":
+                # 原地转身：将 angle/speed/direction 转换为 yaw_rate + duration
+                angle = float(parameters.get("angle", 180.0))
+                speed_deg = float(parameters.get("speed", 30))
+                direction = parameters.get("direction", "cw")
+                angle_rad = angle * math.pi / 180.0
+                yaw_rate_rad = round(speed_deg * math.pi / 180.0, 4)
+                actual_yaw_rate = -yaw_rate_rad if direction == "cw" else yaw_rate_rad
+                duration = round(abs(angle_rad) / abs(yaw_rate_rad), 4)
+                command = json.dumps({"type": "ai_move", "vx": 0.0, "vy": 0.0, "yaw_rate": actual_yaw_rate, "duration": duration})
+                wait_time = duration
+                logger.info(f"原地转身: angle={angle}°, speed={speed_deg}°/s, direction={direction}, duration={duration:.2f}s")
+            elif action in _ATTITUDE_ACTION_MAP:
+                # 姿态控制动作：转换为 attitude JSON 指令
+                attitude_defaults = _ATTITUDE_ACTION_MAP[action]
+                duration = float(parameters.get("duration", 0.5))
+                reset = float(parameters.get("reset", 0))
+                height_vel = attitude_defaults.get("height_vel", 0.0)
+                if "_height_vel" in parameters:
+                    height_vel = float(parameters["_height_vel"])
+                command = json.dumps({
+                    "type": "attitude",
+                    "roll_rate": attitude_defaults.get("roll_rate", 0.0),
+                    "pitch_rate": attitude_defaults.get("pitch_rate", 0.0),
+                    "yaw_rate": attitude_defaults.get("yaw_rate", 0.0),
+                    "height_vel": height_vel,
+                })
+                # 姿态动作需要单独处理发送和等待流程
+                success = self.client.交互式子进程控制器.发送命令(command)
+                if not success:
+                    logger.error(f"发送姿态命令失败: {action}")
+                    return False
+                logger.info(f"姿态控制: {action}, duration={duration}s, reset={reset}s")
+                if not self._可中断的睡眠(token, duration):
+                    logger.info(f"姿态动作 {action} 被打断")
+                    return False
+                if reset > 0:
+                    reset_cmd = json.dumps({"type": "attitude", "roll_rate": 0.0, "pitch_rate": 0.0, "yaw_rate": 0.0, "height_vel": 0.0})
+                    self.client.交互式子进程控制器.发送命令(reset_cmd)
+                    if not self._可中断的睡眠(token, reset):
+                        logger.info(f"姿态复位 {action} 被打断")
+                        return False
+                logger.debug(f"姿态动作 {action} 执行完成")
+                return True
             else:
-                # 其他动作的处理
-                command = action
+                # 其他动作：修正名称映射后发送到 executor 子进程
+                command = _ACTION_NAME_REMAP.get(action, action)
                 wait_time = self._解析等待时间(action)
             if not command:
                 logger.warning(f"不支持的动作: {action}")

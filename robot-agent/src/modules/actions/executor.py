@@ -191,7 +191,7 @@ ACTION_HANDLERS = {
     "sit_down": _执行趴下动作,
     "jump": _执行跳跃动作,
     "front_jump": _执行向前跳跃动作,
-    "backflip": _执行后空翻动作,
+    "back_flip": _执行后空翻动作,
     "shake_hand": _执行握手动作, # 握手
     "wave": _执行握手动作, # 挥手
     "nod": _执行姿态控制动作, # 点头
@@ -222,7 +222,7 @@ def _解析退出命令(config: dict) -> str:
 def _执行选择的动作(app, choice: str) -> bool:
     handler = ACTION_HANDLERS.get(choice)
     if not handler:
-        logger.warning("无效的选择。请重试。")
+        logger.warning(f"无效的选择 {choice}。请重试。")
         return False
     handler(app)
     return choice in EXIT_COMMANDS
