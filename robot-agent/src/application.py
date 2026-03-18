@@ -15,7 +15,9 @@
 import asyncio
 import json
 import math
+import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -90,7 +92,7 @@ class RobotClient:
         self.ws_manager = WebSocketManager(self.config)
         self.交互式子进程控制器 = ProcessController()
         self.joystick_controller = JoystickController(self.交互式子进程控制器)
-        self._action_executor = ThreadPoolExecutor(max_workers=1)
+        self._action_executor = ThreadPoolExecutor(max_workers=4)
         self.audio_task: Optional[asyncio.Task] = None
         self._ipc_status_task: Optional[asyncio.Task] = None
         self._ipc_status_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
@@ -141,6 +143,8 @@ class RobotClient:
 
         """ 初始化动作执行函数 """
         self.动作执行器: Optional[Callable] = None
+        self.动作控制器: Optional["动作执行器"] = None
+        self.动作调度器 = 动作调度器(self)
 
         """ 初始化SDK模式状态 """
         self.sdk_mode_enabled = True  # 默认开启SDK模式
@@ -353,6 +357,24 @@ class RobotClient:
     async def _处理IPC状态(self, status_msg: Dict[str, Any]) -> None:
         await self._ipc_status_queue.put(status_msg)
 
+    async def _按配置执行SDK关闭动作(self, 日志前缀: str = "") -> None:
+        process = self.交互式子进程控制器.process
+        if not process or process.poll() is not None:
+            return
+        behavior = self.config.get("actions", {}).get("exit_behavior", "lie_down")
+        if behavior == "stand_up":
+            exit_command = "exit_stand_up"
+        elif behavior == "stop":
+            exit_command = "exit_stop"
+        else:
+            exit_command = "exit_lie_down"
+        log_prefix = f"{日志前缀} " if 日志前缀 else ""
+        logger.info(f"{log_prefix}关闭子程序前执行退出动作: {exit_command}")
+        if not self.交互式子进程控制器.发送命令(exit_command):
+            logger.warning(f"{log_prefix}关闭子程序前发送退出动作失败: {exit_command}")
+            return
+        await asyncio.sleep(3)
+
     def _获取认证cookies(self) -> dict:
         """获取认证 cookies"""
         token = get_auth_client().获取_token()
@@ -525,30 +547,21 @@ class RobotClient:
                     await self.发送SDK模式响应(request_id, False, None, error_msg)
                     return
 
+                self.设置动作控制器(动作执行器(self))
                 self.sdk_mode_enabled = True
                 logger.info("SDK模式开启成功")
                 await self.发送SDK模式响应(request_id, True, True)
             else:
                 # 关闭SDK模式：关闭子程序
                 logger.info("关闭SDK模式，关闭子程序...")
-
-                # 获取当前状态：检查是否是急停或趴下状态
-                # 这里假设我们能通过IPC或其他方式获取到当前的动作状态
-                # 如果没有跟踪机制，我们需要先执行站立动作
-                # 根据需求：急停保持急停，趴下保持趴下，其他改为站立
-
-                # TODO: 这里需要实现获取当前机器狗状态的逻辑
-                # 目前简化处理：关闭前先站立
+                self.动作调度器.清空并中断()
                 try:
-                    # 关闭前尝试让机器狗站立
-                    if self.交互式子进程控制器.process and self.交互式子进程控制器.process.poll() is None:
-                        logger.info("关闭子程序前，先让机器狗站立")
-                        self.交互式子进程控制器.发送命令("stand_up")
-                        await asyncio.sleep(2)  # 等待站立完成
+                    await self._按配置执行SDK关闭动作()
                 except Exception as e:
-                    logger.warning(f"关闭前执行站立动作失败: {e}")
+                    logger.warning(f"关闭前执行退出动作失败: {e}")
 
                 self.交互式子进程控制器.关闭()
+                self.设置动作控制器(None)
                 self.sdk_mode_enabled = False
                 logger.info("SDK模式关闭成功")
                 await self.发送SDK模式响应(request_id, True, False)
@@ -669,7 +682,7 @@ class RobotClient:
 
     async def _处理文本响应(self, data: Dict[str, Any]) -> None:
         """ 处理文本响应消息 """
-        await 处理文本响应(data, self.动作执行器, self._确保动作执行器())
+        await 处理文本响应(data, self.提交动作, self._确保动作执行器())
 
     async def _处理音频控制(self, data: Dict[str, Any]) -> None:
         """ 处理音频控制消息 """
@@ -687,10 +700,16 @@ class RobotClient:
         停止当前音频播放()
 
     async def _处理动作指令(self, data: Dict[str, Any]) -> None:
-        await 处理动作指令(data, self.动作执行器, self._确保动作执行器())
+        await 处理动作指令(data, self.提交动作, self._确保动作执行器())
 
     async def _处理控制指令(self, data: Dict[str, Any]) -> None:
         """ 处理控制指令消息（来自云端服务器） """
+        command = data.get("command", "")
+        if command == "action":
+            action = data.get("action", "")
+            if action:
+                self.提交动作(action, data.get("parameters", {}))
+            return
         self.joystick_controller.处理命令(data)
 
     def _处理直连控制指令(self, data: Dict[str, Any]) -> None:
@@ -705,9 +724,8 @@ class RobotClient:
             self.joystick_controller.处理命令(data)
         elif command == "action":
             action = data.get("action", "")
-            if action and self.动作执行器:
-                # 在独立线程执行，避免阻塞 asyncio 事件循环
-                self._确保动作执行器().submit(self.动作执行器, action, data.get("parameters", {}))
+            if action:
+                self.提交动作(action, data.get("parameters", {}))
         elif command == "mic_control":
             enabled = bool(data.get("enabled", True))
             self.audio_capture.audio_streaming_enabled = enabled
@@ -776,15 +794,16 @@ class RobotClient:
                         raise FileNotFoundError(f"找不到交互式脚本: {interactive_script}")
                     if not self.交互式子进程控制器.启动(str(interactive_script)):
                         raise RuntimeError("无法启动交互式子进程")
+                    self.设置动作控制器(动作执行器(self))
                     self.sdk_mode_enabled = True
                 else:
+                    self.动作调度器.清空并中断()
                     try:
-                        if self.交互式子进程控制器.process and self.交互式子进程控制器.process.poll() is None:
-                            self.交互式子进程控制器.发送命令("stand_up")
-                            await asyncio.sleep(2)
+                        await self._按配置执行SDK关闭动作("[直连控制]")
                     except Exception as ex:
-                        logger.warning(f"[直连控制] 关闭 SDK 前执行站立失败: {ex}")
+                        logger.warning(f"[直连控制] 关闭 SDK 前执行退出动作失败: {ex}")
                     self.交互式子进程控制器.关闭()
+                    self.设置动作控制器(None)
                     self.sdk_mode_enabled = False
                 await send_fn({"type": "sdk_mode_response", "data": {"requestId": request_id, "success": True, "sdkMode": enabled}})
                 logger.info(f"[直连控制] SDK 模式已切换为: {'SDK' if enabled else '遥控'}")
@@ -1010,6 +1029,7 @@ class RobotClient:
 
     async def 取消初始化(self) -> None:
         """ 取消初始化客户端 """
+        self.动作调度器.关闭()
         try:
             停止当前音频播放()
         except Exception:
@@ -1020,6 +1040,13 @@ class RobotClient:
             logger.info("配置文件监听已停止")
         except Exception:
             pass
+
+    def 设置动作控制器(self, action_controller: Optional["动作执行器"]) -> None:
+        self.动作控制器 = action_controller
+        self.动作执行器 = action_controller.执行动作 if action_controller else None
+
+    def 提交动作(self, action: str, parameters: Optional[dict] = None) -> bool:
+        return self.动作调度器.提交(action, parameters or {})
 
 # 姿态动作 → 控制参数映射（对应 TrickRobotDog 的姿态方法）
 # TODO: 这个映射是为了兼容前端动作命名和后端执行器方法命名不一致的情况，后续可以逐步统一命名后移除
@@ -1042,15 +1069,124 @@ _ACTION_NAME_REMAP: dict[str, str] = {
 }
 
 
+class 动作调度器:
+    def __init__(self, client: "RobotClient") -> None:
+        self.client = client
+        self._lock = threading.Lock()
+        self._wakeup = threading.Event()
+        self._closed = False
+        self._strict_queue: deque[tuple[str, dict]] = deque()
+        self._latest_pending: Optional[tuple[str, dict, str]] = None
+        self._running_policy: Optional[str] = None
+        self._worker = threading.Thread(target=self._运行循环, daemon=True, name="robot-action-dispatcher")
+        self._worker.start()
+
+    def _分类策略(self, action: str) -> str:
+        if action in {
+            "estop", "sdk_mode", "camera_capture", "stand_up", "sit_down", "jump", "front_jump", "back_flip",
+        }:
+            return "strict_serial"
+        if action in {
+            "move", "move_by_distance", "turn_around", "lean_left", "lean_right", "nod_up",
+            "nod_down", "rotate_clockwise", "rotate_counterclockwise", "max_height",
+            "min_height", "attitude_rest",
+        }:
+            return "preempt"
+        return "latest_wins"
+
+    def 提交(self, action: str, parameters: dict) -> bool:
+        if not action:
+            return False
+        policy = self._分类策略(action)
+        with self._lock:
+            if self._closed:
+                return False
+            if policy == "strict_serial":
+                self._strict_queue.append((action, parameters))
+            else:
+                self._latest_pending = (action, parameters, policy)
+                if policy == "preempt" and self.client.动作控制器:
+                    self.client.动作控制器.请求中断()
+            self._wakeup.set()
+        return True
+
+    def 清空并中断(self) -> None:
+        with self._lock:
+            self._strict_queue.clear()
+            self._latest_pending = None
+            self._wakeup.set()
+        if self.client.动作控制器:
+            self.client.动作控制器.请求中断()
+
+    def 关闭(self) -> None:
+        with self._lock:
+            self._closed = True
+            self._strict_queue.clear()
+            self._latest_pending = None
+            self._wakeup.set()
+        if self.client.动作控制器:
+            self.client.动作控制器.请求中断()
+        self._worker.join(timeout=2.0)
+
+    def _取下一个命令(self) -> Optional[tuple[str, dict, str]]:
+        with self._lock:
+            if self._strict_queue:
+                action, parameters = self._strict_queue.popleft()
+                self._running_policy = "strict_serial"
+                return (action, parameters, "strict_serial")
+            if self._latest_pending:
+                cmd = self._latest_pending
+                self._latest_pending = None
+                self._running_policy = cmd[2]
+                return cmd
+            self._running_policy = None
+            return None
+
+    def _运行循环(self) -> None:
+        while True:
+            cmd = self._取下一个命令()
+            if cmd is None:
+                with self._lock:
+                    if self._closed:
+                        return
+                self._wakeup.wait(timeout=0.5)
+                self._wakeup.clear()
+                continue
+            action, parameters, policy = cmd
+            try:
+                executor = self.client.动作执行器
+                if not executor:
+                    logger.warning(f"未设置动作执行器，跳过动作: {action}")
+                    continue
+                result = executor(action, parameters)
+                logger.debug(f"动作调度执行完成: action={action}, policy={policy}, result={result}")
+            except Exception as e:
+                logger.error(f"动作调度执行失败: action={action}, policy={policy}, error={e}", exc_info=True)
+
+
 class 动作执行器:
     def __init__(self, client: "RobotClient") -> None:
         self.client = client
         self._current_token = 0
+        self._token_lock = threading.Lock()
+
+    def _读取当前_token(self) -> int:
+        with self._token_lock:
+            return self._current_token
 
     def _下一个_token(self) -> int:
         """ 生成下一个令牌 """
-        self._current_token += 1
-        return self._current_token
+        with self._token_lock:
+            self._current_token += 1
+            return self._current_token
+
+    def 请求中断(self) -> None:
+        self._下一个_token()
+        try:
+            self.client.交互式子进程控制器.发送命令(json.dumps({"type": "cancel_action"}))
+        except Exception:
+            pass
+        self._停止当前动作()
 
     def _停止当前动作(self) -> None:
         """ 停止当前动作 """
@@ -1078,7 +1214,7 @@ class 动作执行器:
         """ 可中断的睡眠 """
         end_time = time.time() + seconds
         while time.time() < end_time:
-            if token != self._current_token:
+            if token != self._读取当前_token():
                 return False
             time.sleep(0.1)
         return True
@@ -1294,7 +1430,7 @@ async def main():
         if not client.交互式子进程控制器.启动(str(interactive_script)):
             logger.error("无法启动交互式子进程")
             return
-        client.动作执行器 = 动作执行器(client).执行动作
+        client.设置动作控制器(动作执行器(client))
 
     # 运行客户端
     try:

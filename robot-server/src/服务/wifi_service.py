@@ -1,8 +1,6 @@
 import subprocess
 from typing import TypedDict
 
-# TODO：抽象出WiFiManager类
-
 class WiFi信息(TypedDict):
     ssid: str
     signal: str

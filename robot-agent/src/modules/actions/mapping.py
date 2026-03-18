@@ -1,4 +1,3 @@
-import asyncio
 import re
 from typing import Any, Dict, Optional
 
@@ -61,12 +60,9 @@ async def 处理文本响应(data: Dict[str, Any], action_executor, executor) ->
     parameters = action_data["parameters"]
     logger.info(f"检测到动作格式: 动作={action}, 参数={parameters}")
 
-    # 执行动作
     if action_executor:
         try:
-            loop = asyncio.get_event_loop()
-            # 在独立线程中执行动作执行器
-            result = await loop.run_in_executor(executor, action_executor, action, parameters)
+            result = action_executor(action, parameters)
             if result:
                 logger.info(f"动作 {action} 执行成功")
             else:
@@ -91,8 +87,7 @@ async def 处理动作指令(data: Dict[str, Any], action_executor, executor) ->
 
     if action_executor:
         try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(executor, action_executor, action, parameters)
+            result = action_executor(action, parameters)
             logger.info(f"动作执行结果: {result}")
         except Exception as e:
             logger.error(f"执行动作失败: {e}")

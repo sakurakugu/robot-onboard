@@ -8,6 +8,7 @@ import subprocess
 import threading
 from typing import TYPE_CHECKING
 
+from sparkrobot_common import get_logger
 from sparkrobot_common.utils import 获取本机IP
 from zeroconf import ServiceInfo, Zeroconf
 
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     from .config_service import ConfigManager
 
 SERVICE_TYPE = "_sparkrobot._tcp.local."
+logger = get_logger("robot-server")
 
 
 class MDNSService:
@@ -62,7 +64,7 @@ class MDNSService:
             robot_uuid = robot_info["uuid"]
 
             if not robot_uuid:
-                print("[mDNS] 警告: 机器人 UUID 为空，无法启动 mDNS 服务")
+                logger.warning("[mDNS] 机器人 UUID 为空，无法启动 mDNS 服务")
                 return False
 
             local_ip = 获取本机IP()
@@ -93,16 +95,16 @@ class MDNSService:
             self._last_ip = local_ip
             self._启动监听()
 
-            print( "[mDNS] 服务已启动:")
-            print(f"       服务名称: {service_name}")
-            print(f"       IP: {local_ip}:{self.port}")
-            print(f"       UUID: {robot_uuid}")
-            print(f"       名称: {properties['name']}")
+            logger.info( "[mDNS] 服务已启动")
+            logger.info(f"       服务名称: {service_name}")
+            logger.info(f"       IP: {local_ip}:{self.port}")
+            logger.info(f"       UUID: {robot_uuid}")
+            logger.info(f"       名称: {properties['name']}")
 
             return True
 
         except Exception as e:
-            print(f"[mDNS] 启动失败: {e}")
+            logger.error(f"[mDNS] 启动失败: {e}", exc_info=True)
             return False
 
     def _启动监听(self) -> None:
@@ -121,7 +123,7 @@ class MDNSService:
                 text=True,
             )
         except Exception as e:
-            print(f"[mDNS] 监听启动失败: {e}")
+            logger.error(f"[mDNS] 监听启动失败: {e}", exc_info=True)
             return
         if not self._monitor_process.stdout:
             return
@@ -153,9 +155,9 @@ class MDNSService:
             )
             self.zeroconf.update_service(updated_info)
             self.service_info = updated_info
-            print(f"[mDNS] IP 已更新: {ip}:{self.port}")
+            logger.info(f"[mDNS] IP 已更新: {ip}:{self.port}")
         except Exception as e:
-            print(f"[mDNS] 更新 IP 失败: {e}")
+            logger.error(f"[mDNS] 更新 IP 失败: {e}", exc_info=True)
 
     def 停止(self) -> None:
         """停止 mDNS 服务广播"""
@@ -172,9 +174,9 @@ class MDNSService:
             if self.zeroconf and self.service_info:
                 self.zeroconf.unregister_service(self.service_info)
                 self.zeroconf.close()
-                print("[mDNS] 服务已停止")
+                logger.info("[mDNS] 服务已停止")
         except Exception as e:
-            print(f"[mDNS] 停止时出错: {e}")
+            logger.error(f"[mDNS] 停止时出错: {e}", exc_info=True)
         finally:
             self.zeroconf = None
             self.service_info = None

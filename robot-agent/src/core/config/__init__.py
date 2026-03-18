@@ -248,7 +248,7 @@ class Config:
                 result = json.loads(response.read().decode("utf-8"))
                 if result.get("success"):
                     # 重新加载本地配置
-                    self.reload()
+                    self.重新加载()
                     return True
                 return False
 
@@ -287,7 +287,7 @@ class Config:
             with urllib.request.urlopen(req, timeout=5) as response:
                 result = json.loads(response.read().decode("utf-8"))
                 if result.get("success"):
-                    self.reload()
+                    self.重新加载()
                 return result.get("results", {})
 
         except Exception as e:
@@ -526,7 +526,7 @@ class Config:
             logger.error(f"同步配置失败: {e}")
             return False
 
-    def reload(self) -> None:
+    def 重新加载(self) -> None:
         """重新加载配置"""
         self._load()
         self._通知配置变更()

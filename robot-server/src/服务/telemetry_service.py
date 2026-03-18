@@ -104,11 +104,11 @@ def start() -> None:
 
     threading.Thread(
         target=_sender_loop, args=(sock, _stop_event),
-        daemon=True, name="telemetry-sender"
+        daemon=True, name="遥测-发送器"
     ).start()
     threading.Thread(
         target=_receiver_loop, args=(sock, _stop_event),
-        daemon=True, name="telemetry-receiver"
+        daemon=True, name="遥测-接收器"
     ).start()
 
     logger.info("遥测服务已启动，UDP 监听 0.0.0.0:%d，心跳目标 %s:%d", LISTEN_PORT, DOG_HOST, DOG_PORT)

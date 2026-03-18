@@ -11,6 +11,7 @@ from core.dog import sdk
 
 APP_NAME = "robot-agent"
 logger = get_logger(APP_NAME)
+_CANCEL_EVENT = threading.Event()
 
 class 机器人控制模式:
     设备趴下_电机阻尼 = 0          # 设备趴下，电机进入阻尼状态
@@ -25,6 +26,28 @@ def _收集机器人状态(app):
         "battery": app.getBatteryPower(), # 电量
         "mode": app.getCurrentCtrlmode(), # 控制模式
     }
+
+
+def _执行安全停止(app) -> None:
+    try:
+        app.move(0, 0, 0)
+    except Exception:
+        pass
+    try:
+        app.attitudeControl(0.0, 0.0, 0.0, 0.0)
+    except Exception:
+        pass
+
+
+def _可中断等待(seconds: float, app) -> bool:
+    end_time = time.time() + max(0.0, seconds)
+    while time.time() < end_time:
+        if _CANCEL_EVENT.is_set():
+            _执行安全停止(app)
+            return False
+        remaining = end_time - time.time()
+        time.sleep(0.05 if remaining > 0.05 else max(0.0, remaining))
+    return True
 
 def _循环发送机器人状态(app, robot_uuid, ipc_path):
     seq = 0
@@ -72,6 +95,11 @@ def _启动机器人(app, config: dict) -> None:
 
 def _处理控制指令(app, payload: dict) -> None:
     cmd_type = payload.get("type")
+    if cmd_type == "cancel_action":
+        _CANCEL_EVENT.set()
+        _执行安全停止(app)
+        return
+    _CANCEL_EVENT.clear()
     if cmd_type == "move":
         app.move(
             float(payload.get("vx", 0) or 0),
@@ -100,7 +128,7 @@ def _处理控制指令(app, payload: dict) -> None:
         duration = float(payload.get("duration", 2) or 2)
         if duration > 0:
             logger.info(f"执行中: 移动控制 (vx={vx}, vy={vy}, yaw_rate={yaw_rate}, {duration}秒)")
-            time.sleep(duration)
+            _可中断等待(duration, app)
             app.move(0, 0, 0)
 
 def _执行站立动作(app) -> None:
@@ -110,47 +138,47 @@ def _执行站立动作(app) -> None:
 
     logger.info("执行中: 站立")
     app.standUp()
-    time.sleep(3)
+    _可中断等待(3, app)
 
 def _执行趴下动作(app) -> None:
     logger.info("执行中: 趴下")
     app.lieDown()
-    time.sleep(3)
+    _可中断等待(3, app)
 
 def _执行跳跃动作(app) -> None:
     logger.info("执行中: 跳跃")
     app.jump()
-    time.sleep(4)
+    _可中断等待(4, app)
 
 def _执行向前跳跃动作(app) -> None:
     logger.info("执行中: 向前跳跃")
     app.frontJump()
-    time.sleep(4)
+    _可中断等待(4, app)
 
 def _执行后空翻动作(app) -> None:
     logger.info("执行中: 后空翻")
     app.backflip()
-    time.sleep(4)
+    _可中断等待(4, app)
 
 def _执行握手动作(app) -> None:
     logger.info("执行中: 握手")
     app.shakeHand()
-    time.sleep(4)
+    _可中断等待(4, app)
 
 def _执行姿态控制动作(app) -> None:
     logger.info("执行中: 姿态控制 (4秒)")
     app.attitudeControl(0.1, 0.1, 0.1, 0.1)
-    time.sleep(4)
+    _可中断等待(4, app)
     app.standUp()
-    time.sleep(2)
+    _可中断等待(2, app)
 
 # 执行双腿站立动作（一次性）
 def _执行双腿站立动作_一次性(app) -> None:
     logger.info("执行中: 双腿站立")
     app.twoLegStand(0.0, 0.0)
-    time.sleep(4)
+    _可中断等待(4, app)
     app.cancelTwoLegStand()
-    time.sleep(2)
+    _可中断等待(2, app)
 
 # 执行双腿站立动作
 def _执行双腿站立动作(app) -> None:
@@ -161,19 +189,19 @@ def _执行双腿站立动作(app) -> None:
 def _执行退出双腿站立动作(app) -> None:
     logger.info("执行中: 退出双腿站立")
     app.cancelTwoLegStand()
-    time.sleep(1)
+    _可中断等待(1, app)
 
 # 执行退出动作（趴下）
 def _执行退出_趴下动作(app) -> None:
     logger.info("退出演示。机器人将趴下。")
     app.lieDown()
-    time.sleep(3)
+    _可中断等待(3, app)
 
 # 执行退出动作（站立）
 def _执行退出_站立动作(app) -> None:
     logger.info("退出演示。机器人将站立。")
     app.standUp()
-    time.sleep(3)
+    _可中断等待(3, app)
 
 # 执行退出动作（先趴下后急停）
 def _执行退出_停止动作(app) -> None:
@@ -181,9 +209,9 @@ def _执行退出_停止动作(app) -> None:
     current_mode = app.getCurrentCtrlmode()
     if current_mode != 机器人控制模式.设备趴下_电机阻尼:
         app.lieDown()
-        time.sleep(2)
+        _可中断等待(2, app)
     app.passive()
-    time.sleep(1)
+    _可中断等待(1, app)
 
 # 动作处理映射
 ACTION_HANDLERS = {
