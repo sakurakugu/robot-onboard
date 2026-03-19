@@ -1089,7 +1089,7 @@ class 动作调度器:
         if action in {
             "move", "move_by_distance", "turn_around", "lean_left", "lean_right", "nod_up",
             "nod_down", "rotate_clockwise", "rotate_counterclockwise", "max_height",
-            "min_height", "attitude_rest",
+            "min_height", "attitude_rest", "approach_target",
         }:
             return "preempt"
         return "latest_wins"
@@ -1293,12 +1293,69 @@ class 动作执行器:
 
         return (vx, vy, yaw_rate, duration)
 
+    def _执行目标靠近(self, token: int, parameters: dict) -> bool:
+        cx = float(parameters.get("cx", 0.5))
+        w = float(parameters.get("w", 0.12))
+        stop_area = float(parameters.get("stop_area", 0.22))
+        max_seconds = float(parameters.get("max_seconds", 6.0))
+        heading_gain = float(parameters.get("heading_gain", 1.6))
+        min_vx = float(parameters.get("min_vx", 0.08))
+        max_vx = float(parameters.get("max_vx", 0.18))
+        min_vx = max(0.03, min(min_vx, 0.25))
+        max_vx = max(min_vx, min(max_vx, 0.28))
+        stop_area = max(0.03, min(stop_area, 0.8))
+        max_seconds = max(0.5, min(max_seconds, 8.0))
+        h = float(parameters.get("h", w))
+        h = max(0.0, min(1.0, h))
+        area = max(0.0, min(1.0, w * h))
+        cx = max(0.0, min(1.0, cx))
+        center_error = max(-1.0, min(1.0, cx - 0.5))
+        if area >= stop_area:
+            self.client.交互式子进程控制器.发送命令(json.dumps({"type": "ai_move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0, "duration": 0.1}))
+            return True
+        normalized_gap = max(0.0, (stop_area - area) / stop_area)
+        vx = min_vx + (max_vx - min_vx) * normalized_gap
+        yaw_rate = max(-0.45, min(0.45, -heading_gain * center_error))
+        rotate_duration = max(0.2, min(1.2, abs(center_error) * 1.8))
+        move_duration = max(0.4, min(max_seconds, 0.8 + normalized_gap * 2.2))
+        if abs(yaw_rate) >= 0.05:
+            rotate_command = json.dumps({
+                "type": "ai_move",
+                "vx": 0.0,
+                "vy": 0.0,
+                "yaw_rate": round(yaw_rate, 4),
+                "duration": round(rotate_duration, 4),
+            })
+            success = self.client.交互式子进程控制器.发送命令(rotate_command)
+            if not success:
+                return False
+            if not self._可中断的睡眠(token, rotate_duration):
+                return False
+        move_command = json.dumps({
+            "type": "ai_move",
+            "vx": round(vx, 4),
+            "vy": 0.0,
+            "yaw_rate": 0.0,
+            "duration": round(move_duration, 4),
+        })
+        success = self.client.交互式子进程控制器.发送命令(move_command)
+        if not success:
+            return False
+        if not self._可中断的睡眠(token, move_duration):
+            return False
+        self.client.交互式子进程控制器.发送命令(json.dumps({"type": "ai_move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0, "duration": 0.2}))
+        return True
+
     def 执行动作(self, action: str, parameters: dict) -> bool:
         """ 执行动作(操作机器人行动的动作) """
         try:
             token = self._下一个_token()
             logger.debug(f"开始执行动作: {action}, 参数: {parameters}")
             self._停止当前动作()
+            if action == "approach_target":
+                result = self._执行目标靠近(token, parameters)
+                logger.info(f"目标靠近执行结果: {result}, 参数: {parameters}")
+                return result
             # 特殊处理move动作
             if action == "move":
                 # 检查是否使用距离/步数/角度参数

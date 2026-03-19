@@ -201,7 +201,7 @@ class JoystickController:
         vx = axis0 * max_vx * speed_ratio
         vy = axis1 * max_vy * speed_ratio
         # 方向校正：右摇杆上推应为右转，下拉应为左转
-        yaw_rate = -axis2 * max_yaw * speed_ratio
+        yaw_rate = axis2 * max_yaw * speed_ratio
 
         if abs(vx) < 0.05:
             vx = 0.0

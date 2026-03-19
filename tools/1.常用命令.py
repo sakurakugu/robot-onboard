@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import os
 import sys
 import re
@@ -152,7 +149,7 @@ def 运行ssh命令(command: List[str], use_sshpass: bool):
 def 连接机器狗(name: str, ip: str):
     """连接机器狗"""
     print_info(f"正在连接机器狗 {name} ({ROBOT_USER}@{ip})...")
-    use_sshpass = sys.platform != "win32" and shutil.which("sshpass")
+    use_sshpass: bool = sys.platform != "win32" and shutil.which("sshpass")
     ssh_cmd = ["ssh", f"{ROBOT_USER}@{ip}"]
     try:
         运行ssh命令(ssh_cmd, use_sshpass)
