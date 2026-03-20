@@ -1298,11 +1298,14 @@ class 动作执行器:
         w = float(parameters.get("w", 0.12))
         stop_area = float(parameters.get("stop_area", 0.22))
         max_seconds = float(parameters.get("max_seconds", 6.0))
-        heading_gain = float(parameters.get("heading_gain", 1.6))
+        heading_gain = float(parameters.get("heading_gain", 2.4))
+        max_yaw_rate = float(parameters.get("max_yaw_rate", 0.8))
         min_vx = float(parameters.get("min_vx", 0.08))
         max_vx = float(parameters.get("max_vx", 0.18))
         min_vx = max(0.03, min(min_vx, 0.25))
         max_vx = max(min_vx, min(max_vx, 0.28))
+        heading_gain = max(0.4, min(heading_gain, 4.2))
+        max_yaw_rate = max(0.3, min(max_yaw_rate, 1.2))
         stop_area = max(0.03, min(stop_area, 0.8))
         max_seconds = max(0.5, min(max_seconds, 8.0))
         h = float(parameters.get("h", w))
@@ -1315,8 +1318,8 @@ class 动作执行器:
             return True
         normalized_gap = max(0.0, (stop_area - area) / stop_area)
         vx = min_vx + (max_vx - min_vx) * normalized_gap
-        yaw_rate = max(-0.45, min(0.45, -heading_gain * center_error))
-        rotate_duration = max(0.2, min(1.2, abs(center_error) * 1.8))
+        yaw_rate = max(-max_yaw_rate, min(max_yaw_rate, -heading_gain * center_error))
+        rotate_duration = max(0.25, min(1.8, abs(center_error) * 2.6))
         move_duration = max(0.4, min(max_seconds, 0.8 + normalized_gap * 2.2))
         if abs(yaw_rate) >= 0.05:
             rotate_command = json.dumps({

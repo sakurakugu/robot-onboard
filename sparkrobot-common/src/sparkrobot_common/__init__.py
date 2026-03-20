@@ -5,12 +5,12 @@ SparkRobot Common - 通用库
 """
 
 from sparkrobot_common.const import (
+    # 基础常量
     CONFIG_DIR,
     CONFIG_FILE,
     CONFIG_SECTION_TITLES,
     DEFAULT_CONFIG_FIELDS,
     DEFAULT_SERVER_ADDR,
-    # 基础常量
     ORG_NAME,
     READONLY_FIELDS,
     ROBOT_SERVER_HOST,
