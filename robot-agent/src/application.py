@@ -50,7 +50,7 @@ from modules.transport.protocol import (
     构建音频结束消息,
 )
 from modules.transport.ws_manager import WebSocketManager
-from modules.vision.camera import capture_photo
+from modules.vision import capture_photo, 从参数解析目标框, 打开视频流, 读取最新视频帧, 静态目标跟踪器
 
 from . import __version__ as ROBOT_AGENT_VERSION
 
@@ -1089,7 +1089,7 @@ class 动作调度器:
         if action in {
             "move", "move_by_distance", "turn_around", "lean_left", "lean_right", "nod_up",
             "nod_down", "rotate_clockwise", "rotate_counterclockwise", "max_height",
-            "min_height", "attitude_rest", "approach_target",
+            "min_height", "attitude_rest", "approach_target", "vision_approach_target",
         }:
             return "preempt"
         return "latest_wins"
@@ -1349,16 +1349,128 @@ class 动作执行器:
         self.client.交互式子进程控制器.发送命令(json.dumps({"type": "ai_move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0, "duration": 0.2}))
         return True
 
+    def _执行视觉目标靠近(self, token: int, parameters: dict) -> bool:
+        rtsp_url = str(parameters.get("rtsp_url", "rtsp://127.0.0.1:8554/test"))
+        timeout = max(1, min(int(parameters.get("timeout", 5)), 15))
+        warmup_reads = max(1, min(int(parameters.get("warmup_reads", 3)), 10))
+        max_track_seconds = max(2.0, min(float(parameters.get("max_track_seconds", 18.0)), 60.0))
+        max_lost_frames = max(1, min(int(parameters.get("max_lost_frames", 4)), 20))
+        min_score = max(-1.0, min(float(parameters.get("min_score", 0.18)), 1.0))
+        search_margin = max(1.1, min(float(parameters.get("search_margin", 1.8)), 3.5))
+        template_update_rate = max(0.0, min(float(parameters.get("template_update_rate", 0.2)), 1.0))
+        cx_offset = max(-0.25, min(float(parameters.get("cx_offset", 0.0)), 0.25))
+        cy_offset = max(-0.25, min(float(parameters.get("cy_offset", 0.0)), 0.25))
+
+        bbox = 从参数解析目标框(parameters)
+        tracker = 静态目标跟踪器(
+            initial_bbox=bbox,
+            search_margin=search_margin,
+            min_score=min_score,
+            template_update_rate=template_update_rate,
+        )
+
+        cap = None
+        try:
+            cap = 打开视频流(rtsp_url, timeout)
+            if not cap.isOpened():
+                logger.error(f"无法打开 RTSP 流: {rtsp_url}")
+                return False
+
+            first_frame = 读取最新视频帧(cap, warmup_reads=warmup_reads)
+            if first_frame is None:
+                logger.error("无法从 RTSP 流读取首帧")
+                return False
+
+            initial_bbox = tracker.初始化(first_frame)
+            logger.info(
+                "视觉靠近启动: "
+                f"rtsp={rtsp_url}, 初始框=(cx={initial_bbox.cx:.3f}, cy={initial_bbox.cy:.3f}, "
+                f"w={initial_bbox.w:.3f}, h={initial_bbox.h:.3f})"
+            )
+
+            start_time = time.time()
+            lost_frames = 0
+            control_parameters = dict(parameters)
+            control_parameters.setdefault("max_seconds", 1.2)
+            control_parameters.setdefault("min_vx", 0.08)
+            control_parameters.setdefault("max_vx", 0.16)
+            control_parameters.setdefault("heading_gain", 2.0)
+            control_parameters.setdefault("max_yaw_rate", 0.6)
+
+            while time.time() - start_time < max_track_seconds:
+                if token != self._读取当前_token():
+                    return False
+
+                frame = 读取最新视频帧(cap, warmup_reads=1)
+                if frame is None:
+                    lost_frames += 1
+                    logger.warning(f"视觉靠近读取视频帧失败: lost_frames={lost_frames}/{max_lost_frames}")
+                    if lost_frames >= max_lost_frames:
+                        break
+                    continue
+
+                tracked = tracker.更新(frame)
+                if tracked is None:
+                    lost_frames += 1
+                    logger.warning(f"视觉靠近跟踪丢失: lost_frames={lost_frames}/{max_lost_frames}")
+                    if lost_frames >= max_lost_frames:
+                        break
+                    continue
+
+                lost_frames = 0
+                tracked_bbox, score = tracked
+                control_parameters["cx"] = max(0.0, min(1.0, tracked_bbox.cx + cx_offset))
+                control_parameters["cy"] = max(0.0, min(1.0, tracked_bbox.cy + cy_offset))
+                control_parameters["w"] = tracked_bbox.w
+                control_parameters["h"] = tracked_bbox.h
+
+                logger.info(
+                    "视觉靠近跟踪: "
+                    f"score={score:.3f}, cx={control_parameters['cx']:.3f}, cy={control_parameters['cy']:.3f}, "
+                    f"w={tracked_bbox.w:.3f}, h={tracked_bbox.h:.3f}, area={tracked_bbox.area:.3f}"
+                )
+
+                if not self._执行目标靠近(token, control_parameters):
+                    return False
+
+                stop_area = float(control_parameters.get("stop_area", 0.22))
+                stop_height = float(control_parameters.get("stop_height", 0.0))
+                if tracked_bbox.area >= stop_area or (stop_height > 0.0 and tracked_bbox.h >= stop_height):
+                    logger.info("视觉靠近完成，已满足停止阈值")
+                    return True
+
+            logger.warning("视觉靠近结束：跟踪超时或连续丢失目标")
+            self.client.交互式子进程控制器.发送命令(
+                json.dumps({"type": "ai_move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0, "duration": 0.2})
+            )
+            return False
+        except Exception as e:
+            logger.error(f"执行视觉目标靠近失败: {e}", exc_info=True)
+            return False
+        finally:
+            if cap is not None:
+                cap.release()
+
+    def _执行自定义动作(self, action: str, token: int, parameters: dict) -> Optional[bool]:
+        if action == "approach_target":
+            result = self._执行目标靠近(token, parameters)
+            logger.info(f"目标靠近执行结果: {result}, 参数: {parameters}")
+            return result
+        if action == "vision_approach_target":
+            result = self._执行视觉目标靠近(token, parameters)
+            logger.info(f"视觉目标靠近执行结果: {result}, 参数: {parameters}")
+            return result
+        return None
+
     def 执行动作(self, action: str, parameters: dict) -> bool:
         """ 执行动作(操作机器人行动的动作) """
         try:
             token = self._下一个_token()
             logger.debug(f"开始执行动作: {action}, 参数: {parameters}")
             self._停止当前动作()
-            if action == "approach_target":
-                result = self._执行目标靠近(token, parameters)
-                logger.info(f"目标靠近执行结果: {result}, 参数: {parameters}")
-                return result
+            custom_result = self._执行自定义动作(action, token, parameters)
+            if custom_result is not None:
+                return custom_result
             # 特殊处理move动作
             if action == "move":
                 # 检查是否使用距离/步数/角度参数
