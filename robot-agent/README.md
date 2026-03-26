@@ -43,9 +43,6 @@ robot-agent/
 │   │   │   ├── ipc.py           # IPC 通信
 │   │   │   ├── joystick.py      # 摇杆控制
 │   │   │   └── process.py       # 进程控制
-│   │   ├── group_control/       # 群控模块 (旧)
-│   │   │   ├── robot_dog.py
-│   │   │   └── trick_robot_dog.py
 │   │   ├── transport/           # 通信模块
 │   │   │   ├── protocol.py      # 协议定义
 │   │   │   └── ws_manager.py    # WebSocket 管理
@@ -103,14 +100,13 @@ robot-agent/
 
 依赖 core，modules 之间可以相互调用。
 
-| 模块          | 功能                         |
-| ------------- | ---------------------------- |
-| actions       | 动作执行，解析和执行动作指令 |
-| audio         | 音频采集和播放               |
-| control       | IPC 通信、摇杆控制、进程控制 |
-| group_control | 群控功能                     |
-| transport     | WebSocket 通信管理           |
-| vision        | 摄像头和视觉识别             |
+| 模块      | 功能                         |
+| --------- | ---------------------------- |
+| actions   | 动作执行，解析和执行动作指令 |
+| audio     | 音频采集和播放               |
+| control   | IPC 通信、摇杆控制、进程控制 |
+| transport | WebSocket 通信管理           |
+| vision    | 摄像头和视觉识别             |
 
 ## 安装部署
 
