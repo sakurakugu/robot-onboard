@@ -1191,7 +1191,7 @@ class 动作执行器:
     def _停止当前动作(self) -> None:
         """ 停止当前动作 """
         try:
-            self.client.交互式子进程控制器.发送命令(json.dumps({"type": "move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0}))
+            self._发送停止移动命令()
             self.client.交互式子进程控制器.发送命令(
                 json.dumps({
                     "type": "attitude", "roll_rate": 0.0, "pitch_rate": 0.0, "yaw_rate": 0.0, "height_vel": 0.0
@@ -1199,6 +1199,16 @@ class 动作执行器:
             )
         except Exception:
             pass
+
+    def _发送停止移动命令(self, duration: float = 0.0) -> None:
+        """发送零速度命令，必要时使用 ai_move 覆盖正在执行的定时移动。"""
+        stop_payload = {"vx": 0.0, "vy": 0.0, "yaw_rate": 0.0}
+        if duration > 0.0:
+            stop_payload["type"] = "ai_move"
+            stop_payload["duration"] = duration
+        else:
+            stop_payload["type"] = "move"
+        self.client.交互式子进程控制器.发送命令(json.dumps(stop_payload))
 
     def _解析等待时间(self, action: str) -> float:
         """ 解析动作等待时间 """
@@ -1314,11 +1324,12 @@ class 动作执行器:
         cx = max(0.0, min(1.0, cx))
         center_error = max(-1.0, min(1.0, cx - 0.5))
         if area >= stop_area:
-            self.client.交互式子进程控制器.发送命令(json.dumps({"type": "ai_move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0, "duration": 0.1}))
+            self._发送停止移动命令(0.1)
             return True
         normalized_gap = max(0.0, (stop_area - area) / stop_area)
         vx = min_vx + (max_vx - min_vx) * normalized_gap
-        yaw_rate = max(-max_yaw_rate, min(max_yaw_rate, -heading_gain * center_error))
+        # 目标在画面右侧时，应向右转让目标回到中心；此前符号相反会越转越偏。
+        yaw_rate = max(-max_yaw_rate, min(max_yaw_rate, heading_gain * center_error))
         rotate_duration = max(0.25, min(1.8, abs(center_error) * 2.6))
         move_duration = max(0.4, min(max_seconds, 0.8 + normalized_gap * 2.2))
         if abs(yaw_rate) >= 0.05:
@@ -1346,7 +1357,7 @@ class 动作执行器:
             return False
         if not self._可中断的睡眠(token, move_duration):
             return False
-        self.client.交互式子进程控制器.发送命令(json.dumps({"type": "ai_move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0, "duration": 0.2}))
+        self._发送停止移动命令(0.2)
         return True
 
     def _执行视觉目标靠近(self, token: int, parameters: dict) -> bool:
@@ -1399,6 +1410,7 @@ class 动作执行器:
 
             while time.time() - start_time < max_track_seconds:
                 if token != self._读取当前_token():
+                    self._发送停止移动命令(0.2)
                     return False
 
                 frame = 读取最新视频帧(cap, warmup_reads=1)
@@ -1440,12 +1452,11 @@ class 动作执行器:
                     return True
 
             logger.warning("视觉靠近结束：跟踪超时或连续丢失目标")
-            self.client.交互式子进程控制器.发送命令(
-                json.dumps({"type": "ai_move", "vx": 0.0, "vy": 0.0, "yaw_rate": 0.0, "duration": 0.2})
-            )
+            self._发送停止移动命令(0.2)
             return False
         except Exception as e:
             logger.error(f"执行视觉目标靠近失败: {e}", exc_info=True)
+            self._发送停止移动命令(0.2)
             return False
         finally:
             if cap is not None:
