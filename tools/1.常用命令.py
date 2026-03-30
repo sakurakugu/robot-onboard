@@ -3,10 +3,14 @@ import sys
 import re
 import shutil
 import subprocess
+import traceback
 import configparser
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
+
+from scripts.robot.package_builder import 执行打包流程
+from scripts.robot.utils import 确保存在包, 读取机器狗配置, 写入机器狗配置
 
 # 配置
 TOOLS_DIR = Path(__file__).resolve().parent
@@ -16,6 +20,7 @@ BACKUPS_DIR = PROJECT_ROOT.parent / "backups"
 CONFIG_FILE = SCRIPTS_DIR / "config" / "config.ini"
 
 ROBOT_USER = "firefly"
+DEFAULT_ROBOT_PORT = 43988
 
 # 颜色代码 (Windows 10+ 终端支持 ANSI 转义序列)
 class Colors:
@@ -70,6 +75,133 @@ def 保存机器狗列表(robots: Dict[str, str]):
 
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         config.write(f)
+
+
+def 获取当前安装目标() -> Tuple[Optional[str], Optional[int]]:
+    """读取当前安装软件使用的机器狗目标"""
+    return 读取机器狗配置()
+
+
+def 获取安装目标展示文本() -> str:
+    """返回当前安装目标的展示文本"""
+    robot_ip, robot_port = 获取当前安装目标()
+    if robot_ip and robot_port:
+        return f"{robot_ip}:{robot_port}"
+    return "未设置"
+
+
+def 输入端口号(current_port: Optional[int] = None) -> Optional[int]:
+    """读取并校验端口号"""
+    prompt = f"请输入端口号 (当前: {current_port}，回车保持不变): " if current_port else f"请输入端口号 (默认: {DEFAULT_ROBOT_PORT}): "
+
+    while True:
+        raw_port = input(prompt).strip()
+        if not raw_port:
+            if current_port:
+                return current_port
+            return DEFAULT_ROBOT_PORT
+
+        try:
+            port = int(raw_port)
+        except ValueError:
+            print_error("请输入有效的数字端口")
+            continue
+
+        if 1 <= port <= 65535:
+            return port
+
+        print_error("端口号必须在 1-65535 之间")
+
+
+def 手动设置安装目标():
+    """手动输入安装目标机器狗"""
+    current_ip, current_port = 获取当前安装目标()
+
+    while True:
+        prompt = f"请输入机器狗 IP (当前: {current_ip}，回车保持不变): " if current_ip else "请输入机器狗 IP: "
+        robot_ip = input(prompt).strip()
+
+        if not robot_ip:
+            if current_ip:
+                robot_ip = current_ip
+            else:
+                print_error("IP 地址不能为空")
+                continue
+
+        if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", robot_ip):
+            break
+
+        print_error("无效的 IP 地址格式")
+
+    robot_port = 输入端口号(current_port)
+    if robot_port is None:
+        return
+
+    写入机器狗配置(robot_ip, robot_port)
+    print_success(f"已设置安装目标: {robot_ip}:{robot_port}")
+
+
+def 从已保存机器狗设置安装目标():
+    """从已保存机器狗列表中选择安装目标"""
+    robots = load_robots()
+    if not robots:
+        print_error("暂无已保存机器狗，请先在设置中添加")
+        return
+
+    print("\n------------------------------------------")
+    print("选择安装目标机器狗")
+    print("------------------------------------------")
+    for idx, (name, ip) in enumerate(robots.items(), 1):
+        print(f"  {idx}) {name} ({ip})")
+    print("  0) 返回")
+    print("------------------------------------------")
+
+    choice = input("请输入编号: ").strip()
+    if choice == "0":
+        return
+    if not choice.isdigit():
+        print_error("无效输入")
+        return
+
+    idx = int(choice)
+    robot_list = list(robots.items())
+    if not (1 <= idx <= len(robot_list)):
+        print_error("无效的编号")
+        return
+
+    _, robot_ip = robot_list[idx - 1]
+    _, current_port = 获取当前安装目标()
+    robot_port = 输入端口号(current_port)
+    if robot_port is None:
+        return
+
+    写入机器狗配置(robot_ip, robot_port)
+    print_success(f"已设置安装目标: {robot_ip}:{robot_port}")
+
+
+def 设置安装目标菜单():
+    """设置安装目标机器狗"""
+    while True:
+        print("\n------------------------------------------")
+        print("设置安装目标机器狗")
+        print("------------------------------------------")
+        print(f"当前目标: {获取安装目标展示文本()}")
+        print("  1) 从已保存机器狗选择")
+        print("  2) 手动输入 IP 和端口")
+        print("  0) 返回")
+        print("------------------------------------------")
+
+        choice = input("请选择: ").strip()
+        if choice == "0":
+            return
+        if choice == "1":
+            从已保存机器狗设置安装目标()
+            return
+        if choice == "2":
+            手动设置安装目标()
+            return
+
+        print_error("无效选项")
 
 # --- 功能函数 ---
 
@@ -155,6 +287,97 @@ def 连接机器狗(name: str, ip: str):
         运行ssh命令(ssh_cmd, use_sshpass)
     except FileNotFoundError:
         print_error("未找到 ssh 命令，请确保已安装 OpenSSH Client")
+
+
+def 执行安装任务(task_name: str, robot_ip: str, robot_port: int) -> bool:
+    """执行机器狗软件安装任务"""
+    try:
+        确保存在包("paramiko")
+        确保存在包("ruamel.yaml")
+    except ImportError:
+        print_error("依赖安装失败，无法继续执行安装")
+        return False
+
+    from scripts.robot.config import 机器狗配置器
+
+    print("\n" + "=" * 50)
+    print("正在连接机器狗...")
+    print("=" * 50)
+
+    configurator = 机器狗配置器(robot_port, robot_ip, ROBOT_USER, ROBOT_USER)
+    if not configurator.连接():
+        print_error("无法连接到机器狗，请检查网络、IP 和端口是否正确")
+        input("\n按回车键返回安装菜单...")
+        return False
+
+    success = False
+    try:
+        if task_name == "install_1":
+            success = configurator.安装SparkRobotCommon()
+        elif task_name == "install_2":
+            success = configurator.安装RobotServer()
+        elif task_name == "install_3":
+            success = configurator.安装RobotAgent()
+        else:
+            print_error(f"未知的安装任务: {task_name}")
+
+        if success:
+            print_success("安装完成")
+        else:
+            print_error("安装失败或已取消")
+    except Exception as e:
+        print_error(f"安装过程中发生错误: {e}")
+        traceback.print_exc()
+        success = False
+    finally:
+        configurator.断开连接()
+
+    input("\n按回车键返回安装菜单...")
+    return success
+
+
+def 安装软件菜单():
+    """安装机器狗软件菜单"""
+    while True:
+        current_target = 获取安装目标展示文本()
+
+        print("\n------------------------------------------")
+        print("安装机器狗软件")
+        print("------------------------------------------")
+        print(f"当前目标: {current_target}")
+        print("  1) 设置安装目标机器狗")
+        print("  2) 安装 sparkrobot-common")
+        print("  3) 安装 robot-server")
+        print("  4) 安装 robot-agent")
+        print("  0) 返回")
+        print("------------------------------------------")
+
+        choice = input("请选择: ").strip()
+        if choice == "0":
+            return
+
+        if choice == "1":
+            设置安装目标菜单()
+            continue
+
+        robot_ip, robot_port = 获取当前安装目标()
+        if not robot_ip or not robot_port:
+            print_error("请先设置安装目标机器狗")
+            continue
+
+        if choice == "2":
+            执行安装任务("install_1", robot_ip, robot_port)
+        elif choice == "3":
+            执行安装任务("install_2", robot_ip, robot_port)
+        elif choice == "4":
+            执行安装任务("install_3", robot_ip, robot_port)
+        else:
+            print_error("无效选项")
+
+
+def 打包robot_agent套件菜单():
+    """打包 robot-agent 套件"""
+    执行打包流程()
 
 def 获取当前时间戳() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
@@ -564,6 +787,8 @@ def 显示菜单():
     print("  3) 修复常见错误")
     print("  4) 检查代码注释 (默认扫描根目录)")
     print("  5) 设置 (管理机器狗)")
+    print(f"  6) 安装机器狗软件 (当前目标: {获取安装目标展示文本()})")
+    print("  7) 打包 robot-agent 套件")
     print("  0) 退出")
     print("")
     print("==========================================")
@@ -591,6 +816,10 @@ def main():
                 检查代码注释()
             elif choice == "5":
                 设置菜单()
+            elif choice == "6":
+                安装软件菜单()
+            elif choice == "7":
+                打包robot_agent套件菜单()
             elif choice == "0":
                 print_success("退出脚本")
                 sys.exit(0)

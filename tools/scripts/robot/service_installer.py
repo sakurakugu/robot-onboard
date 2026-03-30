@@ -1,11 +1,8 @@
 """服务安装模块 - 处理 SparkRobotCommon 和 RobotServer 的安装"""
 
-import fnmatch
-import os
-import tarfile
-import zipfile
 from pathlib import Path
-from typing import Literal
+
+from .package_builder import 打包单个项目
 
 
 class 服务安装管理器:
@@ -174,94 +171,8 @@ class 服务安装管理器:
             return None
         return local_path
 
-    def _解析压缩扩展(self, package_ext: str | None) -> tuple[str, str | None]:
-        if not package_ext:
-            return ".tar.gz", "gztar"
-
-        value = package_ext.strip().lower()
-        if not value.startswith("."):
-            value = f".{value}"
-
-        ext_mapping = {
-            ".tar.gz": "gztar",
-            ".tgz": "gztar",
-            ".zip": "zip",
-            ".tar": "tar",
-            ".tar.bz2": "bztar",
-            ".tar.xz": "xztar",
-        }
-        archive_format = ext_mapping.get(value)
-        if archive_format is None:
-            return ".tar.gz", "gztar"
-        if value == ".tgz":
-            return ".tar.gz", archive_format
-        return value, archive_format
-
-    def _获取输出目录(self) -> Path:
-        script_dir = Path(__file__).resolve()
-        project_root = script_dir.parents[3]
-        return project_root / "other" / "packages"
-
-    def _是否忽略路径(self, target: Path) -> bool:
-        ignore_patterns = [
-            "__pycache__", "*.pyc", "*.pyo", "*.pyd",
-            "*.egg-info", ".git", ".idea", ".vscode",
-            ".DS_Store", "node_modules", "dist", "build",
-            ".mypy_cache", ".ruff_cache",
-        ]
-        for part in target.parts:
-            for pattern in ignore_patterns:
-                if fnmatch.fnmatch(part, pattern):
-                    return True
-        return False
-
     def _打包项目(self, name: str, source_dir: Path, package_ext: str | None) -> Path | None:
-        ext, archive_format = self._解析压缩扩展(package_ext)
-        if archive_format is None:
-            print("✗ 不支持的压缩格式")
-            return None
-
-        output_dir = self._获取输出目录()
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{name}{ext}"
-        if output_path.exists():
-            output_path.unlink()
-
-        if archive_format == "zip":
-            with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
-                for root, dirs, files in os.walk(source_dir):
-                    root_path = Path(root)
-                    dirs[:] = [d for d in dirs if not self._是否忽略路径(root_path / d)]
-                    for file_name in files:
-                        file_path = root_path / file_name
-                        if self._是否忽略路径(file_path):
-                            continue
-                        arcname = file_path.relative_to(source_dir).as_posix()
-                        zip_file.write(file_path, arcname)
-            return output_path
-
-        mode_mapping: dict[str, Literal["w", "w:gz", "w:bz2", "w:xz"]] = {
-            "gztar": "w:gz",
-            "tar": "w",
-            "bztar": "w:bz2",
-            "xztar": "w:xz",
-        }
-        mode = mode_mapping.get(archive_format)
-        if mode is None:
-            print("✗ 不支持的压缩格式")
-            return None
-
-        with tarfile.open(output_path, mode) as tar_file:
-            for root, dirs, files in os.walk(source_dir):
-                root_path = Path(root)
-                dirs[:] = [d for d in dirs if not self._是否忽略路径(root_path / d)]
-                for file_name in files:
-                    file_path = root_path / file_name
-                    if self._是否忽略路径(file_path):
-                        continue
-                arcname = file_path.relative_to(source_dir).as_posix()
-                tar_file.add(file_path, arcname=arcname)
-        return output_path
+        return 打包单个项目(name, source_dir, package_ext)
 
     def _上传并解压(self, archive_path: Path, remote_path: str) -> bool:
         remote_packages_dir = "/home/firefly/sparkrobot/packages"
