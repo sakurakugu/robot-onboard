@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-ROBOT_AGENT_ROOT = PROJECT_ROOT / "app" / "robot-agent"
+ROBOT_AGENT_ROOT = PROJECT_ROOT / "app" / "robot-onboard"
 PACKAGES_DIR = PROJECT_ROOT / "other" / "packages"
 
 忽略模式 = [
