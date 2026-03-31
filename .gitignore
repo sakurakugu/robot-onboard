@@ -1,0 +1,68 @@
+# Python 相关
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# 环境与虚拟环境
+.env
+.env.*
+.venv/
+venv/
+ENV/
+env/
+
+# node相关
+node_modules/
+dist/
+
+# 构建与打包产物
+cache/
+build/
+*.egg-info/
+.eggs/
+*.egg
+
+# 测试与覆盖率缓存
+.coverage*
+coverage.xml
+htmlcov/
+
+# 笔记本与编辑器配置
+.ipynb_checkpoints/
+.vscode/
+.idea/
+.trae/
+.qoder/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+Desktop.ini
+*:Zone.Identifier
+
+# 日志与临时文件
+*.log
+*.tmp
+*.bak
+logs/
+test/
+.cache/
+
+# 模型文件
+# 这种二进制文件，到时候单独开一个git仓库放置
+# app/fronted/public/models/
+*.glb
+*.gltf
+*.bin
+*.blend
+*.blend1
+
+/other/
+robot-packages/
+*.db
+tools/scripts/config/
+

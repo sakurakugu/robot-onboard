@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Literal
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-ROBOT_AGENT_ROOT = PROJECT_ROOT / "app" / "robot-onboard"
-PACKAGES_DIR = PROJECT_ROOT / "other" / "packages"
+ROBOT_AGENT_ROOT = PROJECT_ROOT
+PACKAGES_DIR = PROJECT_ROOT / "dist" / "packages"
 
 忽略模式 = [
     "__pycache__", "*.pyc", "*.pyo", "*.pyd",

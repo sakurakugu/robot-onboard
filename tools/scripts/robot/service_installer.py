@@ -165,7 +165,7 @@ class 服务安装管理器:
     def _获取本地项目路径(self, project_name: str) -> Path | None:
         script_dir = Path(__file__).resolve()
         project_root = script_dir.parents[3]
-        local_path = project_root / "app" / "robot-onboard" / project_name
+        local_path = project_root / project_name
         if not local_path.exists():
             print(f"✗ 未找到本地 {project_name} 目录: {local_path}")
             return None
