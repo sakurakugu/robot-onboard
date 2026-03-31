@@ -9,7 +9,7 @@
 - **配置管理**: 读取、写入、重置配置文件
 - **WiFi 配置**: 扫描和连接 WiFi 网络
 - **Web 界面**: 提供配置页面
-- **mDNS 广播**: 自动在局域网广播服务，支持 robot-cloud 自动发现
+- **mDNS 广播**: 自动在局域网广播服务，支持 phone-app 自动发现
 - **日志管理**: 查看系统日志
 - **音量控制**: 系统音量管理
 - **认证服务**: 简单的会话认证
@@ -135,7 +135,7 @@ python main.py
 
 ## mDNS 服务发现
 
-robot-server 启动后会自动在局域网广播 mDNS 服务，robot-cloud 可以通过 `/api/v1/robots/discover` 接口自动发现局域网内的所有机器人。
+robot-server 启动后会自动在局域网广播 mDNS 服务，phone-app 可以通过 `/api/v1/robots/discover` 接口自动发现局域网内的所有机器人。
 
 ### 服务类型
 
@@ -158,7 +158,7 @@ robot-server 启动后会自动在局域网广播 mDNS 服务，robot-cloud 可�
 
 ```
 ┌─────────────────┐
-│  robot-cloud    │
+│  phone-app      │
 │   后端服务       │
 └────────┬────────┘
          │ mDNS 查询

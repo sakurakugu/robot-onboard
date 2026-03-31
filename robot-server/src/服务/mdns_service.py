@@ -1,7 +1,7 @@
 """
 mDNS 服务模块 - 在局域网广播机器人服务
 
-使用 zeroconf 库实现 mDNS 服务注册，允许 robot-cloud 自动发现机器人。
+使用 zeroconf 库实现 mDNS 服务注册，允许 phone-app 自动发现机器人。
 """
 import socket
 import subprocess
