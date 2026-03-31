@@ -1,6 +1,7 @@
 import subprocess
 from typing import TypedDict
 
+
 class WiFi信息(TypedDict):
     ssid: str
     signal: str

@@ -1202,7 +1202,7 @@ class 动作执行器:
 
     def _发送停止移动命令(self, duration: float = 0.0) -> None:
         """发送零速度命令，必要时使用 ai_move 覆盖正在执行的定时移动。"""
-        stop_payload = {"vx": 0.0, "vy": 0.0, "yaw_rate": 0.0}
+        stop_payload: dict[str, float | str] = {"vx": 0.0, "vy": 0.0, "yaw_rate": 0.0}
         if duration > 0.0:
             stop_payload["type"] = "ai_move"
             stop_payload["duration"] = duration

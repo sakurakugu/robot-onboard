@@ -47,7 +47,8 @@ class Test静态目标跟踪器(unittest.TestCase):
         tracker.初始化(frame1)
         result = tracker.更新(frame2)
 
-        self.assertIsNotNone(result)
+        if result is None:
+            self.fail("期望返回跟踪结果")
         bbox, score = result
         self.assertGreaterEqual(score, 0.0)
         self.assertGreater(bbox.cx, 0.44)
