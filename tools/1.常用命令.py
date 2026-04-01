@@ -13,6 +13,7 @@ from scripts.robot.package_builder import 执行打包流程
 from scripts.robot.utils import 确保存在包, 读取机器狗配置, 写入机器狗配置
 
 # 配置
+ROOT_DIR = Path(__file__).resolve().parent.parent
 TOOLS_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = TOOLS_DIR / "scripts"
 PROJECT_ROOT = TOOLS_DIR.parent
@@ -41,6 +42,45 @@ def print_error(msg: str):
 
 def print_warn(msg: str):
     print(f"{Colors.YELLOW}[警告]{Colors.NC} {msg}")
+
+# --- 确保环境 ---
+
+def 确保_git_hooks_已启用() -> None:
+    """检查并启用 git hooks。"""
+    # 检查 .githooks 目录是否存在
+    githooks_dir = ROOT_DIR / ".githooks"
+    if not githooks_dir.exists():
+        return
+
+    # 获取当前 hooks 路径
+    result = subprocess.run(
+        ["git", "config", "core.hooksPath"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT_DIR,
+    )
+    current_path = result.stdout.strip() if result.returncode == 0 else ""
+
+    # 如果已经设置为 .githooks，则跳过
+    if current_path == ".githooks":
+        return
+
+    # print_info("启用 git hooks")
+    subprocess.run(
+        ["git", "config", "core.hooksPath", ".githooks"],
+        check=True,
+        cwd=ROOT_DIR,
+    )
+
+    # 非 Windows 系统需要添加执行权限
+    if os.name != "nt":
+        for hook_file in githooks_dir.iterdir():
+            if hook_file.is_file():
+                subprocess.run(
+                    ["chmod", "+x", str(hook_file)],
+                    check=False,
+                    cwd=ROOT_DIR,
+                )
 
 # --- 配置文件管理 ---
 
@@ -281,7 +321,7 @@ def 运行ssh命令(command: List[str], use_sshpass: bool):
 def 连接机器狗(name: str, ip: str):
     """连接机器狗"""
     print_info(f"正在连接机器狗 {name} ({ROBOT_USER}@{ip})...")
-    use_sshpass: bool = sys.platform != "win32" and shutil.which("sshpass")
+    use_sshpass: bool = sys.platform != "win32" and bool(shutil.which("sshpass"))
     ssh_cmd = ["ssh", f"{ROBOT_USER}@{ip}"]
     try:
         运行ssh命令(ssh_cmd, use_sshpass)
@@ -798,7 +838,7 @@ def main():
     # 确保能够显示颜色
     os.system("")
 
-    # 确保配置文件存在
+    确保_git_hooks_已启用()
     确保配置文件存在()
 
     while True:
