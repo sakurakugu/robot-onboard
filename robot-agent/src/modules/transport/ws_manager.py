@@ -58,7 +58,7 @@ class WebSocketManager:
     def _解析服务器URL配置(self) -> Dict[str, str]:
         """ _resolve_server_urls """
         server_cfg = self.config.get("server", {})
-        server_url = server_cfg.get("server_url") or f"ws://{DEFAULT_SERVER_ADDR}:9000"
+        server_url = server_cfg.get("server_url") or f"ws://{DEFAULT_SERVER_ADDR}"
 
         business_url = server_cfg.get("business_url") or server_cfg.get("url")
         if business_url and business_url.startswith("/"):

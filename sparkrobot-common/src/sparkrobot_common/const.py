@@ -35,7 +35,7 @@ ROBOT_SERVER_PORT = 8080
 ROBOT_SERVER_URL = f"http://{ROBOT_SERVER_HOST}:{ROBOT_SERVER_PORT}"
 
 # 默认服务器地址
-DEFAULT_SERVER_ADDR = "192.168.1.101"
+DEFAULT_SERVER_ADDR = "106.53.174.61"
 
 
 # ==================== 配置字段定义 ====================
@@ -74,7 +74,7 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
 
 
     # 服务器配置 [server]
-    配置字段("server", "server_url", f"ws://{DEFAULT_SERVER_ADDR}:9000", "服务器URL", "string"),
+    配置字段("server", "server_url", f"ws://{DEFAULT_SERVER_ADDR}", "服务器URL", "string"), # 只有本地测试才要加 :9000
     配置字段("server", "business_url", "/api/v1/robot/business", "业务连接URL", "string"),
     配置字段("server", "audio_upload_url", "/api/v1/robot/audio/upload", "音频上传URL", "string"),
     配置字段("server", "audio_download_url", "/api/v1/robot/audio/download", "音频下载URL", "string"),
