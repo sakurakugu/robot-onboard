@@ -99,7 +99,7 @@ class RobotClient:
         self._ipc_status_task: Optional[asyncio.Task] = None
         self._media_stream_task: Optional[asyncio.Task] = None
         self._ipc_status_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
-        self._云端媒体已激活 = False
+        self._云端媒体推流租约到期时间 = 0.0
 
         """ 初始化音频捕获 """
         self.audio_capture = AudioCapture(
@@ -142,6 +142,7 @@ class RobotClient:
             "config_update": self._处理配置更新,
             "sdk_mode_set": self._处理SDK模式设置,
             "sdk_mode_get": self._处理SDK模式获取,
+            "cloud_stream_control": self._处理云端视频推流控制,
             "log_mark": self._处理日志标记,
             "package_download": self._处理安装包下载,
         }
@@ -188,6 +189,23 @@ class RobotClient:
         # 更新重连间隔
         self.initial_reconnect_interval = self.config["server"].get("reconnect_interval", 5)
 
+    def _云端媒体是否按需推流(self) -> bool:
+        """是否启用按需推流模式。"""
+        media_cfg = self.config.get("media", {})
+        return bool(media_cfg.get("stream_on_demand", True))
+
+    def _当前云端媒体租约是否有效(self) -> bool:
+        """当前本地保存的云端媒体租约是否仍有效。"""
+        return self._云端媒体推流租约到期时间 > time.monotonic()
+
+    def _允许云端媒体推流(self) -> bool:
+        """根据连接状态和观看租约决定是否允许 ffmpeg 运行。"""
+        if not self.ws_manager.connected:
+            return False
+        if not self._云端媒体是否按需推流():
+            return True
+        return self._当前云端媒体租约是否有效()
+
 
     def _初始化日志(self) -> None:
         """ 初始化日志记录 """
@@ -231,7 +249,6 @@ class RobotClient:
             # 确保注册消息发送后连接仍然有效
             if not self.ws_manager.connected:
                 return False
-            self._云端媒体已激活 = True
         return success
 
     async def 断开连接到服务器(self, shutdown_resources: bool = False) -> None:
@@ -827,6 +844,27 @@ class RobotClient:
         message = data.get("message", "")
         logger.error(f"服务器错误: {code} - {message}")
 
+    async def _处理云端视频推流控制(self, data: Dict[str, Any]) -> None:
+        """处理云端下发的视频推流租约。"""
+        enabled = bool(data.get("enabled", True))
+        lease_ttl_ms = data.get("leaseTtlMs", 0)
+
+        try:
+            lease_ttl_ms = int(lease_ttl_ms)
+        except (TypeError, ValueError):
+            lease_ttl_ms = 0
+
+        if not enabled:
+            self._云端媒体推流租约到期时间 = 0.0
+            logger.info("云端视频推流租约已释放")
+            return
+
+        if lease_ttl_ms <= 0:
+            lease_ttl_ms = 30_000
+
+        self._云端媒体推流租约到期时间 = time.monotonic() + (lease_ttl_ms / 1000)
+        logger.info(f"云端视频推流租约已续期: {lease_ttl_ms}ms")
+
     async def _处理音频流开始(self, data: Dict[str, Any]) -> None:
         """ 处理音频流开始消息 """
         logger.debug("音频流开始")
@@ -862,7 +900,7 @@ class RobotClient:
         # 启动本地直连控制服务（独立运行，不受云端连接状态影响）
         direct_control_task = asyncio.create_task(self.ws_control_server.服务循环(), name="direct-control-ws")
         self._media_stream_task = asyncio.create_task(
-            self.media_streamer.服务循环(lambda: self._云端媒体已激活),
+            self.media_streamer.服务循环(self._允许云端媒体推流),
             name="cloud-media-stream",
         )
         try:

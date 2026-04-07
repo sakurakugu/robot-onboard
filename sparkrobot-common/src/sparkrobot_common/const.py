@@ -85,6 +85,7 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
 
     # 视频流媒体配置 [media]
     配置字段("media", "enable_cloud_streaming", True, "是否启用云端正式视频推流", "bool"),
+    配置字段("media", "stream_on_demand", True, "是否启用按需推流（无人观看时停止 ffmpeg）", "bool"),
     配置字段("media", "source_rtsp_url", "rtsp://127.0.0.1:8554/test", "本地 RTSP 视频源地址", "string"),
     配置字段("media", "publish_base_url", MEDIA_PUBLISH_BASE_URL_AUTO, "云端 MediaMTX RTSP 推流地址，默认跟随 server.server_url 主机", "string"),
     配置字段("media", "stream_path_prefix", "robots", "云端媒体流路径前缀", "string"),
