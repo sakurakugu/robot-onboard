@@ -43,6 +43,7 @@ from modules.transport.protocol import (
     构建日志标记响应消息,
     构建机器人注册消息,
     构建状态消息,
+    构建视频帧消息,
     构建配置响应消息,
     构建音量响应消息,
     构建音频帧消息,
@@ -51,6 +52,7 @@ from modules.transport.protocol import (
 )
 from modules.transport.ws_manager import WebSocketManager
 from modules.vision import capture_photo, 从参数解析目标框, 打开视频流, 读取最新视频帧, 静态目标跟踪器
+from modules.vision.cloud_video import 云端视频流管理器
 
 from . import __version__ as ROBOT_AGENT_VERSION
 
@@ -116,6 +118,7 @@ class RobotClient:
             self._处理直连控制指令,
             self._处理直连异步命令,
         )
+        self.video_streamer = 云端视频流管理器(self.发送视频帧)
 
         """ 初始化消息处理函数 """
         self.message_handlers: Dict[str, Callable] = {
@@ -129,6 +132,8 @@ class RobotClient:
             "audio_stream_start": self._处理音频流开始,
             "audio_stream_chunk": self._处理音频流数据块,
             "audio_stream_end": self._处理音频流结束,
+            "video_subscribe": self._处理视频订阅,
+            "video_unsubscribe": self._处理取消视频订阅,
             "camera_capture": self._处理相机拍照,
             "volume_get": self._处理音量获取,
             "volume_set": self._处理音量设置,
@@ -229,6 +234,7 @@ class RobotClient:
 
     async def 断开连接到服务器(self, shutdown_resources: bool = False) -> None:
         """断开连接"""
+        await self.video_streamer.停止()
         await self.ws_manager.断开连接()
         if shutdown_resources:
             self.交互式子进程控制器.关闭()
@@ -238,6 +244,17 @@ class RobotClient:
     async def 发送消息(self, message: Dict[str, Any], channel: str = "business") -> None:
         """发送消息到服务器"""
         await self.ws_manager.发送消息(message, channel=channel)
+
+    async def 发送视频帧(self, data: Dict[str, Any]) -> None:
+        """发送视频帧到云端。"""
+        message = 构建视频帧消息(
+            self.config["robot"]["uuid"],
+            str(data.get("frame", "")),
+            int(data["width"]) if data.get("width") is not None else None,
+            int(data["height"]) if data.get("height") is not None else None,
+            int(data["capturedAt"]) if data.get("capturedAt") is not None else None,
+        )
+        await self.发送消息(message, channel="business")
 
     async def 发送文本(self, text: str) -> None:
         message = 构建文本输入消息(self.config["robot"]["uuid"], text)
@@ -831,6 +848,23 @@ class RobotClient:
     async def _处理音频流结束(self, data: Dict[str, Any]) -> None:
         """ 处理音频流结束消息 """
         logger.debug("音频流结束")
+
+    async def _处理视频订阅(self, data: Dict[str, Any]) -> None:
+        """处理云端视频订阅。"""
+        rtsp_url = str(data.get("rtsp_url", "rtsp://127.0.0.1:8554/test"))
+        if self.video_streamer.正在运行:
+            logger.debug("云端视频抽帧已在运行，忽略重复订阅")
+            return
+        logger.info(f"收到云端视频订阅，开始抽帧: {rtsp_url}")
+        await self.video_streamer.启动(rtsp_url=rtsp_url)
+
+    async def _处理取消视频订阅(self, data: Dict[str, Any]) -> None:
+        """处理云端视频退订。"""
+        if not self.video_streamer.正在运行:
+            logger.debug("云端视频抽帧未运行，忽略退订")
+            return
+        logger.info("收到云端视频退订，停止抽帧")
+        await self.video_streamer.停止()
 
     async def _处理收到的消息(self, message: Dict[str, Any]) -> None:
         """ 处理收到的消息 """

@@ -146,6 +146,28 @@ def 构建拍照响应消息(
     }
 
 
+def 构建视频帧消息(
+    robot_uuid: str,            # 机器人 UUID
+    frame: str,                 # base64 编码的 JPEG 图像
+    width: int | None = None,   # 图像宽度
+    height: int | None = None,  # 图像高度
+    captured_at: int | None = None,  # 帧采集时间
+) -> Dict[str, Any]:
+    """ build_video_frame """
+    return {
+        "type": "video_frame",
+        "robotId": robot_uuid,
+        "timestamp": int(time.time() * 1000),
+        "data": {
+            "frame": frame,
+            "format": "jpeg",
+            "width": width,
+            "height": height,
+            "capturedAt": captured_at,
+        },
+    }
+
+
 def 构建音量响应消息(
     robot_uuid: str,        # 机器人 UUID
     request_id: str,        # 请求ID

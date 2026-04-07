@@ -14,7 +14,8 @@ dependencies = [
     "numpy>=2.2.6",
     "sounddevice>=0.5.5",
     "opuslib>=3.0.1",
-    "opencv-python>=4.8.0"
+    "opencv-python>=4.8.0",
+    "httpx>=0.28.1"
 ]
 
 [tool.setuptools]
