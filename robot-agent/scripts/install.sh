@@ -30,12 +30,17 @@ SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME"
 echo -e "${GREEN}正在安装机器狗客户端 Robot Agent...${NC}"
 echo -e "${BLUE}工作目录: $BASE_DIR${NC}"
 
-# 1. 赋予相关脚本执行权限
+# 1. 安装系统依赖
+echo -e "${BLUE}正在安装系统依赖（ffmpeg / netcat-openbsd）...${NC}"
+apt-get update
+apt-get install -y ffmpeg netcat-openbsd
+
+# 2. 赋予相关脚本执行权限
 echo -e "${BLUE}正在设置文件权限...${NC}"
 chmod +x "$SCRIPT_DIR/start.sh"
 chmod +x "$BASE_DIR/main.py"
 
-# 2. 生成 systemd 服务文件
+# 3. 生成 systemd 服务文件
 # 使用当前路径动态生成，确保路径正确
 echo -e "${BLUE}正在生成服务配置文件 $SERVICE_FILE ...${NC}"
 cat > "$SERVICE_FILE" <<EOF
@@ -57,13 +62,13 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-# 3. 重新加载 systemd 并启动服务
+# 4. 重新加载 systemd 并启动服务
 echo -e "${BLUE}正在启动服务...${NC}"
 systemctl daemon-reload
 systemctl enable $SERVICE_NAME
 systemctl restart $SERVICE_NAME
 
-# 4. 检查服务状态
+# 5. 检查服务状态
 echo -e "${BLUE}正在检查服务状态...${NC}"
 sleep 2 # 等待服务启动
 if systemctl is-active --quiet $SERVICE_NAME; then

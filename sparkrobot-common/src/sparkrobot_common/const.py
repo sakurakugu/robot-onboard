@@ -36,6 +36,7 @@ ROBOT_SERVER_URL = f"http://{ROBOT_SERVER_HOST}:{ROBOT_SERVER_PORT}"
 
 # 默认服务器地址
 DEFAULT_SERVER_ADDR = "106.53.174.61"
+MEDIA_PUBLISH_BASE_URL_AUTO = "follow_server"
 
 
 # ==================== 配置字段定义 ====================
@@ -55,6 +56,7 @@ class 配置字段:
 CONFIG_SECTION_TITLES: dict[str, str] = {
     "robot": "机器人信息",
     "server": "服务器配置",
+    "media": "视频流媒体",
     "sdk": "SDK配置",
     "audio": "音频配置",
     "actions": "动作配置",
@@ -80,6 +82,17 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     配置字段("server", "audio_download_url", "/api/v1/robot/audio/download", "音频下载URL", "string"),
     配置字段("server", "reconnect_interval", 5, "重连间隔（秒）", "int"),
     配置字段("server", "heartbeat_interval", 30, "心跳间隔（秒）", "int"),
+
+    # 视频流媒体配置 [media]
+    配置字段("media", "enable_cloud_streaming", True, "是否启用云端正式视频推流", "bool"),
+    配置字段("media", "source_rtsp_url", "rtsp://127.0.0.1:8554/test", "本地 RTSP 视频源地址", "string"),
+    配置字段("media", "publish_base_url", MEDIA_PUBLISH_BASE_URL_AUTO, "云端 MediaMTX RTSP 推流地址，默认跟随 server.server_url 主机", "string"),
+    配置字段("media", "stream_path_prefix", "robots", "云端媒体流路径前缀", "string"),
+    配置字段("media", "publish_user", "robotdog", "云端媒体推流用户名", "string"),
+    配置字段("media", "publish_pass", "robotdog", "云端媒体推流密码", "string"),
+    配置字段("media", "ffmpeg_path", "ffmpeg", "ffmpeg 可执行文件路径", "string"),
+    配置字段("media", "rtsp_transport", "tcp", "RTSP 传输方式：tcp|udp", "string", options=["tcp", "udp"]),
+    配置字段("media", "ffmpeg_loglevel", "warning", "ffmpeg 日志级别", "string", options=["quiet", "error", "warning", "info"]),
 
     # SDK配置 [sdk]
     配置字段("sdk", "enable_sdk_on_startup", True, "启动时是否开启SDK模式", "bool"),
@@ -204,6 +217,7 @@ __all__ = [
     "CONFIG_DIR",
     "CONFIG_FILE",
     "DEFAULT_SERVER_ADDR",
+    "MEDIA_PUBLISH_BASE_URL_AUTO",
     "DEFAULT_CONFIG_FIELDS",
     "ROBOT_SERVER_HOST",
     "ROBOT_SERVER_PORT",

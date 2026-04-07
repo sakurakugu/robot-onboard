@@ -4,6 +4,7 @@
 - 配置管理（~/sparkrobot/config/config.toml）
 - 配置热更新（watchdog 监听）
 - WebSocket 通信（云端服务器）
+- 云端 MediaMTX 正式视频推流
 - 本地直连 WebSocket 控制服务（端口 8082，手机同局域网时直接发送指令，无需经过云端）
 - 心跳保持
 - 接收音频回复（opus）
@@ -25,16 +26,16 @@ from typing import Any, Callable, Dict, Optional
 import httpx
 from sparkrobot_common import WORKSPACE_DIR, configure_logger, get_logger, 检测机器人运控版本, 获取项目版本
 
-from core.auth_client import get_auth_client
-from core.config import Config
-from modules.actions.mapping import 处理动作指令, 处理文本响应
-from modules.audio.capture import AudioCapture
-from modules.audio.playback import 停止当前音频播放, 处理音频响应并播放
-from modules.control.ipc import IpcServer
-from modules.control.joystick import JoystickController
-from modules.control.process import ProcessController
-from modules.control.ws_control_server import WsControlServer
-from modules.transport.protocol import (
+from src.core.auth_client import get_auth_client
+from src.core.config import Config
+from src.modules.actions.mapping import 处理动作指令, 处理文本响应
+from src.modules.audio.capture import AudioCapture
+from src.modules.audio.playback import 停止当前音频播放, 处理音频响应并播放
+from src.modules.control.ipc import IpcServer
+from src.modules.control.joystick import JoystickController
+from src.modules.control.process import ProcessController
+from src.modules.control.ws_control_server import WsControlServer
+from src.modules.transport.protocol import (
     构建SDK模式响应消息,
     构建安装包下载响应消息,
     构建心跳消息,
@@ -43,16 +44,15 @@ from modules.transport.protocol import (
     构建日志标记响应消息,
     构建机器人注册消息,
     构建状态消息,
-    构建视频帧消息,
     构建配置响应消息,
     构建音量响应消息,
     构建音频帧消息,
     构建音频开始消息,
     构建音频结束消息,
 )
-from modules.transport.ws_manager import WebSocketManager
-from modules.vision import capture_photo, 从参数解析目标框, 打开视频流, 读取最新视频帧, 静态目标跟踪器
-from modules.vision.cloud_video import 云端视频流管理器
+from src.modules.transport.ws_manager import WebSocketManager
+from src.modules.vision import capture_photo, 从参数解析目标框, 打开视频流, 读取最新视频帧, 静态目标跟踪器
+from src.modules.vision.cloud_media import 云端媒体推流管理器
 
 from . import __version__ as ROBOT_AGENT_VERSION
 
@@ -97,7 +97,9 @@ class RobotClient:
         self._action_executor = ThreadPoolExecutor(max_workers=4)
         self.audio_task: Optional[asyncio.Task] = None
         self._ipc_status_task: Optional[asyncio.Task] = None
+        self._media_stream_task: Optional[asyncio.Task] = None
         self._ipc_status_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+        self._云端媒体已激活 = False
 
         """ 初始化音频捕获 """
         self.audio_capture = AudioCapture(
@@ -118,7 +120,7 @@ class RobotClient:
             self._处理直连控制指令,
             self._处理直连异步命令,
         )
-        self.video_streamer = 云端视频流管理器(self.发送视频帧)
+        self.media_streamer = 云端媒体推流管理器(self.config)
 
         """ 初始化消息处理函数 """
         self.message_handlers: Dict[str, Callable] = {
@@ -132,8 +134,6 @@ class RobotClient:
             "audio_stream_start": self._处理音频流开始,
             "audio_stream_chunk": self._处理音频流数据块,
             "audio_stream_end": self._处理音频流结束,
-            "video_subscribe": self._处理视频订阅,
-            "video_unsubscribe": self._处理取消视频订阅,
             "camera_capture": self._处理相机拍照,
             "volume_get": self._处理音量获取,
             "volume_set": self._处理音量设置,
@@ -184,6 +184,7 @@ class RobotClient:
         # 更新相关组件的配置
         self.ws_manager.config = new_config
         self.audio_capture.config = new_config
+        self.media_streamer.更新配置(new_config)
         # 更新重连间隔
         self.initial_reconnect_interval = self.config["server"].get("reconnect_interval", 5)
 
@@ -230,13 +231,14 @@ class RobotClient:
             # 确保注册消息发送后连接仍然有效
             if not self.ws_manager.connected:
                 return False
+            self._云端媒体已激活 = True
         return success
 
     async def 断开连接到服务器(self, shutdown_resources: bool = False) -> None:
         """断开连接"""
-        await self.video_streamer.停止()
         await self.ws_manager.断开连接()
         if shutdown_resources:
+            await self.media_streamer.停止()
             self.交互式子进程控制器.关闭()
             if self._action_executor:
                 self._action_executor.shutdown(wait=False)
@@ -244,17 +246,6 @@ class RobotClient:
     async def 发送消息(self, message: Dict[str, Any], channel: str = "business") -> None:
         """发送消息到服务器"""
         await self.ws_manager.发送消息(message, channel=channel)
-
-    async def 发送视频帧(self, data: Dict[str, Any]) -> None:
-        """发送视频帧到云端。"""
-        message = 构建视频帧消息(
-            self.config["robot"]["uuid"],
-            str(data.get("frame", "")),
-            int(data["width"]) if data.get("width") is not None else None,
-            int(data["height"]) if data.get("height") is not None else None,
-            int(data["capturedAt"]) if data.get("capturedAt") is not None else None,
-        )
-        await self.发送消息(message, channel="business")
 
     async def 发送文本(self, text: str) -> None:
         message = 构建文本输入消息(self.config["robot"]["uuid"], text)
@@ -849,23 +840,6 @@ class RobotClient:
         """ 处理音频流结束消息 """
         logger.debug("音频流结束")
 
-    async def _处理视频订阅(self, data: Dict[str, Any]) -> None:
-        """处理云端视频订阅。"""
-        rtsp_url = str(data.get("rtsp_url", "rtsp://127.0.0.1:8554/test"))
-        if self.video_streamer.正在运行:
-            logger.debug("云端视频抽帧已在运行，忽略重复订阅")
-            return
-        logger.info(f"收到云端视频订阅，开始抽帧: {rtsp_url}")
-        await self.video_streamer.启动(rtsp_url=rtsp_url)
-
-    async def _处理取消视频订阅(self, data: Dict[str, Any]) -> None:
-        """处理云端视频退订。"""
-        if not self.video_streamer.正在运行:
-            logger.debug("云端视频抽帧未运行，忽略退订")
-            return
-        logger.info("收到云端视频退订，停止抽帧")
-        await self.video_streamer.停止()
-
     async def _处理收到的消息(self, message: Dict[str, Any]) -> None:
         """ 处理收到的消息 """
         msg_type = message.get("type")
@@ -887,6 +861,10 @@ class RobotClient:
         await self.ipc_server.启动()
         # 启动本地直连控制服务（独立运行，不受云端连接状态影响）
         direct_control_task = asyncio.create_task(self.ws_control_server.服务循环(), name="direct-control-ws")
+        self._media_stream_task = asyncio.create_task(
+            self.media_streamer.服务循环(lambda: self._云端媒体已激活),
+            name="cloud-media-stream",
+        )
         try:
             while True:
                 try:
@@ -936,6 +914,12 @@ class RobotClient:
                 await direct_control_task
             except (asyncio.CancelledError, Exception):
                 pass
+            if self._media_stream_task:
+                self._media_stream_task.cancel()
+                try:
+                    await self._media_stream_task
+                except (asyncio.CancelledError, Exception):
+                    pass
             await self.断开连接到服务器(shutdown_resources=True)
             await self.ipc_server.关闭()
             try:

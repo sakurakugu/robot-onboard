@@ -43,12 +43,12 @@ class ProcessController:
                 logger.error(f"脚本文件不可读: {script_path}")
                 return False
 
-            src_dir = Path(script_path).resolve().parents[2]
-            logger.info(f"设置 PYTHONPATH: {src_dir}")
+            project_root = Path(script_path).resolve().parents[3]
+            logger.info(f"设置 PYTHONPATH: {project_root}")
 
             env = os.environ.copy()
             existing_pythonpath = env.get("PYTHONPATH", "")
-            env["PYTHONPATH"] = f"{src_dir}:{existing_pythonpath}" if existing_pythonpath else str(src_dir)
+            env["PYTHONPATH"] = f"{project_root}:{existing_pythonpath}" if existing_pythonpath else str(project_root)
 
             self.process = subprocess.Popen(
                 [python_exec, script_path],

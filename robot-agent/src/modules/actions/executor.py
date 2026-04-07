@@ -6,8 +6,8 @@ import time
 
 from sparkrobot_common import ORG_NAME, 获取IPC路径, configure_logger, get_logger
 
-from core.config import Config
-from core.dog import sdk
+from src.core.config import Config
+from src.core.dog import sdk
 
 APP_NAME = "robot-agent"
 logger = get_logger(APP_NAME)
@@ -290,7 +290,7 @@ def main():
             log_file_prefix="executor",
         )
 
-        app = sdk.HighLevel()
+        app = sdk.HighLevel()  # type: ignore[attr-defined]
         sdk_cfg = config.get("sdk", {})
         robot_ip = sdk_cfg.get("robot_ip", "127.0.0.1")
         local_port = int(sdk_cfg.get("local_port", 43988) or 43988)

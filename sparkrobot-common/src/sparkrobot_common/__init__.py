@@ -11,6 +11,7 @@ from sparkrobot_common.const import (
     CONFIG_SECTION_TITLES,
     DEFAULT_CONFIG_FIELDS,
     DEFAULT_SERVER_ADDR,
+    MEDIA_PUBLISH_BASE_URL_AUTO,
     ORG_NAME,
     READONLY_FIELDS,
     ROBOT_SERVER_HOST,
@@ -54,6 +55,7 @@ __all__ = [
     "ROBOT_SERVER_PORT",
     "ROBOT_SERVER_URL",
     "DEFAULT_SERVER_ADDR",
+    "MEDIA_PUBLISH_BASE_URL_AUTO",
     # 配置字段
     "配置字段",
     "DEFAULT_CONFIG_FIELDS",
