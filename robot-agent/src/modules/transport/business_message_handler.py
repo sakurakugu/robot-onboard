@@ -11,6 +11,7 @@ from sparkrobot_common import get_logger
 
 from src.modules.actions.mapping import 处理动作指令, 处理文本响应
 from src.modules.audio.playback import 停止当前音频播放, 处理音频响应并播放
+from src.modules.runtime.runtime_client import 本地运行时客户端
 from src.modules.transport.message_sender import 消息发送器
 from src.modules.vision import capture_photo
 
@@ -31,6 +32,7 @@ class 业务消息处理器:
         joystick_controller: Any,
         audio_capture: Any,
         sdk_mode_manager: Any,
+        runtime_client: 本地运行时客户端,
         设置云端媒体租约到期时间: Callable[[float], None],
     ) -> None:
         self.message_sender = message_sender
@@ -42,11 +44,15 @@ class 业务消息处理器:
         self.joystick_controller = joystick_controller
         self.audio_capture = audio_capture
         self.sdk_mode_manager = sdk_mode_manager
+        self.runtime_client = runtime_client
         self._设置云端媒体租约到期时间 = 设置云端媒体租约到期时间
         self.message_handlers: dict[str, Callable[[dict[str, Any]], Any]] = {
             "text_response": self.处理文本响应,
             "audio_response": self.处理音频响应并播放,
             "action_command": self.处理动作指令,
+            "navigation_command": self.处理导航命令,
+            "map_command": self.处理地图命令,
+            "patrol_command": self.处理巡逻命令,
             "control_command": self.处理控制指令,
             "audio_control": self.处理音频控制,
             "stop_audio": self.处理停止音频播放,
@@ -90,6 +96,45 @@ class 业务消息处理器:
         except Exception as e:
             logger.error(f"处理拍照请求时出错: {e}", exc_info=True)
             await self.message_sender.发送拍照响应(request_id, False, None, str(e))
+
+    async def 处理导航命令(self, data: dict[str, Any]) -> None:
+        """处理导航命令消息。"""
+        request_id = str(data.get("requestId", ""))
+        logger.info(f"收到导航命令: requestId={request_id}, data={data}")
+        try:
+            result = await self.runtime_client.执行导航命令(data)
+            await self.message_sender.发送导航响应(request_id, True, result)
+            logger.info(f"导航命令执行成功: {request_id}")
+        except Exception as exc:
+            error = self.runtime_client.格式化异常(exc)
+            await self.message_sender.发送导航响应(request_id, False, None, error["message"], error["code"])
+            logger.error(f"导航命令执行失败: requestId={request_id}, error={error}")
+
+    async def 处理地图命令(self, data: dict[str, Any]) -> None:
+        """处理地图命令消息。"""
+        request_id = str(data.get("requestId", ""))
+        logger.info(f"收到地图命令: requestId={request_id}, data={data}")
+        try:
+            result = await self.runtime_client.执行地图命令(data)
+            await self.message_sender.发送地图响应(request_id, True, result)
+            logger.info(f"地图命令执行成功: {request_id}")
+        except Exception as exc:
+            error = self.runtime_client.格式化异常(exc)
+            await self.message_sender.发送地图响应(request_id, False, None, error["message"], error["code"])
+            logger.error(f"地图命令执行失败: requestId={request_id}, error={error}")
+
+    async def 处理巡逻命令(self, data: dict[str, Any]) -> None:
+        """处理巡逻命令消息。"""
+        request_id = str(data.get("requestId", ""))
+        logger.info(f"收到巡逻命令: requestId={request_id}, data={data}")
+        try:
+            result = await self.runtime_client.执行巡逻命令(data)
+            await self.message_sender.发送巡逻响应(request_id, True, result)
+            logger.info(f"巡逻命令执行成功: {request_id}")
+        except Exception as exc:
+            error = self.runtime_client.格式化异常(exc)
+            await self.message_sender.发送巡逻响应(request_id, False, None, error["message"], error["code"])
+            logger.error(f"巡逻命令执行失败: requestId={request_id}, error={error}")
 
     async def 处理音量获取(self, data: dict[str, Any]) -> None:
         """处理音量获取消息。"""

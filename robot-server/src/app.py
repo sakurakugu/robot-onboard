@@ -11,6 +11,7 @@ from .路由 import auth as 认证路由
 from .路由 import config as 配置路由
 from .路由 import logs as 日志路由
 from .路由 import packages as 软件包路由
+from .路由 import runtime as 运行时路由
 from .路由 import sdk as SDK路由
 from .路由 import system as 系统路由
 from .路由 import telemetry as 遥测路由
@@ -33,6 +34,7 @@ app.include_router(认证路由.router)
 app.include_router(配置路由.router)
 app.include_router(SDK路由.router)
 app.include_router(遥测路由.router)
+app.include_router(运行时路由.router)
 app.include_router(无线路由.router)
 app.include_router(系统路由.router)
 app.include_router(音量路由.router)

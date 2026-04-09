@@ -58,6 +58,12 @@ CONFIG_SECTION_TITLES: dict[str, str] = {
     "server": "服务器配置",
     "media": "视频流媒体",
     "sdk": "SDK配置",
+    "lidar": "激光雷达配置",
+    "frames": "坐标系配置",
+    "mapping": "建图配置",
+    "localization": "定位配置",
+    "navigation": "导航配置",
+    "patrol": "巡逻配置",
     "audio": "音频配置",
     "actions": "动作配置",
     "logging": "日志配置",
@@ -99,6 +105,56 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     配置字段("sdk", "enable_sdk_on_startup", True, "启动时是否开启SDK模式", "bool"),
     配置字段("sdk", "robot_ip", "127.0.0.1", "机器人SDK IP地址", "string", readonly=True),
     配置字段("sdk", "local_port", 43988, "本地SDK端口", "int", readonly=True),
+
+    # 激光雷达配置 [lidar]
+    配置字段("lidar", "enabled", False, "是否启用 2D 激光雷达", "bool"),
+    配置字段("lidar", "transport", "ethernet", "雷达传输方式：ethernet|serial", "string", options=["ethernet", "serial"]),
+    配置字段("lidar", "device_model", "n10p", "激光雷达型号", "string"),
+    配置字段("lidar", "serial_port", "/dev/wheeltec_laser", "雷达串口设备路径", "string"),
+    配置字段("lidar", "baud_rate", 460800, "雷达串口波特率", "int"),
+    配置字段("lidar", "device_ip", "192.168.1.200", "网口版雷达设备 IP", "string"),
+    配置字段("lidar", "host_ip", "", "本机用于接收网口雷达数据的 IP", "string"),
+    配置字段("lidar", "msop_port", 2368, "网口雷达数据接收端口", "int"),
+    配置字段("lidar", "difop_port", 2369, "网口雷达控制端口", "int"),
+    配置字段("lidar", "frame_id", "laser", "雷达坐标系名称", "string"),
+    配置字段("lidar", "angle_disable_min", 0.0, "雷达屏蔽角度起点", "float"),
+    配置字段("lidar", "angle_disable_max", 0.0, "雷达屏蔽角度终点", "float"),
+    配置字段("lidar", "min_range", 0.2, "雷达最小有效距离（米）", "float"),
+    配置字段("lidar", "max_range", 25.0, "雷达最大有效距离（米）", "float"),
+
+    # 坐标系配置 [frames]
+    配置字段("frames", "base_frame", "base_link", "机器人机体坐标系", "string"),
+    配置字段("frames", "odom_frame", "odom", "里程计坐标系", "string"),
+    配置字段("frames", "map_frame", "map", "地图坐标系", "string"),
+    配置字段("frames", "laser_frame", "laser", "激光雷达坐标系", "string"),
+
+    # 建图配置 [mapping]
+    配置字段("mapping", "enabled", False, "是否启用建图能力", "bool"),
+    配置字段("mapping", "backend", "slam_toolbox", "建图后端名称", "string"),
+    配置字段("mapping", "map_save_dir", str(WORKSPACE_DIR / "maps"), "地图保存目录", "string"),
+    配置字段("mapping", "auto_save_on_stop", True, "结束建图时是否自动保存地图", "bool"),
+
+    # 定位配置 [localization]
+    配置字段("localization", "enabled", False, "是否启用定位能力", "bool"),
+    配置字段("localization", "backend", "amcl", "定位后端名称", "string"),
+    配置字段("localization", "default_map", "", "默认加载的地图名称", "string"),
+    配置字段("localization", "relocalization_on_start", False, "启动时是否尝试重定位", "bool"),
+
+    # 导航配置 [navigation]
+    配置字段("navigation", "enabled", False, "是否启用导航能力", "bool"),
+    配置字段("navigation", "backend", "nav2", "导航后端名称", "string"),
+    配置字段("navigation", "cmd_vel_topic", "/cmd_vel", "导航速度控制话题", "string"),
+    配置字段("navigation", "goal_timeout_sec", 120, "导航目标超时时间（秒）", "int"),
+    配置字段("navigation", "goal_tolerance_xy", 0.15, "导航到点平面容差（米）", "float"),
+    配置字段("navigation", "goal_tolerance_yaw", 0.2, "导航到点偏航容差（弧度）", "float"),
+
+    # 巡逻配置 [patrol]
+    配置字段("patrol", "enabled", False, "是否启用巡逻能力", "bool"),
+    配置字段("patrol", "waypoint_dir", str(WORKSPACE_DIR / "waypoints"), "巡逻点位目录", "string"),
+    配置字段("patrol", "default_linear_speed", 0.3, "巡逻默认线速度（米每秒）", "float"),
+    配置字段("patrol", "default_angular_speed", 0.5, "巡逻默认角速度（弧度每秒）", "float"),
+    配置字段("patrol", "arrival_wait_sec", 2.0, "到达点位后的停留时间（秒）", "float"),
+    配置字段("patrol", "loop", False, "巡逻是否循环执行", "bool"),
 
     # 音频配置 [audio]
     配置字段("audio", "sample_rate", 16000, "音频采样率", "int"),

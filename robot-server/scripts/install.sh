@@ -19,7 +19,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # 定义进程名称
-PROCESS_NAME="robot-server"
+PROCESS_NAME="sparkrobot-server"
 
 # 获取脚本所在目录的绝对路径
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

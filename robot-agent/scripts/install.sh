@@ -19,7 +19,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # 定义进程名称
-PROCESS_NAME="robot-agent"
+PROCESS_NAME="sparkrobot-agent"
 
 # 获取脚本所在目录的绝对路径
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -46,8 +46,8 @@ echo -e "${BLUE}正在生成服务配置文件 $SERVICE_FILE ...${NC}"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=机器人客户端
-After=network.target robot-server.service
-Requires=robot-server.service
+After=network.target sparkrobot-server.service
+Requires=sparkrobot-server.service
 
 [Service]
 Type=simple

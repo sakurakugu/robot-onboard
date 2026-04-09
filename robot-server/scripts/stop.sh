@@ -9,7 +9,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 定义路径
-PROCESS_NAME="robot-server"
+PROCESS_NAME="sparkrobot-server"
 WORKSPACE_DIR="$HOME/sparkrobot"
 PID_DIR="$WORKSPACE_DIR/logs/pid"
 PID_FILE="$PID_DIR/${PROCESS_NAME}.pid"

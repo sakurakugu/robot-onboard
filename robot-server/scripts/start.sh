@@ -15,7 +15,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 定义进程名称
-PROCESS_NAME="robot-server"
+PROCESS_NAME="sparkrobot-server"
 
 # 切换到该软件所在目录（脚本的父目录）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,7 +55,7 @@ fi
 
 # 防止 PID 文件丢失但进程仍在跑的情况
 # 使用完整路径避免误检测其他服务的 main.py
-EXISTING_PID=$(pgrep -f "robot-server.*main.py" 2>/dev/null || true)
+EXISTING_PID=$(pgrep -f "sparkrobot-server.*main.py" 2>/dev/null || true)
 if [ -n "$EXISTING_PID" ]; then
     echo -e "${BLUE}发现已运行的 $PROCESS_NAME 进程 (PID: $EXISTING_PID)${NC}"
     echo -e "${BLUE}请先停止该进程，或使用 stop.sh 脚本${NC}"

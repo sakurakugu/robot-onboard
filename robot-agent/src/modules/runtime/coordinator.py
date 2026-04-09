@@ -24,6 +24,7 @@ class 客户端运行时协调器:
         断开连接到服务器: Callable[[bool], Awaitable[None]],
         取消初始化: Callable[[], Awaitable[None]],
         允许云端媒体推流: Callable[[], bool],
+        runtime_client: Any,
         获取机器人UUID: Callable[[], str],
         获取初始重连间隔: Callable[[], int | float],
     ) -> None:
@@ -38,9 +39,11 @@ class 客户端运行时协调器:
         self._断开连接到服务器 = 断开连接到服务器
         self._取消初始化 = 取消初始化
         self._允许云端媒体推流 = 允许云端媒体推流
+        self.runtime_client = runtime_client
         self._获取机器人UUID = 获取机器人UUID
         self.audio_task: asyncio.Task[Any] | None = None
         self._ipc_status_task: asyncio.Task[Any] | None = None
+        self._runtime_status_task: asyncio.Task[Any] | None = None
         self._media_stream_task: asyncio.Task[Any] | None = None
         self._ipc_status_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self.initial_reconnect_interval = float(获取初始重连间隔())
@@ -171,6 +174,24 @@ class 客户端运行时协调器:
                 continue
             await self.message_sender.发送状态(status_msg)
 
+    async def _发送运行时状态循环(self) -> None:
+        while True:
+            if not self.ws_manager.connected:
+                await asyncio.sleep(1)
+                continue
+
+            try:
+                async for summary in self.runtime_client.订阅状态摘要(interval_sec=1.0):
+                    if not self.ws_manager.connected:
+                        break
+                    await self.message_sender.发送运行时摘要(summary)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                error = self.runtime_client.格式化异常(exc)
+                logger.warning(f"订阅运行时状态失败: {error}")
+                await asyncio.sleep(5)
+
     async def _运行音频采集任务(self) -> None:
         while self.ws_manager.connected:
             try:
@@ -223,6 +244,9 @@ class 客户端运行时协调器:
         if not self._ipc_status_task or self._ipc_status_task.done():
             self._ipc_status_task = asyncio.create_task(self._发送IPC状态循环())
         tasks.append(self._ipc_status_task)
+        if not self._runtime_status_task or self._runtime_status_task.done():
+            self._runtime_status_task = asyncio.create_task(self._发送运行时状态循环())
+        tasks.append(self._runtime_status_task)
         tasks.append(
             asyncio.create_task(self.ws_manager.发送心跳消息循环(self._获取机器人UUID(), 构建心跳消息))
         )

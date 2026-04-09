@@ -1070,15 +1070,130 @@ async function restartMotion() {
 }
 
 // ==================== 遥测状态 ====================
+function setTelemetryVisibility(itemId, dividerId, visible) {
+  const itemEl = document.getElementById(itemId);
+  const dividerEl = document.getElementById(dividerId);
+  if (!itemEl || !dividerEl) return;
+
+  itemEl.classList.toggle("hidden", !visible);
+  dividerEl.classList.toggle("hidden", !visible);
+}
+
+function formatBridgeReason(reason) {
+  const reasonMap = {
+    initializing: "初始化中",
+    normal: "正常输出",
+    command_timeout: "等待指令",
+    telemetry_offline: "遥测离线",
+    emergency_stop: "急停中",
+    motion_control_disabled: "仅遥测模式",
+    sdk_unavailable: "SDK未就绪",
+    control_error: "下发失败",
+    telemetry_unavailable: "遥测接口异常",
+    bridge_status_missing: "状态未上报",
+    unknown: "未知",
+  };
+
+  return reasonMap[reason] || String(reason || "未知");
+}
+
+function formatBridgeVelocity(velocity) {
+  if (!velocity || typeof velocity !== "object") {
+    return "--";
+  }
+
+  const vx = Number(velocity.vx);
+  const vy = Number(velocity.vy);
+  const wz = Number(velocity.wz);
+  if (Number.isNaN(vx) || Number.isNaN(vy) || Number.isNaN(wz)) {
+    return "--";
+  }
+
+  return `vx ${vx.toFixed(2)} vy ${vy.toFixed(2)} wz ${wz.toFixed(2)}`;
+}
+
+function updateBridgeTelemetry(bridgeStatus, wholeRobotOnline) {
+  const bridgeEl = document.getElementById("telemetryBridge");
+  const reasonEl = document.getElementById("telemetryBridgeReason");
+  const outputEl = document.getElementById("telemetryBridgeOutput");
+  if (!bridgeEl || !reasonEl || !outputEl) return;
+
+  if (!bridgeStatus || typeof bridgeStatus !== "object") {
+    setTelemetryVisibility("telemetryBridge", "telemetryBridgeDivider", false);
+    setTelemetryVisibility(
+      "telemetryBridgeReason",
+      "telemetryBridgeReasonDivider",
+      false,
+    );
+    setTelemetryVisibility(
+      "telemetryBridgeOutput",
+      "telemetryBridgeOutputDivider",
+      false,
+    );
+    return;
+  }
+
+  setTelemetryVisibility("telemetryBridge", "telemetryBridgeDivider", true);
+  setTelemetryVisibility(
+    "telemetryBridgeReason",
+    "telemetryBridgeReasonDivider",
+    true,
+  );
+  setTelemetryVisibility(
+    "telemetryBridgeOutput",
+    "telemetryBridgeOutputDivider",
+    true,
+  );
+
+  if (bridgeStatus.emergency_stop) {
+    bridgeEl.textContent = "🛑 急停中";
+    bridgeEl.className = "telemetry-item danger";
+  } else if (!wholeRobotOnline) {
+    bridgeEl.textContent = "🧭 整机离线";
+    bridgeEl.className = "telemetry-item offline";
+  } else if (!bridgeStatus.sdk_ready) {
+    bridgeEl.textContent = "🧭 SDK未就绪";
+    bridgeEl.className = "telemetry-item warning";
+  } else if (!bridgeStatus.motion_control_enabled) {
+    bridgeEl.textContent = "🧭 仅遥测模式";
+    bridgeEl.className = "telemetry-item warning";
+  } else if (bridgeStatus.telemetry_motion_ready) {
+    bridgeEl.textContent = "🧭 运动就绪";
+    bridgeEl.className = "telemetry-item online";
+  } else {
+    bridgeEl.textContent = "🧭 桥接在线";
+    bridgeEl.className = "telemetry-item warning";
+  }
+
+  const reason = bridgeStatus.arbitration_reason || "unknown";
+  reasonEl.textContent = `🎛️ ${formatBridgeReason(reason)}`;
+  reasonEl.className =
+    "telemetry-item" +
+    (reason === "normal"
+      ? " online"
+      : reason === "emergency_stop" || reason === "control_error"
+        ? " danger"
+        : " warning");
+
+  outputEl.textContent = `↔️ ${formatBridgeVelocity(bridgeStatus.output_velocity)}`;
+  outputEl.className = "telemetry-item mono";
+}
+
 async function loadTelemetry() {
   try {
-    const response = await fetch("/api/v1/telemetry", {
+    const response = await fetch("/api/v1/telemetry/full", {
       credentials: "include",
     });
     const data = await response.json();
     if (!data.success) return;
 
     const d = data.data;
+    const dogState =
+      d.dog_state && typeof d.dog_state === "object" ? d.dog_state : {};
+    const bridgeStatus =
+      d.bridge_status && typeof d.bridge_status === "object"
+        ? d.bridge_status
+        : null;
 
     // 在线状态
     const onlineEl = document.getElementById("telemetryOnline");
@@ -1087,7 +1202,7 @@ async function loadTelemetry() {
 
     // 电量
     const powerEl = document.getElementById("telemetryPower");
-    const power = d.power ?? null;
+    const power = dogState.power ?? null;
     powerEl.textContent = power !== null ? `🔋 ${power}%` : "🔋 --";
     powerEl.className =
       "telemetry-item" +
@@ -1099,14 +1214,16 @@ async function loadTelemetry() {
 
     // 温度
     const tempEl = document.getElementById("telemetryTemp");
-    const temp = d.temp ?? null;
+    const temp = dogState.temp ?? null;
     tempEl.textContent = temp !== null ? `🌡️ ${temp.toFixed(1)}°C` : "🌡️ --";
+
+    updateBridgeTelemetry(bridgeStatus, Boolean(d.online));
 
     // 设备名
     const devEl = document.getElementById("telemetryDev");
     const devDividerEl = document.getElementById("telemetryDevDivider");
-    if (d.dev_name || d.model) {
-      devEl.textContent = `🐕 ${d.dev_name || d.model}`;
+    if (dogState.dev_name || dogState.model) {
+      devEl.textContent = `🐕 ${dogState.dev_name || dogState.model}`;
       devDividerEl.classList.remove("hidden");
     } else {
       devEl.textContent = "";

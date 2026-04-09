@@ -124,6 +124,84 @@ def 构建状态消息(
     }
 
 
+def _构建业务响应消息(
+    message_type: str,
+    robot_uuid: str,
+    request_id: str,
+    success: bool,
+    data: dict[str, Any] | None = None,
+    error: str | None = None,
+    error_code: str | None = None,
+) -> Dict[str, Any]:
+    """构建通用业务响应消息。"""
+    return {
+        "type": message_type,
+        "robotId": robot_uuid,
+        "timestamp": int(time.time() * 1000),
+        "data": {
+            "requestId": request_id,
+            "success": success,
+            "data": data,
+            "error": error,
+            "errorCode": error_code,
+        },
+    }
+
+
+def _构建状态广播消息(
+    message_type: str,
+    robot_uuid: str,
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """构建运行时状态广播消息。"""
+    return {
+        "type": message_type,
+        "robotId": robot_uuid,
+        "timestamp": int(time.time() * 1000),
+        "data": data,
+    }
+
+
+def 构建机器人摘要消息(
+    robot_uuid: str,
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """构建机器人摘要状态消息。"""
+    return _构建状态广播消息("robot_summary", robot_uuid, data)
+
+
+def 构建导航状态消息(
+    robot_uuid: str,
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """构建导航状态消息。"""
+    return _构建状态广播消息("navigation_state", robot_uuid, data)
+
+
+def 构建地图状态消息(
+    robot_uuid: str,
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """构建地图状态消息。"""
+    return _构建状态广播消息("map_state", robot_uuid, data)
+
+
+def 构建任务状态消息(
+    robot_uuid: str,
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """构建任务状态消息。"""
+    return _构建状态广播消息("task_state", robot_uuid, data)
+
+
+def 构建传感器状态消息(
+    robot_uuid: str,
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """构建传感器状态消息。"""
+    return _构建状态广播消息("sensor_state", robot_uuid, data)
+
+
 def 构建拍照响应消息(
     robot_uuid: str,        # 机器人 UUID
     request_id: str,        # 请求ID
@@ -186,6 +264,43 @@ def 构建配置响应消息(
             "error": error,
         },
     }
+
+
+def 构建导航响应消息(
+    robot_uuid: str,
+    request_id: str,
+    success: bool,
+    data: dict[str, Any] | None = None,
+    error: str | None = None,
+    error_code: str | None = None,
+) -> Dict[str, Any]:
+    """build_navigation_response"""
+    return _构建业务响应消息("navigation_response", robot_uuid, request_id, success, data, error, error_code)
+
+
+def 构建地图响应消息(
+    robot_uuid: str,
+    request_id: str,
+    success: bool,
+    data: dict[str, Any] | None = None,
+    error: str | None = None,
+    error_code: str | None = None,
+) -> Dict[str, Any]:
+    """build_map_response"""
+    return _构建业务响应消息("map_response", robot_uuid, request_id, success, data, error, error_code)
+
+
+def 构建巡逻响应消息(
+    robot_uuid: str,
+    request_id: str,
+    success: bool,
+    data: dict[str, Any] | None = None,
+    error: str | None = None,
+    error_code: str | None = None,
+) -> Dict[str, Any]:
+    """build_patrol_response"""
+    return _构建业务响应消息("patrol_response", robot_uuid, request_id, success, data, error, error_code)
+
 
 def 构建日志标记响应消息(
     robot_uuid: str,        # 机器人 UUID

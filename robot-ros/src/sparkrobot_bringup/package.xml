@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>sparkrobot_bringup</name>
+  <version>0.1.0</version>
+  <description>机器狗 N10P 激光雷达与导航 bringup 封装</description>
+  <maintainer email="elric@example.com">elric</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>lslidar_driver</depend>
+  <depend>nav2_bringup</depend>
+  <depend>slam_toolbox</depend>
+  <depend>sparkrobot_dog_bridge</depend>
+  <depend>sparkrobot_nav_bridge</depend>
+  <depend>tf2_ros</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

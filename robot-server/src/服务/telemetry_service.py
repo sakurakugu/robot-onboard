@@ -8,7 +8,8 @@
   - 运控进程监听 0.0.0.0:8081，收到心跳后将状态推送到心跳来源的 IP:8080
   - 因此必须绑定 UDP 0.0.0.0:8080（与 HTTP 8080 不冲突，协议不同）
   - 心跳发送至 127.0.0.1:8081（本机运控）
-  - 任何收到的包都更新在线时间戳（不仅限于 dog_state）
+  - 只有来自运控链路的真实遥测包才更新在线时间戳
+  - 本地回灌的诊断包（例如 bridge_status）只进缓存，不参与整机在线判定
 """
 
 from __future__ import annotations
@@ -29,10 +30,12 @@ LISTEN_PORT  = 8080    # 运控回包目标端口（与 HTTP TCP:8080 不冲突�
 HEARTBEAT    = json.dumps({"type": "heartbeat", "heartbeat": 1}).encode()
 HB_INTERVAL  = 1.0    # 心跳间隔（秒）
 OFFLINE_TO   = 5.0    # 超过此秒数未收到任何遥测包则判定离线
+不参与在线判定的类型 = {"bridge_status"}
 
 # ── 共享状态 ─────────────────────────────────────────────────────────────────
 _lock   = threading.Lock()
-_cache: dict[str, Any] = {}  # 最新 dog_state 字段
+_dog_state_cache: dict[str, Any] = {}  # 最新 dog_state 字段
+_typed_cache: dict[str, dict[str, Any]] = {}  # 按 type 缓存最新遥测包
 _last_rx_time: float   = 0.0
 _started = False
 
@@ -40,10 +43,28 @@ _started = False
 def 获取遥测数据() -> dict[str, Any]:
     """返回最新遥测快照，包含 online 字段。"""
     with _lock:
-        snapshot = dict(_cache)
+        snapshot = dict(_dog_state_cache)
         elapsed = time.time() - _last_rx_time
         snapshot["online"] = _last_rx_time > 0 and elapsed < OFFLINE_TO
     return snapshot
+
+
+def 获取完整遥测数据() -> dict[str, Any]:
+    """返回完整遥测快照，包含各 type 的最新数据。"""
+    with _lock:
+        elapsed = time.time() - _last_rx_time
+        online = _last_rx_time > 0 and elapsed < OFFLINE_TO
+        typed_snapshot = {
+            type_name: dict(payload)
+            for type_name, payload in _typed_cache.items()
+        }
+
+    return {
+        "online": online,
+        "last_rx_time": _last_rx_time,
+        "available_types": sorted(typed_snapshot),
+        **typed_snapshot,
+    }
 
 
 # ── 发送心跳 ─────────────────────────────────────────────────────────────────
@@ -73,12 +94,16 @@ def _receiver_loop(sock: socket.socket, stop: threading.Event) -> None:
         except json.JSONDecodeError:
             continue
 
-        # 任何合法 JSON 包都视为在线证明
         with _lock:
-            _last_rx_time = time.time()
-            # 只缓存 dog_state 字段（含 power/temp 等关键信息）
-            if obj.get("type") == "dog_state":
-                _cache.update({k: v for k, v in obj.items() if k != "type"})
+            type_name = obj.get("type")
+            if isinstance(type_name, str):
+                if type_name not in 不参与在线判定的类型:
+                    _last_rx_time = time.time()
+                payload = {k: v for k, v in obj.items() if k != "type"}
+                _typed_cache[type_name] = payload
+                if type_name == "dog_state":
+                    _dog_state_cache.clear()
+                    _dog_state_cache.update(payload)
 
 
 # ── 启动 ─────────────────────────────────────────────────────────────────────

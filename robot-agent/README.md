@@ -11,6 +11,8 @@
 - **音频采集**: 麦克风采集 → Opus 压缩 → 服务端 ASR
 - **音频播放**: 接收服务端语音回复并在音箱播放
 - **动作执行**: 接收并执行服务端发送的动作指令
+- **运行时桥接**: 将导航、建图、巡逻命令转发给 `robot-runtime`
+- **状态汇聚上报**: 订阅 `robot-runtime` 摘要状态并转发到云端
 - **视觉识别**: 支持摄像头拍照和视觉分析
 - **日志记录**: 完整的运行日志
 - **自动重连**: 断线后自动重连
@@ -43,6 +45,9 @@ robot-agent/
 │   │   │   ├── ipc.py           # IPC 通信
 │   │   │   ├── joystick.py      # 摇杆控制
 │   │   │   └── process.py       # 进程控制
+│   │   ├── runtime/             # 本地运行时桥接
+│   │   │   ├── coordinator.py   # 客户端运行时协调器
+│   │   │   └── runtime_client.py# robot-runtime IPC 客户端包装
 │   │   ├── transport/           # 通信模块
 │   │   │   ├── protocol.py      # 协议定义
 │   │   │   └── ws_manager.py    # WebSocket 管理
@@ -105,6 +110,7 @@ robot-agent/
 | actions   | 动作执行，解析和执行动作指令 |
 | audio     | 音频采集和播放               |
 | control   | IPC 通信、摇杆控制、进程控制 |
+| runtime   | 与 `robot-runtime` 交互、转发导航与建图命令 |
 | transport | WebSocket 通信管理           |
 | vision    | 摄像头和视觉识别             |
 
@@ -175,10 +181,10 @@ max_file_size_mb = 10
 
 ```bash
 # 启动
-systemctl start robot-agent
+systemctl start sparkrobot-agent
 # 停止（二选一）
 ./scripts/stop.sh
-systemctl stop robot-agent
+systemctl stop sparkrobot-agent
 
 # 查看日志
 tail -f ~/sparkrobot/logs/robot-agent/robot-agent_$(date +%Y%m%d).log
@@ -297,6 +303,42 @@ tail -f ~/sparkrobot/logs/robot-agent/robot-agent_$(date +%Y%m%d).log
   "data": {
     "action": "stand_up",
     "parameters": {}
+  }
+}
+```
+
+**导航命令**:
+
+```json
+{
+  "type": "navigation_command",
+  "robotId": "uuid",
+  "timestamp": 1234567890,
+  "data": {
+    "requestId": "req-1",
+    "command": "navigate_to",
+    "goal": {
+      "x": 1.2,
+      "y": 0.5,
+      "yaw": 1.57,
+      "frameId": "map",
+      "mapName": "office-1"
+    }
+  }
+}
+```
+
+**建图命令**:
+
+```json
+{
+  "type": "map_command",
+  "robotId": "uuid",
+  "timestamp": 1234567890,
+  "data": {
+    "requestId": "req-2",
+    "command": "start_mapping",
+    "mapName": "office-1"
   }
 }
 ```
@@ -428,7 +470,7 @@ robot-agent 支持两种控制模式：
 
 ### 使用 systemd
 
-创建服务文件 `/etc/systemd/system/robot-agent.service`:
+创建服务文件 `/etc/systemd/system/sparkrobot-agent.service`:
 
 ```ini
 [Unit]
@@ -451,14 +493,14 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable robot-agent
-sudo systemctl start robot-agent
+sudo systemctl enable sparkrobot-agent
+sudo systemctl start sparkrobot-agent
 
 # 查看状态
-sudo systemctl status robot-agent
+sudo systemctl status sparkrobot-agent
 
 # 查看日志
-sudo journalctl -u robot-agent -f
+sudo journalctl -u sparkrobot-agent -f
 ```
 
 ## 故障排查

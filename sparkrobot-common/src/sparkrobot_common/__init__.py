@@ -31,6 +31,21 @@ from sparkrobot_common.logger import (
     configure_logger,
     get_logger,
 )
+from sparkrobot_common.runtime_ipc import (
+    格式化运行时IPC异常,
+    获取运行时IPC路径,
+    运行时IPC客户端,
+    运行时IPC错误,
+    构建运行时事件,
+    构建运行时成功响应,
+    构建运行时请求,
+    构建运行时错误响应,
+    编码运行时消息,
+    解码运行时消息,
+    运行时状态事件名,
+    运行时默认超时秒数,
+    运行时默认项目名,
+)
 from sparkrobot_common.toml_parser import TomlParser
 from sparkrobot_common.utils import (
     生成UUID,
@@ -72,6 +87,20 @@ __all__ = [
     # 日志
     "configure_logger",
     "get_logger",
+    # 运行时 IPC
+    "运行时IPC客户端",
+    "运行时IPC错误",
+    "格式化运行时IPC异常",
+    "运行时默认项目名",
+    "运行时状态事件名",
+    "运行时默认超时秒数",
+    "获取运行时IPC路径",
+    "构建运行时请求",
+    "构建运行时成功响应",
+    "构建运行时错误响应",
+    "构建运行时事件",
+    "编码运行时消息",
+    "解码运行时消息",
     # 工具
     "生成UUID",
     "生成机器人名称",

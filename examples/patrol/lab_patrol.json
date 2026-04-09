@@ -1,0 +1,30 @@
+{
+  "name": "lab-patrol",
+  "map_name": "lab-test",
+  "loop": false,
+  "arrival_wait_sec": 2.0,
+  "waypoints": [
+    {
+      "name": "start",
+      "x": 0.0,
+      "y": 0.0,
+      "yaw": 0.0,
+      "frame_id": "map"
+    },
+    {
+      "name": "corridor-mid",
+      "x": 1.2,
+      "y": 0.1,
+      "yaw": 0.0,
+      "frame_id": "map"
+    },
+    {
+      "name": "charging-side",
+      "x": 1.8,
+      "y": -0.6,
+      "yaw": 1.57,
+      "frame_id": "map",
+      "arrival_wait_sec": 3.0
+    }
+  ]
+}

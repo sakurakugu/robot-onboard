@@ -2,11 +2,19 @@ from typing import Any, Callable
 
 from src.modules.transport.protocol import (
     构建SDK模式响应消息,
+    构建任务状态消息,
+    构建传感器状态消息,
+    构建地图响应消息,
+    构建地图状态消息,
     构建安装包下载响应消息,
+    构建导航响应消息,
+    构建导航状态消息,
+    构建巡逻响应消息,
     构建心跳消息,
     构建拍照响应消息,
     构建文本输入消息,
     构建日志标记响应消息,
+    构建机器人摘要消息,
     构建机器人注册消息,
     构建状态消息,
     构建配置响应消息,
@@ -105,6 +113,34 @@ class 消息发送器:
         )
         await self.发送消息(message, channel="business")
 
+    async def 发送运行时摘要(self, summary: dict[str, Any]) -> None:
+        """发送运行时摘要与分项状态。"""
+        await self.发送消息(构建机器人摘要消息(self._机器人UUID(), summary), channel="business")
+
+        navigation = summary.get("navigation", {})
+        if isinstance(navigation, dict):
+            await self.发送消息(构建导航状态消息(self._机器人UUID(), navigation), channel="business")
+
+        mapping = summary.get("mapping", {})
+        if isinstance(mapping, dict):
+            await self.发送消息(构建地图状态消息(self._机器人UUID(), mapping), channel="business")
+
+        task = summary.get("task", {})
+        if isinstance(task, dict):
+            await self.发送消息(构建任务状态消息(self._机器人UUID(), task), channel="business")
+
+        lidar = summary.get("lidar", {})
+        if isinstance(lidar, dict):
+            await self.发送消息(
+                构建传感器状态消息(
+                    self._机器人UUID(),
+                    {
+                        "lidar": lidar,
+                    },
+                ),
+                channel="business",
+            )
+
     async def 发送拍照响应(
         self, request_id: str, success: bool, image: str | None = None, error: str | None = None
     ) -> None:
@@ -124,6 +160,42 @@ class 消息发送器:
     ) -> None:
         """发送配置响应消息。"""
         message = 构建配置响应消息(self._机器人UUID(), request_id, success, data, error)
+        await self.发送消息(message, channel="business")
+
+    async def 发送导航响应(
+        self,
+        request_id: str,
+        success: bool,
+        data: dict[str, Any] | None = None,
+        error: str | None = None,
+        error_code: str | None = None,
+    ) -> None:
+        """发送导航响应消息。"""
+        message = 构建导航响应消息(self._机器人UUID(), request_id, success, data, error, error_code)
+        await self.发送消息(message, channel="business")
+
+    async def 发送地图响应(
+        self,
+        request_id: str,
+        success: bool,
+        data: dict[str, Any] | None = None,
+        error: str | None = None,
+        error_code: str | None = None,
+    ) -> None:
+        """发送地图响应消息。"""
+        message = 构建地图响应消息(self._机器人UUID(), request_id, success, data, error, error_code)
+        await self.发送消息(message, channel="business")
+
+    async def 发送巡逻响应(
+        self,
+        request_id: str,
+        success: bool,
+        data: dict[str, Any] | None = None,
+        error: str | None = None,
+        error_code: str | None = None,
+    ) -> None:
+        """发送巡逻响应消息。"""
+        message = 构建巡逻响应消息(self._机器人UUID(), request_id, success, data, error, error_code)
         await self.发送消息(message, channel="business")
 
     async def 发送SDK模式响应(

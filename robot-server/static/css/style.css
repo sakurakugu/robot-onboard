@@ -532,6 +532,11 @@ button.btn-full {
 .telemetry-item.warning {
   color: #fb8c00;
 }
+.telemetry-item.mono {
+  font-family:
+    "Consolas", "SFMono-Regular", "Menlo", "Monaco", "Liberation Mono",
+    monospace;
+}
 .telemetry-divider {
   color: #ddd;
 }

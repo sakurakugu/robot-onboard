@@ -1,10 +1,11 @@
+import argparse
+import configparser
 import os
-import sys
 import re
 import shutil
 import subprocess
+import sys
 import traceback
-import configparser
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -22,6 +23,27 @@ CONFIG_FILE = SCRIPTS_DIR / "config" / "config.ini"
 
 ROBOT_USER = "firefly"
 DEFAULT_ROBOT_PORT = 43988
+
+命令行安装任务映射 = {
+    "common": "install_common",
+    "server": "install_server",
+    "agent": "install_agent",
+    "runtime": "install_runtime",
+    "ros": "install_ros",
+    "full": "install_full",
+}
+
+命令行打包任务映射 = {
+    "common": (["sparkrobot-common"], "打包 sparkrobot-common"),
+    "server": (["robot-server"], "打包 robot-server"),
+    "agent": (["robot-agent"], "打包 robot-agent"),
+    "runtime": (["robot-runtime"], "打包 robot-runtime"),
+    "ros": (["robot-ros"], "打包 robot-ros 工作区"),
+    "full": (
+        ["sparkrobot-common", "robot-server", "robot-agent", "robot-runtime", "robot-ros"],
+        "打包本体全套",
+    ),
+}
 
 # 颜色代码 (Windows 10+ 终端支持 ANSI 转义序列)
 class Colors:
@@ -329,7 +351,13 @@ def 连接机器狗(name: str, ip: str):
         print_error("未找到 ssh 命令，请确保已安装 OpenSSH Client")
 
 
-def 执行安装任务(task_name: str, robot_ip: str, robot_port: int) -> bool:
+def 执行安装任务(
+    task_name: str,
+    robot_ip: str,
+    robot_port: int,
+    package_ext: str | None = None,
+    pause_after: bool = True,
+) -> bool:
     """执行机器狗软件安装任务"""
     try:
         确保存在包("paramiko")
@@ -347,17 +375,26 @@ def 执行安装任务(task_name: str, robot_ip: str, robot_port: int) -> bool:
     configurator = 机器狗配置器(robot_port, robot_ip, ROBOT_USER, ROBOT_USER)
     if not configurator.连接():
         print_error("无法连接到机器狗，请检查网络、IP 和端口是否正确")
-        input("\n按回车键返回安装菜单...")
+        if pause_after:
+            input("\n按回车键返回安装菜单...")
         return False
 
     success = False
     try:
-        if task_name == "install_1":
-            success = configurator.安装SparkRobotCommon()
-        elif task_name == "install_2":
-            success = configurator.安装RobotServer()
-        elif task_name == "install_3":
-            success = configurator.安装RobotAgent()
+        if task_name == "install_common":
+            success = configurator.安装SparkRobotCommon(package_ext)
+        elif task_name == "install_server":
+            success = configurator.安装RobotServer(package_ext)
+        elif task_name == "install_agent":
+            success = configurator.安装RobotAgent(package_ext)
+        elif task_name == "install_runtime":
+            success = configurator.安装RobotRuntime(package_ext)
+        elif task_name == "install_ros":
+            success = configurator.安装RobotRos工作区(package_ext)
+        elif task_name == "install_full":
+            success = configurator.安装本体全套(package_ext)
+        elif task_name == "cleanup_legacy":
+            success = configurator.清理旧版服务()
         else:
             print_error(f"未知的安装任务: {task_name}")
 
@@ -372,7 +409,8 @@ def 执行安装任务(task_name: str, robot_ip: str, robot_port: int) -> bool:
     finally:
         configurator.断开连接()
 
-    input("\n按回车键返回安装菜单...")
+    if pause_after:
+        input("\n按回车键返回安装菜单...")
     return success
 
 
@@ -385,10 +423,15 @@ def 安装软件菜单():
         print("安装机器狗软件")
         print("------------------------------------------")
         print(f"当前目标: {current_target}")
+        print("说明: 安装会先在本地自动打包，再上传并部署到目标机器狗")
         print("  1) 设置安装目标机器狗")
         print("  2) 安装 sparkrobot-common")
         print("  3) 安装 robot-server")
         print("  4) 安装 robot-agent")
+        print("  5) 安装 robot-runtime 服务")
+        print("  6) 安装 robot-ros 工作区（含 rosdep / colcon）")
+        print("  7) 一键打包并安装本体全套")
+        print("  8) 清理旧版 robot-server / robot-agent 服务")
         print("  0) 返回")
         print("------------------------------------------")
 
@@ -406,18 +449,199 @@ def 安装软件菜单():
             continue
 
         if choice == "2":
-            执行安装任务("install_1", robot_ip, robot_port)
+            执行安装任务("install_common", robot_ip, robot_port)
         elif choice == "3":
-            执行安装任务("install_2", robot_ip, robot_port)
+            执行安装任务("install_server", robot_ip, robot_port)
         elif choice == "4":
-            执行安装任务("install_3", robot_ip, robot_port)
+            执行安装任务("install_agent", robot_ip, robot_port)
+        elif choice == "5":
+            执行安装任务("install_runtime", robot_ip, robot_port)
+        elif choice == "6":
+            执行安装任务("install_ros", robot_ip, robot_port)
+        elif choice == "7":
+            执行安装任务("install_full", robot_ip, robot_port)
+        elif choice == "8":
+            执行安装任务("cleanup_legacy", robot_ip, robot_port)
         else:
             print_error("无效选项")
 
 
-def 打包robot_agent套件菜单():
-    """打包 robot-agent 套件"""
-    执行打包流程()
+def 执行打包任务(
+    project_names: List[str],
+    title: str,
+    package_format: str = "tar.gz",
+    require_prompt: bool = True,
+    open_explorer: bool = True,
+) -> bool:
+    """执行指定项目打包任务"""
+    _, _, outputs = 执行打包流程(
+        project_names=project_names,
+        title=title,
+        package_format=package_format,
+        require_prompt=require_prompt,
+        open_explorer=open_explorer,
+    )
+    return bool(outputs)
+
+
+def 打包本体软件菜单():
+    """打包本体软件菜单"""
+    while True:
+        print("\n------------------------------------------")
+        print("打包本体软件（本地）")
+        print("------------------------------------------")
+        print("  1) 一键打包本体全套")
+        print("  2) 打包 sparkrobot-common")
+        print("  3) 打包 robot-server")
+        print("  4) 打包 robot-agent")
+        print("  5) 打包 robot-runtime")
+        print("  6) 打包 robot-ros 工作区")
+        print("  0) 返回")
+        print("------------------------------------------")
+
+        choice = input("请选择: ").strip()
+        if choice == "0":
+            return
+        if choice == "1":
+            执行打包任务(
+                ["sparkrobot-common", "robot-server", "robot-agent", "robot-runtime", "robot-ros"],
+                "打包本体全套",
+            )
+            return
+        if choice == "2":
+            执行打包任务(["sparkrobot-common"], "打包 sparkrobot-common")
+            return
+        if choice == "3":
+            执行打包任务(["robot-server"], "打包 robot-server")
+            return
+        if choice == "4":
+            执行打包任务(["robot-agent"], "打包 robot-agent")
+            return
+        if choice == "5":
+            执行打包任务(["robot-runtime"], "打包 robot-runtime")
+            return
+        if choice == "6":
+            执行打包任务(["robot-ros"], "打包 robot-ros 工作区")
+            return
+
+        print_error("无效选项")
+
+
+def 解析命令行参数() -> argparse.Namespace:
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(
+        description="机器狗本体常用命令工具",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "示例:\n"
+            "  python tools\\1.常用命令.py --package full --format zip\n"
+            "  python tools\\1.常用命令.py --install full --robot-ip 192.168.1.106\n"
+            "  python tools\\1.常用命令.py --cleanup-legacy-services --robot-ip 192.168.1.106\n"
+            "  python tools\\1.常用命令.py --robot-ip 192.168.1.106 --robot-port 43988 --save-target"
+        ),
+    )
+    parser.add_argument("--robot-ip", help="目标机器狗 IP")
+    parser.add_argument("--robot-port", type=int, help=f"目标机器狗端口，默认 {DEFAULT_ROBOT_PORT}")
+    parser.add_argument("--save-target", action="store_true", help="保存 --robot-ip / --robot-port 为默认安装目标")
+    parser.add_argument(
+        "--install",
+        choices=sorted(命令行安装任务映射.keys()),
+        help="执行远程安装任务：common/server/agent/runtime/ros/full",
+    )
+    parser.add_argument(
+        "--package",
+        choices=sorted(命令行打包任务映射.keys()),
+        help="执行本地打包任务：common/server/agent/runtime/ros/full",
+    )
+    parser.add_argument("--format", default="tar.gz", help="打包格式，支持 tar.gz、zip、tar、tar.bz2、tar.xz")
+    parser.add_argument(
+        "--cleanup-legacy-services",
+        action="store_true",
+        help="清理目标机器上旧版 robot-server / robot-agent 服务",
+    )
+    return parser.parse_args()
+
+
+def 校验命令行IP(robot_ip: str) -> bool:
+    """校验命令行传入的 IP 地址"""
+    return bool(re.match(r"^\d{1,3}(\.\d{1,3}){3}$", robot_ip))
+
+
+def 获取命令行安装目标(robot_ip: Optional[str], robot_port: Optional[int]) -> Tuple[Optional[str], int]:
+    """获取命令行安装目标"""
+    saved_ip, saved_port = 获取当前安装目标()
+    target_ip = robot_ip or saved_ip
+
+    if robot_port is not None:
+        return target_ip, robot_port
+    if saved_port is not None:
+        return target_ip, saved_port
+    return target_ip, DEFAULT_ROBOT_PORT
+
+
+def 执行命令行模式(args: argparse.Namespace) -> int:
+    """执行命令行模式"""
+    if args.install and args.package:
+        print_error("--install 和 --package 不能同时使用")
+        return 1
+    if args.install and args.cleanup_legacy_services:
+        print_error("--install 和 --cleanup-legacy-services 不能同时使用")
+        return 1
+    if args.package and args.cleanup_legacy_services:
+        print_error("--package 和 --cleanup-legacy-services 不能同时使用")
+        return 1
+
+    if args.robot_ip and not 校验命令行IP(args.robot_ip):
+        print_error("命令行传入的 --robot-ip 格式无效")
+        return 1
+    if args.robot_port is not None and not (1 <= args.robot_port <= 65535):
+        print_error("命令行传入的 --robot-port 必须在 1-65535 之间")
+        return 1
+
+    target_ip, target_port = 获取命令行安装目标(args.robot_ip, args.robot_port)
+
+    if args.save_target:
+        if not target_ip:
+            print_error("保存默认目标前，请提供 --robot-ip")
+            return 1
+        写入机器狗配置(target_ip, target_port)
+        print_success(f"已保存默认安装目标: {target_ip}:{target_port}")
+
+    if args.package:
+        project_names, title = 命令行打包任务映射[args.package]
+        success = 执行打包任务(
+            project_names=project_names,
+            title=title,
+            package_format=args.format,
+            require_prompt=False,
+            open_explorer=False,
+        )
+        return 0 if success else 1
+
+    install_task_name: Optional[str] = None
+    if args.install:
+        install_task_name = 命令行安装任务映射[args.install]
+    elif args.cleanup_legacy_services:
+        install_task_name = "cleanup_legacy"
+
+    if install_task_name:
+        if not target_ip:
+            print_error("执行远程任务前，请提供 --robot-ip，或先保存默认安装目标")
+            return 1
+        success = 执行安装任务(
+            task_name=install_task_name,
+            robot_ip=target_ip,
+            robot_port=target_port,
+            package_ext=args.format,
+            pause_after=False,
+        )
+        return 0 if success else 1
+
+    if args.save_target:
+        return 0
+
+    print_error("未指定任何任务，请使用 --install、--package、--cleanup-legacy-services 或 --save-target")
+    return 1
 
 def 获取当前时间戳() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H_%M_%S")
@@ -828,19 +1052,13 @@ def 显示菜单():
     print("  4) 检查代码注释 (默认扫描根目录)")
     print("  5) 设置 (管理机器狗)")
     print(f"  6) 安装机器狗软件 (当前目标: {获取安装目标展示文本()})")
-    print("  7) 打包 robot-agent 套件")
+    print("  7) 打包本体软件")
     print("  0) 退出")
     print("")
     print("==========================================")
 
-def main():
-    print("\033]0;服务端\007")
-    # 确保能够显示颜色
-    os.system("")
-
-    确保_git_hooks_已启用()
-    确保配置文件存在()
-
+def 运行交互模式():
+    """运行交互模式"""
     while True:
         try:
             显示菜单()
@@ -859,7 +1077,7 @@ def main():
             elif choice == "6":
                 安装软件菜单()
             elif choice == "7":
-                打包robot_agent套件菜单()
+                打包本体软件菜单()
             elif choice == "0":
                 print_success("退出脚本")
                 sys.exit(0)
@@ -872,6 +1090,29 @@ def main():
             print("\n")
             print_success("退出脚本")
             sys.exit(0)
+
+
+def main():
+    命令行模式 = len(sys.argv) > 1
+
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+    if not 命令行模式:
+        print("\033]0;服务端\007")
+        # 确保能够显示颜色
+        os.system("")
+
+    确保_git_hooks_已启用()
+    确保配置文件存在()
+
+    if 命令行模式:
+        args = 解析命令行参数()
+        sys.exit(执行命令行模式(args))
+
+    运行交互模式()
 
 if __name__ == "__main__":
     main()

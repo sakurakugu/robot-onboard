@@ -60,9 +60,10 @@ robot-server/
 ### 安装依赖
 
 ```bash
+# 建议先进入虚拟环境，避免污染系统 Python
 cd robot-server
-pip install -e ../sparkrobot-common
-pip install -e .
+python -m pip install -e ../sparkrobot-common
+python -m pip install -e .
 ```
 
 ### 运行
@@ -132,6 +133,19 @@ python main.py
 | GET  | `/api/v1/system/info`     | 获取系统信息 |
 | POST | `/api/v1/system/reboot`   | 重启系统     |
 | POST | `/api/v1/system/shutdown` | 关机         |
+
+### 遥测 API
+
+| 方法 | 路径                     | 描述 |
+| ---- | ------------------------ | ---- |
+| GET  | `/api/v1/telemetry`      | 获取当前整机摘要遥测，兼容现有页面与脚本 |
+| GET  | `/api/v1/telemetry/full` | 获取完整遥测快照，包含 `dog_state / imu_info / odom_info / feedback / navigation_state / bridge_status` 等最新缓存 |
+
+当前本地配置页顶部遥测栏也会显示：
+
+- 整机在线状态
+- 电量、温度、设备名
+- `bridge_status` 对应的运控桥状态、裁决原因、当前输出速度
 
 ## mDNS 服务发现
 
@@ -240,7 +254,7 @@ robot-agent 通过 HTTP 调用 robot-server 的 API 来：
 
 ## 开机自启动
 
-创建服务文件 `/etc/systemd/system/robot-server.service`:
+创建服务文件 `/etc/systemd/system/sparkrobot-server.service`:
 
 ```ini
 [Unit]
@@ -263,19 +277,19 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable robot-server
-sudo systemctl start robot-server
+sudo systemctl enable sparkrobot-server
+sudo systemctl start sparkrobot-server
 ```
 
 查看日志：
 
 ```bash
-sudo journalctl -u robot-server -f
+sudo journalctl -u sparkrobot-server -f
 ```
 
 关闭/重启服务：
 
 ```bash
-sudo systemctl stop robot-server
-sudo systemctl restart robot-server
+sudo systemctl stop sparkrobot-server
+sudo systemctl restart sparkrobot-server
 ```

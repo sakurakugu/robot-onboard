@@ -1,4 +1,4 @@
-"""robot-agent 套件打包工具"""
+"""本体套件打包工具"""
 
 import fnmatch
 import os
@@ -8,13 +8,12 @@ from pathlib import Path
 from typing import Literal
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-ROBOT_AGENT_ROOT = PROJECT_ROOT
 PACKAGES_DIR = PROJECT_ROOT / "dist" / "packages"
 
 忽略模式 = [
     "__pycache__", "*.pyc", "*.pyo", "*.pyd",
     "*.egg-info", ".git", ".idea", ".vscode",
-    ".DS_Store", "node_modules", "dist", "build",
+    ".DS_Store", "node_modules", "dist", "build", "install", "log",
     ".mypy_cache", ".ruff_cache",
 ]
 
@@ -115,21 +114,38 @@ def 打包单个项目(name: str, source_dir: Path, package_ext: str | None = No
     return output_path
 
 
-def 获取robot_agent项目列表() -> list[tuple[str, Path]]:
-    """返回 robot-agent 相关项目目录"""
+def 获取本体项目列表() -> list[tuple[str, Path]]:
+    """返回本体相关项目目录。"""
     return [
-        ("robot-agent", ROBOT_AGENT_ROOT / "robot-agent"),
-        ("robot-server", ROBOT_AGENT_ROOT / "robot-server"),
-        ("sparkrobot-common", ROBOT_AGENT_ROOT / "sparkrobot-common"),
+        ("sparkrobot-common", PROJECT_ROOT / "sparkrobot-common"),
+        ("robot-server", PROJECT_ROOT / "robot-server"),
+        ("robot-agent", PROJECT_ROOT / "robot-agent"),
+        ("robot-runtime", PROJECT_ROOT / "robot-runtime"),
+        ("robot-ros", PROJECT_ROOT / "robot-ros"),
     ]
 
 
-def 打包robot_agent套件(archive_format: str, ext: str) -> list[Path]:
-    """打包 robot-agent 相关项目"""
+def 获取本体项目映射() -> dict[str, Path]:
+    """返回项目名称到目录的映射。"""
+    return {name: path for name, path in 获取本体项目列表()}
+
+
+def 获取默认打包项目名称列表() -> list[str]:
+    """返回默认需要打包的项目名称列表。"""
+    return [name for name, _ in 获取本体项目列表()]
+
+
+def 打包项目集合(project_names: list[str], archive_format: str, ext: str) -> list[Path]:
+    """按项目名称列表打包项目。"""
     PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
     outputs: list[Path] = []
+    project_mapping = 获取本体项目映射()
 
-    for name, path in 获取robot_agent项目列表():
+    for name in project_names:
+        path = project_mapping.get(name)
+        if path is None:
+            print(f"✗ 未知项目: {name}")
+            continue
         if not path.exists():
             print(f"✗ 找不到目录: {path}")
             continue
@@ -141,10 +157,26 @@ def 打包robot_agent套件(archive_format: str, ext: str) -> list[Path]:
     return outputs
 
 
-def 执行打包流程(open_explorer: bool = True, require_prompt: bool = True) -> tuple[str, str, list[Path]]:
-    """执行 robot-agent 套件打包流程"""
+def 获取robot_agent项目列表() -> list[tuple[str, Path]]:
+    """兼容旧调用，返回当前本体项目目录。"""
+    return 获取本体项目列表()
+
+
+def 打包robot_agent套件(archive_format: str, ext: str) -> list[Path]:
+    """兼容旧调用，打包当前本体套件。"""
+    return 打包项目集合(获取默认打包项目名称列表(), archive_format, ext)
+
+
+def 执行打包流程(
+    open_explorer: bool = True,
+    require_prompt: bool = True,
+    project_names: list[str] | None = None,
+    title: str = "打包本体套件",
+    package_format: str = "tar.gz",
+) -> tuple[str, str, list[Path]]:
+    """执行本体套件打包流程。"""
     print("\n" + "-" * 50)
-    print("打包 robot-agent 套件")
+    print(title)
     print("-" * 50)
 
     if require_prompt:
@@ -152,9 +184,10 @@ def 执行打包流程(open_explorer: bool = True, require_prompt: bool = True) 
         raw_format = input("请输入压缩格式 (回车默认 tar.gz): ")
         archive_format, ext = 解析压缩格式(raw_format)
     else:
-        archive_format, ext = 解析压缩格式("tar.gz")
+        archive_format, ext = 解析压缩格式(package_format)
 
-    outputs = 打包robot_agent套件(archive_format, ext)
+    target_names = project_names or 获取默认打包项目名称列表()
+    outputs = 打包项目集合(target_names, archive_format, ext)
     if outputs:
         print("\n" + "=" * 50)
         print("✓ 打包完成")

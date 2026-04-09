@@ -1,18 +1,28 @@
-"""服务安装模块 - 处理 SparkRobotCommon 和 RobotServer 的安装"""
+"""服务安装模块。"""
 
 from pathlib import Path
 
 from .package_builder import 打包单个项目
 
+ROSDISTRO_INDEX_URL = "https://mirrors.tuna.tsinghua.edu.cn/rosdistro/index-v4.yaml"
+ROSDEP_SOURCES_LIST_CONTENT = """# os-specific listings first
+yaml https://mirrors.tuna.tsinghua.edu.cn/rosdistro/rosdep/osx-homebrew.yaml osx
+
+# generic
+yaml https://mirrors.tuna.tsinghua.edu.cn/rosdistro/rosdep/base.yaml
+yaml https://mirrors.tuna.tsinghua.edu.cn/rosdistro/rosdep/python.yaml
+yaml https://mirrors.tuna.tsinghua.edu.cn/rosdistro/rosdep/ruby.yaml
+"""
+
 
 class 服务安装管理器:
-    """服务安装管理器 - 处理 Python 包和服务的安装"""
+    """服务安装管理器。"""
 
     def __init__(self, ssh管理器):
         self.ssh = ssh管理器
 
     def 安装SparkRobotCommon(self, package_ext: str | None = None) -> bool:
-        """安装 SparkRobot Common 包"""
+        """安装 SparkRobot Common 包。"""
         print("\n正在安装 SparkRobot Common...")
 
         local_common_path = self._获取本地项目路径("sparkrobot-common")
@@ -24,29 +34,21 @@ class 服务安装管理器:
             return False
 
         remote_path = "/home/firefly/sparkrobot/sparkrobot-common"
-
-        # 0. 确保远程目录权限正确 (防止之前用 sudo 运行导致权限归 root)
-        self.ssh.执行命令(f"mkdir -p {remote_path}")
-        self.ssh.执行命令(f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_path}", use_sudo=True)
-
-        # 1. 上传文件
+        if not self._准备远程目录(remote_path):
+            return False
         if not self._上传并解压(archive_path, remote_path):
             return False
 
-        # 2. 安装依赖和包
         print("正在安装 sparkrobot-common 依赖...")
-        # 只安装业务依赖，避免修改系统打包工具链，影响 ROS/colcon 环境
-        cmd_deps = "python3 -m pip install uuid6 watchdog"
-        success, _, error = self.ssh.执行命令(cmd_deps, use_sudo=True)
+        cmd_install_deps = "python3 -m pip install uuid6 watchdog"
+        success, _, error = self.ssh.执行命令(cmd_install_deps, use_sudo=True)
         if not success:
             print(f"✗ 安装依赖失败: {error}")
             return False
 
         print("正在安装 sparkrobot-common...")
-        # 使用 -e 安装源码包，依赖已在上一步安装，这里不再重复解析
         cmd_install = f"python3 -m pip install --no-deps -e {remote_path}"
         success, _, error = self.ssh.执行命令(cmd_install, use_sudo=True)
-
         if success:
             print("✓ SparkRobot Common 安装成功")
             return True
@@ -55,112 +57,265 @@ class 服务安装管理器:
         return False
 
     def 安装RobotServer(self, package_ext: str | None = None) -> bool:
-        """安装并启动 Robot Server"""
+        """安装 Robot Server。"""
         if not self.安装SparkRobotCommon(package_ext):
             return False
-
-        print("\n正在安装 Robot Server...")
-
-        local_robot_server_path = self._获取本地项目路径("robot-server")
-        if local_robot_server_path is None:
-            return False
-
-        archive_path = self._打包项目("robot-server", local_robot_server_path, package_ext)
-        if archive_path is None:
-            return False
-
-        remote_path = "/home/firefly/sparkrobot/robot-server"
-
-        # 0. 确保远程目录权限正确
-        self.ssh.执行命令(f"mkdir -p {remote_path}")
-        self.ssh.执行命令(f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_path}", use_sudo=True)
-
-        # 1. 上传文件
-        if not self._上传并解压(archive_path, remote_path):
-            return False
-
-        # 2. 安装 robot-server 依赖
-        print("正在安装 robot-server 依赖...")
-        cmd_install_deps = f"python3 -m pip install {remote_path}"
-        success, _, error = self.ssh.执行命令(cmd_install_deps, use_sudo=True)
-        if not success:
-            print(f"✗ robot-server 依赖安装失败: {error}")
-            return False
-        print("✓ robot-server 依赖安装完成")
-
-        # 3. 赋予执行权限
-        print("正在设置权限...")
-        # 尝试检测 install.sh 位置
-        install_script = f"{remote_path}/scripts/install.sh"
-
-        # 4. 执行安装脚本
-        print("正在运行安装脚本...")
-        # 确保脚本有执行权限
-        self.ssh.执行命令(f"chmod +x {install_script}")
-        success, output, error = self.ssh.执行命令(f"bash {install_script}", use_sudo=True)
-
-        if success:
-            print("✓ Robot Server 安装并启动成功")
-            print(f"请打开: http://{self.ssh.机器人IP}:8080 进行配置")
-            print(output)
-            return True
-
-        details = (error or "").strip() or (output or "").strip()
-        if details:
-            print(f"✗ 安装失败: {details}")
-        else:
-            print("✗ 安装失败: 未返回错误信息")
-        return False
+        return self._安装Python服务项目(
+            project_name="robot-server",
+            display_name="Robot Server",
+            remote_path="/home/firefly/sparkrobot/robot-server",
+            package_ext=package_ext,
+            success_tip=f"请打开: http://{self.ssh.机器人IP}:8080 进行配置",
+        )
 
     def 安装RobotAgent(self, package_ext: str | None = None) -> bool:
-        """安装 Robot Agent"""
-        if not self.安装RobotServer(package_ext):
+        """安装 Robot Agent。"""
+        if not self.安装SparkRobotCommon(package_ext):
+            return False
+        if not self._安装Python服务项目(
+            project_name="robot-server",
+            display_name="Robot Server",
+            remote_path="/home/firefly/sparkrobot/robot-server",
+            package_ext=package_ext,
+            success_tip=f"请打开: http://{self.ssh.机器人IP}:8080 进行配置",
+        ):
+            return False
+        return self._安装Python服务项目(
+            project_name="robot-agent",
+            display_name="Robot Agent",
+            remote_path="/home/firefly/sparkrobot/robot-agent",
+            package_ext=package_ext,
+        )
+
+    def 安装RobotRuntime(self, package_ext: str | None = None) -> bool:
+        """安装 Robot Runtime。"""
+        if not self.安装SparkRobotCommon(package_ext):
+            return False
+        return self._安装Python服务项目(
+            project_name="robot-runtime",
+            display_name="Robot Runtime",
+            remote_path="/home/firefly/sparkrobot/robot-runtime",
+            package_ext=package_ext,
+        )
+
+    def 安装RobotRos工作区(self, package_ext: str | None = None) -> bool:
+        """安装并构建 robot-ros 工作区。"""
+        print("\n正在安装 robot-ros 工作区...")
+
+        local_robot_ros_path = self._获取本地项目路径("robot-ros")
+        if local_robot_ros_path is None:
             return False
 
-        print("\n正在解压 Robot Agent...")
-        local_robot_agent_path = self._获取本地项目路径("robot-agent")
-        if local_robot_agent_path is None:
-            return False
-
-        archive_path = self._打包项目("robot-agent", local_robot_agent_path, package_ext)
+        archive_path = self._打包项目("robot-ros", local_robot_ros_path, package_ext)
         if archive_path is None:
             return False
 
-        remote_path = "/home/firefly/sparkrobot/robot-agent"
+        remote_path = "/home/firefly/sparkrobot/robot-ros"
+        if not self._准备远程目录(remote_path):
+            return False
+
+        self.ssh.执行命令(f"rm -rf {remote_path}/build {remote_path}/install {remote_path}/log")
         if not self._上传并解压(archive_path, remote_path):
             return False
 
-        # 2. 安装 robot-agent 依赖
-        print("正在安装 robot-agent 依赖...")
+        print("正在检查 ROS2 Humble 环境...")
+        check_ros_cmd = "bash -lc 'test -f /opt/ros/humble/setup.bash'"
+        success, _, _ = self.ssh.执行命令(check_ros_cmd)
+        if not success:
+            print("✗ 未检测到 /opt/ros/humble/setup.bash，请先在目标机器安装 ROS2 Humble")
+            return False
+
+        if not self._确保rosdep已初始化():
+            return False
+
+        print("正在安装 robot-ros 依赖...")
+        rosdep_cmd = (
+            "bash -lc '"
+            f"export HOME=/home/{self.ssh.用户名} && "
+            f"export ROS_HOME=/home/{self.ssh.用户名}/.ros && "
+            f"source /opt/ros/humble/setup.bash && "
+            f"export ROSDISTRO_INDEX_URL={ROSDISTRO_INDEX_URL} && "
+            f"cd {remote_path} && "
+            "rosdep install --from-paths src --ignore-src -r -y"
+            "'"
+        )
+        success, output, error = self.ssh.执行命令(rosdep_cmd, use_sudo=True)
+        if not success:
+            details = self._构建错误详情(output, error)
+            print(f"✗ robot-ros 依赖安装失败: {details}")
+            print("提示: 如果缺少 lslidar_driver / lslidar_msgs，请先在本地导入厂商驱动后再重试")
+            return False
+        print("✓ robot-ros 依赖安装完成")
+
+        print("正在构建 robot-ros 工作区...")
+        build_cmd = (
+            "bash -lc '"
+            f"source /opt/ros/humble/setup.bash && "
+            f"cd {remote_path} && "
+            "colcon build"
+            "'"
+        )
+        success, output, error = self.ssh.执行命令(build_cmd)
+        if not success:
+            details = self._构建错误详情(output, error)
+            print(f"✗ robot-ros 工作区构建失败: {details}")
+            return False
+
+        print("✓ robot-ros 工作区构建成功")
+        return True
+
+    def 安装本体全套(self, package_ext: str | None = None) -> bool:
+        """安装本体全套软件。"""
+        print("\n正在安装本体全套软件...")
+        if not self.安装SparkRobotCommon(package_ext):
+            return False
+        if not self._安装Python服务项目(
+            project_name="robot-server",
+            display_name="Robot Server",
+            remote_path="/home/firefly/sparkrobot/robot-server",
+            package_ext=package_ext,
+            success_tip=f"请打开: http://{self.ssh.机器人IP}:8080 进行配置",
+        ):
+            return False
+        if not self._安装Python服务项目(
+            project_name="robot-agent",
+            display_name="Robot Agent",
+            remote_path="/home/firefly/sparkrobot/robot-agent",
+            package_ext=package_ext,
+        ):
+            return False
+        if not self.安装RobotRos工作区(package_ext):
+            return False
+        if not self._安装Python服务项目(
+            project_name="robot-runtime",
+            display_name="Robot Runtime",
+            remote_path="/home/firefly/sparkrobot/robot-runtime",
+            package_ext=package_ext,
+        ):
+            return False
+
+        print("✓ 本体全套软件安装完成")
+        return True
+
+    def 清理旧版服务(self) -> bool:
+        """清理旧版 robot-server 和 robot-agent 服务。"""
+        print("\n正在清理旧版 robot-server / robot-agent 服务...")
+
+        cleanup_cmd = (
+            "bash -lc '"
+            "set -e; "
+            "for service in robot-server robot-agent; do "
+            "systemctl stop \"${service}.service\" 2>/dev/null || true; "
+            "systemctl disable \"${service}.service\" 2>/dev/null || true; "
+            "rm -f \"/etc/systemd/system/${service}.service\"; "
+            "rm -f \"/etc/systemd/system/multi-user.target.wants/${service}.service\"; "
+            "rm -f \"/home/firefly/sparkrobot/logs/pid/${service}.pid\"; "
+            "done; "
+            "legacy_server_pids=$(pgrep -f \"robot-server.*main.py\" || true); "
+            "if [ -n \"$legacy_server_pids\" ]; then kill $legacy_server_pids || true; fi; "
+            "legacy_agent_pids=$(pgrep -f \"robot-agent.*main.py\" || true); "
+            "if [ -n \"$legacy_agent_pids\" ]; then kill $legacy_agent_pids || true; fi; "
+            "systemctl daemon-reload; "
+            "systemctl reset-failed || true"
+            "'"
+        )
+        success, output, error = self.ssh.执行命令(cleanup_cmd, use_sudo=True)
+        if not success:
+            details = self._构建错误详情(output, error)
+            print(f"✗ 清理旧版服务失败: {details}")
+            return False
+
+        print("✓ 旧版服务清理完成")
+        print("已处理: robot-server.service / robot-agent.service")
+        return True
+
+    def _确保rosdep已初始化(self) -> bool:
+        """确保目标机器的 rosdep 已初始化。"""
+        print("正在检查 rosdep 初始化状态...")
+        check_cmd = "bash -lc 'test -f /etc/ros/rosdep/sources.list.d/20-default.list'"
+        success, _, _ = self.ssh.执行命令(check_cmd)
+        if success:
+            print("✓ rosdep 已初始化")
+        else:
+            print("正在初始化 rosdep...")
+            init_cmd = "bash -lc 'rosdep init'"
+            success, output, error = self.ssh.执行命令(init_cmd, use_sudo=True)
+            if not success:
+                details = self._构建错误详情(output, error)
+                if "already exists" not in details.lower():
+                    print(f"✗ rosdep init 失败: {details}")
+                    return False
+
+        print("正在切换 rosdep 源到镜像...")
+        success = self.ssh.写入配置文件(
+            ROSDEP_SOURCES_LIST_CONTENT,
+            "/etc/ros/rosdep/sources.list.d/20-default.list",
+            "rosdep 源配置",
+        )
+        if not success:
+            print("✗ 写入 rosdep 镜像源失败")
+            return False
+
+        print("正在更新 rosdep 源...")
+        update_cmd = f"bash -lc 'export ROSDISTRO_INDEX_URL={ROSDISTRO_INDEX_URL} && rosdep update'"
+        success, output, error = self.ssh.执行命令(update_cmd)
+        if not success:
+            details = self._构建错误详情(output, error)
+            print(f"✗ rosdep update 失败: {details}")
+            return False
+
+        print("✓ rosdep 初始化完成")
+        return True
+
+    def _安装Python服务项目(
+        self,
+        project_name: str,
+        display_name: str,
+        remote_path: str,
+        package_ext: str | None,
+        success_tip: str | None = None,
+    ) -> bool:
+        """安装并启动 Python 服务项目。"""
+        print(f"\n正在安装 {display_name}...")
+
+        local_project_path = self._获取本地项目路径(project_name)
+        if local_project_path is None:
+            return False
+
+        archive_path = self._打包项目(project_name, local_project_path, package_ext)
+        if archive_path is None:
+            return False
+
+        if not self._准备远程目录(remote_path):
+            return False
+        if not self._上传并解压(archive_path, remote_path):
+            return False
+
+        print(f"正在安装 {project_name} 依赖...")
         cmd_install_deps = f"python3 -m pip install {remote_path}"
         success, _, error = self.ssh.执行命令(cmd_install_deps, use_sudo=True)
         if not success:
-            print(f"✗ robot-agent 依赖安装失败: {error}")
+            print(f"✗ {project_name} 依赖安装失败: {error}")
             return False
-        print("✓ robot-agent 依赖安装完成")
+        print(f"✓ {project_name} 依赖安装完成")
 
-        # 3. 赋予执行权限
-        print("正在设置权限...")
-        # 尝试检测 install.sh 位置
         install_script = f"{remote_path}/scripts/install.sh"
-
-        # 4. 执行安装脚本
-        print("正在运行安装脚本...")
-        # 确保脚本有执行权限
+        print("正在设置权限...")
         self.ssh.执行命令(f"chmod +x {install_script}")
+
+        print("正在运行安装脚本...")
         success, output, error = self.ssh.执行命令(f"bash {install_script}", use_sudo=True)
-
-        if success:
-            print("✓ Robot Agent 安装并启动成功")
-            print(output)
-            return True
-
-        details = (error or "").strip() or (output or "").strip()
-        if details:
+        if not success:
+            details = self._构建错误详情(output, error)
             print(f"✗ 安装失败: {details}")
-        else:
-            print("✗ 安装失败: 未返回错误信息")
-        return False
+            return False
+
+        print(f"✓ {display_name} 安装并启动成功")
+        if success_tip:
+            print(success_tip)
+        if output.strip():
+            print(output)
+        return True
 
     def _获取本地项目路径(self, project_name: str) -> Path | None:
         script_dir = Path(__file__).resolve()
@@ -174,12 +329,50 @@ class 服务安装管理器:
     def _打包项目(self, name: str, source_dir: Path, package_ext: str | None) -> Path | None:
         return 打包单个项目(name, source_dir, package_ext)
 
+    def _准备远程目录(self, remote_path: str) -> bool:
+        remote_workspace_dir = "/home/firefly/sparkrobot"
+        success, _, error = self.ssh.执行命令(f"mkdir -p {remote_workspace_dir}")
+        if not success:
+            print(f"✗ 创建远程工作目录失败: {error}")
+            return False
+
+        success, _, error = self.ssh.执行命令(
+            f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_workspace_dir}",
+            use_sudo=True,
+        )
+        if not success:
+            print(f"✗ 修正远程工作目录权限失败: {error}")
+            return False
+
+        success, _, error = self.ssh.执行命令(f"mkdir -p {remote_path}")
+        if not success:
+            print(f"✗ 创建远程项目目录失败: {error}")
+            return False
+
+        success, _, error = self.ssh.执行命令(
+            f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_path}",
+            use_sudo=True,
+        )
+        if not success:
+            print(f"✗ 修正远程项目目录权限失败: {error}")
+            return False
+        return True
+
     def _上传并解压(self, archive_path: Path, remote_path: str) -> bool:
         remote_packages_dir = "/home/firefly/sparkrobot/packages"
-        self.ssh.执行命令(f"mkdir -p {remote_packages_dir}")
-        self.ssh.执行命令(f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_packages_dir}", use_sudo=True)
-        self.ssh.执行命令(f"mkdir -p {remote_path}")
-        self.ssh.执行命令(f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_path}", use_sudo=True)
+
+        success, _, error = self.ssh.执行命令(f"mkdir -p {remote_packages_dir}")
+        if not success:
+            print(f"✗ 创建远程包目录失败: {error}")
+            return False
+
+        success, _, error = self.ssh.执行命令(
+            f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_packages_dir}",
+            use_sudo=True,
+        )
+        if not success:
+            print(f"✗ 修正远程包目录权限失败: {error}")
+            return False
 
         remote_archive = f"{remote_packages_dir}/{archive_path.name}"
         if not self.ssh.上传文件(str(archive_path), remote_archive):
@@ -204,5 +397,19 @@ class 服务安装管理器:
         if not success:
             print(f"✗ 解压失败: {error}")
             return False
-        self.ssh.执行命令(f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_path}", use_sudo=True)
+
+        success, _, error = self.ssh.执行命令(
+            f"chown -R {self.ssh.用户名}:{self.ssh.用户名} {remote_path}",
+            use_sudo=True,
+        )
+        if not success:
+            print(f"✗ 修正解压后目录权限失败: {error}")
+            return False
         return True
+
+    def _构建错误详情(self, output: str, error: str) -> str:
+        """构建更可读的错误详情。"""
+        details = (error or "").strip() or (output or "").strip()
+        if not details:
+            return "未返回错误信息"
+        return details

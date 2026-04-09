@@ -32,7 +32,7 @@ from src.modules.control.joystick import JoystickController
 from src.modules.control.process import ProcessController
 from src.modules.control.sdk_mode_manager import SDK模式管理器
 from src.modules.control.ws_control_server import WsControlServer
-from src.modules.runtime.coordinator import 客户端运行时协调器
+from src.modules.runtime import 客户端运行时协调器, 本地运行时客户端
 from src.modules.transport.business_message_handler import 业务消息处理器
 from src.modules.transport.message_sender import 消息发送器
 from src.modules.transport.ws_manager import WebSocketManager
@@ -101,6 +101,7 @@ class RobotClient:
         """ 初始化 IPC 服务器 """
         self.ipc_server = IpcServer(self.project_name, self._处理IPC状态)
         self.media_streamer = 云端媒体推流管理器(self.config)
+        self.runtime_client = 本地运行时客户端()
 
         """ 初始化动作执行函数 """
         self.动作执行器: Optional[Callable[[str, dict[str, Any]], bool]] = None
@@ -148,6 +149,7 @@ class RobotClient:
             joystick_controller=self.joystick_controller,
             audio_capture=self.audio_capture,
             sdk_mode_manager=self.sdk_mode_manager,
+            runtime_client=self.runtime_client,
             设置云端媒体租约到期时间=self._设置云端媒体推流租约到期时间,
         )
         self.直连控制处理器 = 直连控制处理器(
@@ -172,6 +174,7 @@ class RobotClient:
             断开连接到服务器=self.断开连接到服务器,
             取消初始化=self.取消初始化,
             允许云端媒体推流=self._允许云端媒体推流,
+            runtime_client=self.runtime_client,
             获取机器人UUID=lambda: str(self.config["robot"]["uuid"]),
             获取初始重连间隔=lambda: self.config["server"].get("reconnect_interval", 5),
         )
