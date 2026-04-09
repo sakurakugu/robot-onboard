@@ -13,9 +13,8 @@ SparkRobot 通用库，提供配置管理、日志、工具函数等通用功能
 
 ```bash
 # 开发模式安装
-# 先进入当前目录（含有README的目录）
-python -m pip install --upgrade pip setuptools wheel
-pip install -e .
+# 建议先进入虚拟环境，再进入当前目录（含有 README 的目录）
+python -m pip install -e .
 ```
 
 ## 使用

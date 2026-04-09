@@ -35,16 +35,16 @@ class 服务安装管理器:
 
         # 2. 安装依赖和包
         print("正在安装 sparkrobot-common 依赖...")
-        # 使用 python3 -m pip 确保安装到 python3 环境
-        cmd_deps = "python3 -m pip install --upgrade pip setuptools wheel uuid6 watchdog"
+        # 只安装业务依赖，避免修改系统打包工具链，影响 ROS/colcon 环境
+        cmd_deps = "python3 -m pip install uuid6 watchdog"
         success, _, error = self.ssh.执行命令(cmd_deps, use_sudo=True)
         if not success:
             print(f"✗ 安装依赖失败: {error}")
             return False
 
         print("正在安装 sparkrobot-common...")
-        # 使用 -e 安装
-        cmd_install = f"python3 -m pip install -e {remote_path}"
+        # 使用 -e 安装源码包，依赖已在上一步安装，这里不再重复解析
+        cmd_install = f"python3 -m pip install --no-deps -e {remote_path}"
         success, _, error = self.ssh.执行命令(cmd_install, use_sudo=True)
 
         if success:
