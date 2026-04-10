@@ -681,7 +681,7 @@ class 运行时控制服务:
     async def _确保定位环境就绪(self, map_name: str, yaml_path: Path) -> dict[str, Any]:
         bringup_info = await self.ros进程服务.启动("bringup")
         current_map = self._获取快照().定位.地图名称
-        if self.ros进程服务.是否运行("navigation"):
+        if current_map != map_name and self.ros进程服务.是否运行("navigation"):
             await self.ros进程服务.停止("navigation")
         if self.ros进程服务.是否运行("localization") and current_map != map_name:
             await self.ros进程服务.停止("localization")
@@ -700,7 +700,10 @@ class 运行时控制服务:
         resolved_name, yaml_path = self._解析定位地图(map_name)
         env = await self._确保定位环境就绪(resolved_name, yaml_path)
         navigation_info = await self.ros进程服务.启动("navigation")
+        await self._等待生命周期节点激活("/bt_navigator", timeout_sec=15.0)
         bridge_status = await self.ros导航桥客户端.等待就绪(timeout_sec=10.0)
+        if not bool(bridge_status.get("status", {}).get("action_server_ready", False)):
+            raise ROS导航桥错误("nav_action_unavailable", "导航桥已启动，但 Nav2 Action 仍未就绪")
         self._更新导航状态("idle", None, None, None)
         env["navigation"] = navigation_info
         env["bridge"] = bridge_status
@@ -738,6 +741,47 @@ class 运行时控制服务:
 
         output = stdout.decode("utf-8", errors="ignore").strip() if stdout else ""
         return process.returncode or 0, output
+
+    async def _等待生命周期节点激活(self, 节点名: str, timeout_sec: float = 15.0) -> None:
+        script = (
+            "import sys\n"
+            "import time\n"
+            "import rclpy\n"
+            "from lifecycle_msgs.srv import GetState\n"
+            f"node_name = {节点名!r}\n"
+            f"timeout_sec = {float(timeout_sec)!r}\n"
+            "deadline = time.monotonic() + timeout_sec\n"
+            "last_label = ''\n"
+            "rclpy.init()\n"
+            "node = rclpy.create_node('wait_lifecycle_state_once')\n"
+            "client = node.create_client(GetState, f'{node_name}/get_state')\n"
+            "try:\n"
+            "    while time.monotonic() < deadline:\n"
+            "        if not client.wait_for_service(timeout_sec=0.5):\n"
+            "            continue\n"
+            "        future = client.call_async(GetState.Request())\n"
+            "        rclpy.spin_until_future_complete(node, future, timeout_sec=1.0)\n"
+            "        result = future.result()\n"
+            "        if result is None:\n"
+            "            continue\n"
+            "        last_label = str(result.current_state.label).strip().lower()\n"
+            "        if last_label == 'active':\n"
+            "            print(last_label)\n"
+            "            sys.exit(0)\n"
+            "        time.sleep(0.2)\n"
+            "finally:\n"
+            "    node.destroy_node()\n"
+            "    if rclpy.ok():\n"
+            "        rclpy.shutdown()\n"
+            "print(last_label or 'timeout')\n"
+            "sys.exit(2)\n"
+        )
+        exit_code, output = await self._执行ROS命令(["python3", "-c", script], timeout_sec=timeout_sec + 5.0)
+        if exit_code != 0:
+            raise ROS进程服务错误(
+                "ros_navigation_not_active",
+                f"等待生命周期节点激活超时: node={节点名}, state={output or exit_code}",
+            )
 
     async def _保存地图(self, map_name: str) -> dict[str, Any]:
         map_base = self.map_dir / map_name

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import queue
 import socketserver
 import threading
@@ -10,13 +9,14 @@ import uuid
 from concurrent.futures import Future
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 
@@ -33,6 +33,9 @@ class 桥接命令:
 class 导航桥Socket处理器(socketserver.StreamRequestHandler):
     """导航桥 Socket 请求处理器。"""
 
+    def _获取桥接服务器(self) -> "导航桥Socket服务器":
+        return cast("导航桥Socket服务器", self.server)
+
     def handle(self) -> None:
         while True:
             raw = self.rfile.readline()
@@ -47,16 +50,18 @@ class 导航桥Socket处理器(socketserver.StreamRequestHandler):
 
                 request_id = str(message.get("id") or "unknown")
                 if message.get("type") != "request":
-                    response = self.server.节点.构建错误响应(request_id, "invalid_message_type", "仅支持 request 类型消息")
-                    self.wfile.write(self.server.节点.编码消息(response))
+                    server = self._获取桥接服务器()
+                    response = server.节点.构建错误响应(request_id, "invalid_message_type", "仅支持 request 类型消息")
+                    self.wfile.write(server.节点.编码消息(response))
                     self.wfile.flush()
                     continue
 
                 method = str(message.get("method") or "").strip()
                 params = message.get("params", {})
                 if not isinstance(params, dict):
-                    response = self.server.节点.构建错误响应(request_id, "invalid_params", "params 必须是对象")
-                    self.wfile.write(self.server.节点.编码消息(response))
+                    server = self._获取桥接服务器()
+                    response = server.节点.构建错误响应(request_id, "invalid_params", "params 必须是对象")
+                    self.wfile.write(server.节点.编码消息(response))
                     self.wfile.flush()
                     continue
 
@@ -67,16 +72,22 @@ class 导航桥Socket处理器(socketserver.StreamRequestHandler):
                     参数=params,
                     响应Future=response_future,
                 )
-                self.server.节点.提交命令(command)
+                server = self._获取桥接服务器()
+                server.节点.提交命令(command)
                 response = response_future.result(timeout=30.0)
             except Exception as exc:
-                response = self.server.节点.构建错误响应(request_id, "internal_error", f"导航桥内部错误: {exc}")
+                server = self._获取桥接服务器()
+                response = server.节点.构建错误响应(request_id, "internal_error", f"导航桥内部错误: {exc}")
 
-            self.wfile.write(self.server.节点.编码消息(response))
+            server = self._获取桥接服务器()
+            self.wfile.write(server.节点.编码消息(response))
             self.wfile.flush()
 
 
-class 导航桥Socket服务器(socketserver.ThreadingUnixStreamServer):
+导航桥Socket服务器基类: Any = getattr(socketserver, "ThreadingUnixStreamServer", socketserver.ThreadingTCPServer)
+
+
+class 导航桥Socket服务器(导航桥Socket服务器基类):
     """带节点上下文的导航桥 Socket 服务器。"""
 
     daemon_threads = True
@@ -121,7 +132,7 @@ class 运行时桥接节点(Node):
         self._启动socket服务()
         self._command_timer = self.create_timer(0.1, self._处理命令队列)
         self._status_timer = self.create_timer(10.0, self._输出状态)
-        self.get_logger().info("运行时桥接节点已启动，socket=%s", self._socket_path)
+        self.get_logger().info(f"运行时桥接节点已启动，socket={self._socket_path}")
 
     def 提交命令(self, command: 桥接命令) -> None:
         """提交待执行命令。"""
@@ -466,11 +477,11 @@ class 运行时桥接节点(Node):
     def _输出状态(self) -> None:
         status = self._构建导航状态摘要()
         self.get_logger().info(
-            "导航桥心跳: state=%s, goal=%s, remaining_distance=%s, action_ready=%s",
-            status["state"],
-            status["current_goal"],
-            status["remaining_distance"],
-            status["action_server_ready"],
+            "导航桥心跳: "
+            f"state={status['state']}, "
+            f"goal={status['current_goal']}, "
+            f"remaining_distance={status['remaining_distance']}, "
+            f"action_ready={status['action_server_ready']}"
         )
 
     def _启动socket服务(self) -> None:
@@ -496,7 +507,7 @@ class 运行时桥接节点(Node):
             if self._socket_path.exists():
                 self._socket_path.unlink()
         except OSError as exc:
-            self.get_logger().warning("清理导航桥 Socket 失败: %s", exc)
+            self.get_logger().warning(f"清理导航桥 Socket 失败: {exc}")
 
     def destroy_node(self) -> bool:
         """销毁节点前先关闭本地 Socket。"""
@@ -510,6 +521,9 @@ def main(args: list[str] | None = None) -> None:
     node = 运行时桥接节点()
     try:
         rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
