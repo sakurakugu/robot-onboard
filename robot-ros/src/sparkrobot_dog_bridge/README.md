@@ -23,6 +23,8 @@
 - `telemetry_offline_timeout_sec`：遥测多久未刷新判定为离线，默认 `1.5`
 - `stop_on_telemetry_offline`：遥测离线时是否强制停车，默认 `true`
 - `emergency_stop_topic`：急停话题，默认 `/sparkrobot/emergency_stop`
+- `auto_stand_up_on_startup`：SDK 初始化后是否自动执行一次站立，默认 `false`
+- `stand_up_wait_sec`：自动站立后等待机体进入可运动状态的秒数，默认 `3.0`
 - `max_linear_x / max_linear_y / max_angular_z`：基础速度上限
 - `max_accel_x / max_accel_y / max_accel_z`：基础加速度限幅
 - `rotate_in_place_enabled`：是否启用原地转向策略，默认 `true`
@@ -57,6 +59,7 @@
 - 真机 Ubuntu 上优先验证真实控狗
 - WSL 中优先验证节点是否启动、topic/TF 是否存在、参数是否生效
 - 急停可直接发布 `std_msgs/Bool` 到 `/sparkrobot/emergency_stop`
+- 如果首次下发 `cmd_vel` 前机体还没进入可运动姿态，优先开启 `auto_stand_up_on_startup=true`
 
 当前约束：
 

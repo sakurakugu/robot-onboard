@@ -15,6 +15,7 @@ from typing import Any
 import rclpy
 from geometry_msgs.msg import TransformStamped, Twist
 from nav_msgs.msg import Odometry
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Bool, String
@@ -61,6 +62,8 @@ class 机器狗桥接节点(Node):
         self.declare_parameter("stop_on_telemetry_offline", True)
         self.declare_parameter("publish_tf", True)
         self.declare_parameter("enable_motion_control", True)
+        self.declare_parameter("auto_stand_up_on_startup", False)
+        self.declare_parameter("stand_up_wait_sec", 3.0)
         self.declare_parameter("command_hz", 15.0)
         self.declare_parameter("command_timeout_sec", 0.5)
         self.declare_parameter("emergency_stop_topic", "/sparkrobot/emergency_stop")
@@ -90,6 +93,8 @@ class 机器狗桥接节点(Node):
         self._command_timeout_sec = self._读取浮点参数("command_timeout_sec", 0.5)
         self._publish_tf = self._读取布尔参数("publish_tf", True)
         self._enable_motion_control = self._读取布尔参数("enable_motion_control", True)
+        self._启动后自动站立 = self._读取布尔参数("auto_stand_up_on_startup", False)
+        self._站立等待秒数 = self._读取浮点参数("stand_up_wait_sec", 3.0)
         self._最大线速度x = self._读取浮点参数("max_linear_x", 0.6)
         self._最大线速度y = self._读取浮点参数("max_linear_y", 0.4)
         self._最大角速度z = self._读取浮点参数("max_angular_z", 1.2)
@@ -172,6 +177,8 @@ class 机器狗桥接节点(Node):
                 self._读取整数参数("sdk_local_port", 43988),
                 self._读取字符串参数("sdk_dog_ip", "127.0.0.1"),
             )
+            if self._启动后自动站立:
+                self._尝试自动站立()
         except Exception as exc:
             self._SDK实例 = None
             self.get_logger().warning(f"机器狗 SDK 初始化失败，后续仅发布状态不下发速度: {exc}")
@@ -208,6 +215,33 @@ class 机器狗桥接节点(Node):
             if (parent / "robot-agent").exists() and (parent / "robot-server").exists():
                 return parent
         raise FileNotFoundError("无法自动推断 robot-onboard 根目录，请设置 robot_onboard_dir 参数")
+
+    def _尝试自动站立(self) -> None:
+        if self._SDK实例 is None:
+            return
+
+        try:
+            current_mode = self._读取当前控制模式()
+            if current_mode == 18:
+                self.get_logger().info("SDK 当前已处于移动模式，跳过自动站立")
+                return
+
+            self.get_logger().info(f"准备执行自动站立，当前控制模式={current_mode}")
+            self._SDK实例.standUp()
+            wait_sec = max(0.0, self._站立等待秒数)
+            if wait_sec > 0.0:
+                time.sleep(wait_sec)
+            self.get_logger().info(f"自动站立完成，当前控制模式={self._读取当前控制模式()}")
+        except Exception as exc:
+            self.get_logger().warning(f"自动站立失败: {exc}")
+
+    def _读取当前控制模式(self) -> int | None:
+        if self._SDK实例 is None or not hasattr(self._SDK实例, "getCurrentCtrlmode"):
+            return None
+        try:
+            return int(self._SDK实例.getCurrentCtrlmode())
+        except Exception:
+            return None
 
     def _处理速度指令(self, msg: Twist) -> None:
         if self._当前急停:
@@ -667,6 +701,9 @@ def main(args: list[str] | None = None) -> None:
     node = 机器狗桥接节点()
     try:
         rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()

@@ -59,6 +59,11 @@ def generate_launch_description() -> LaunchDescription:
                 "telemetry_udp_port": ParameterValue(LaunchConfiguration("dog_telemetry_udp_port"), value_type=int),
                 "publish_tf": ParameterValue(LaunchConfiguration("dog_publish_tf"), value_type=bool),
                 "enable_motion_control": ParameterValue(LaunchConfiguration("dog_enable_motion_control"), value_type=bool),
+                "auto_stand_up_on_startup": ParameterValue(
+                    LaunchConfiguration("dog_auto_stand_up_on_startup"),
+                    value_type=bool,
+                ),
+                "stand_up_wait_sec": ParameterValue(LaunchConfiguration("dog_stand_up_wait_sec"), value_type=float),
                 "command_timeout_sec": ParameterValue(LaunchConfiguration("dog_command_timeout_sec"), value_type=float),
                 "telemetry_offline_timeout_sec": ParameterValue(
                     LaunchConfiguration("dog_telemetry_offline_timeout_sec"),
@@ -110,6 +115,8 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("dog_telemetry_udp_port", default_value="8080"),
             DeclareLaunchArgument("dog_publish_tf", default_value="true"),
             DeclareLaunchArgument("dog_enable_motion_control", default_value="true"),
+            DeclareLaunchArgument("dog_auto_stand_up_on_startup", default_value="false"),
+            DeclareLaunchArgument("dog_stand_up_wait_sec", default_value="3.0"),
             DeclareLaunchArgument("dog_command_timeout_sec", default_value="0.5"),
             DeclareLaunchArgument("dog_telemetry_offline_timeout_sec", default_value="1.5"),
             DeclareLaunchArgument("dog_stop_on_telemetry_offline", default_value="true"),
