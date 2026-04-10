@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from sparkrobot_common import CONFIG_DIR
+
 
 @dataclass(frozen=True)
 class ROS启动计划:
@@ -49,9 +51,12 @@ class ROS工作空间服务:
         self.dog_bridge_dir = self.src_dir / "sparkrobot_dog_bridge"
         self.vendor_driver_dir = self.src_dir / "lslidar_driver"
         self.vendor_msgs_dir = self.src_dir / "lslidar_msgs"
+        self.generated_config_dir = CONFIG_DIR / "generated" / "ros"
 
     def 获取工作空间摘要(self) -> dict[str, Any]:
         """返回 ROS 工作空间摘要。"""
+        lidar_driver_config = self._构建雷达驱动参数()
+        lidar_params_file = self._获取雷达参数文件(lidar_driver_config)
         plans = {name: plan.导出字典() for name, plan in self.获取启动计划().items()}
         missing_items: list[str] = []
 
@@ -68,7 +73,7 @@ class ROS工作空间服务:
         if not (self.vendor_msgs_dir / "package.xml").exists():
             missing_items.append("缺少厂商 lslidar_msgs 包，可运行导入脚本补齐")
         if not self.install_setup.exists():
-            missing_items.append("缺少 install/setup.bash，可先在 robot-ros 下执行 colcon build --symlink-install")
+            missing_items.append("缺少 install/setup.bash，可先在 robot-ros 下执行 colcon build")
 
         return {
             "workspace_dir": str(self.workspace_dir),
@@ -82,6 +87,8 @@ class ROS工作空间服务:
             "vendor_msgs_ready": (self.vendor_msgs_dir / "package.xml").exists(),
             "install_setup_ready": self.install_setup.exists(),
             "transport": self._获取雷达传输方式(),
+            "lidar_params_file": str(lidar_params_file),
+            "lidar_driver_config": lidar_driver_config,
             "default_map": self._解析默认地图路径(),
             "missing_items": missing_items,
             "plans": plans,
@@ -121,7 +128,7 @@ class ROS工作空间服务:
                 {
                     "lidar_params": str(self._获取雷达参数文件()),
                     "base_frame": self._获取坐标系("base_frame", "base_link"),
-                    "laser_frame": self._获取坐标系("laser_frame", "laser"),
+                    "laser_frame": self._获取激光坐标系(),
                 },
             ),
             "mapping": (
@@ -177,16 +184,86 @@ class ROS工作空间服务:
             return Path(configured).expanduser()
         return self.robot_onboard_dir / "robot-ros"
 
-    def _获取雷达参数文件(self) -> Path:
+    def _获取雷达参数文件(self, driver_config: dict[str, str | int | float | bool] | None = None) -> Path:
+        if driver_config is None:
+            driver_config = self._构建雷达驱动参数()
+
         transport = self._获取雷达传输方式()
-        filename = "lidar_n10p_serial.yaml" if transport == "serial" else "lidar_n10p_ethernet.yaml"
-        return self.bringup_config_dir / filename
+        filename = f"lidar_runtime_{transport}.yaml"
+        target_path = self.generated_config_dir / filename
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(self._渲染雷达参数文件(driver_config), encoding="utf-8")
+        return target_path
 
     def _获取雷达传输方式(self) -> str:
         raw_value = self._读取可选字符串("lidar", "transport")
         if raw_value and raw_value.lower() == "serial":
             return "serial"
         return "ethernet"
+
+    def _构建雷达驱动参数(self) -> dict[str, str | int | float | bool]:
+        transport = self._获取雷达传输方式()
+        host_ip = self._读取可选字符串("lidar", "host_ip") or "192.168.1.102"
+
+        return {
+            "frame_id": self._获取激光坐标系(),
+            "group_ip": "224.1.1.2",
+            "add_multicast": False,
+            "device_ip": self._读取可选字符串("lidar", "device_ip") or "192.168.1.200",
+            "device_ip_difop": host_ip,
+            "msop_port": self._读取整数("lidar", "msop_port", 2368),
+            "difop_port": self._读取整数("lidar", "difop_port", 2369),
+            "lidar_name": self._获取雷达型号(),
+            "angle_disable_min": self._读取浮点数("lidar", "angle_disable_min", 0.0),
+            "angle_disable_max": self._读取浮点数("lidar", "angle_disable_max", 0.0),
+            "min_range": self._读取浮点数("lidar", "min_range", 0.2),
+            "max_range": self._读取浮点数("lidar", "max_range", 25.0),
+            "use_gps_ts": False,
+            "scan_topic": "/scan",
+            "interface_selection": "serial" if transport == "serial" else "net",
+            "serial_port_": self._读取可选字符串("lidar", "serial_port") or "/dev/wheeltec_laser",
+            "high_reflection": False,
+            "compensation": False,
+            "pubScan": True,
+            "pubPointCloud2": False,
+            "pointcloud_topic": "/lslidar_point_cloud",
+        }
+
+    def _渲染雷达参数文件(self, driver_config: dict[str, str | int | float | bool]) -> str:
+        lines = [
+            "/lslidar_driver_node:",
+            "  ros__parameters:",
+        ]
+        for key, value in driver_config.items():
+            lines.append(f"    {key}: {self._格式化YAML值(value)}")
+        lines.append("")
+        return "\n".join(lines)
+
+    def _格式化YAML值(self, value: str | int | float | bool) -> str:
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, str):
+            escaped = value.replace("'", "''")
+            return f"'{escaped}'"
+        return str(value)
+
+    def _获取雷达型号(self) -> str:
+        raw_value = self._读取可选字符串("lidar", "device_model")
+        if not raw_value:
+            return "N10_P"
+
+        normalized = raw_value.strip().lower().replace("-", "").replace("_", "")
+        model_mapping = {
+            "n10": "N10",
+            "n10p": "N10_P",
+            "l10": "L10",
+            "m10": "M10",
+            "m10p": "M10_P",
+            "m10plus": "M10_PLUS",
+            "m10double": "M10_DOUBLE",
+            "m10gps": "M10_GPS",
+        }
+        return model_mapping.get(normalized, raw_value.strip())
 
     def _解析默认地图路径(self) -> str:
         raw_map = self._读取可选字符串("localization", "default_map")
@@ -208,17 +285,48 @@ class ROS工作空间服务:
             return Path(configured).expanduser()
         return self.robot_onboard_dir / "maps"
 
+    def _获取激光坐标系(self) -> str:
+        laser_frame = self._读取可选字符串("frames", "laser_frame")
+        if laser_frame:
+            return laser_frame
+
+        lidar_frame = self._读取可选字符串("lidar", "frame_id")
+        if lidar_frame:
+            return lidar_frame
+        return "laser"
+
     def _获取坐标系(self, key: str, fallback: str) -> str:
         value = self._读取可选字符串("frames", key)
         if value:
             return value
         return fallback
 
-    def _读取可选字符串(self, section: str, key: str) -> str | None:
+    def _读取整数(self, section: str, key: str, fallback: int) -> int:
+        value = self._读取可选值(section, key)
+        if isinstance(value, bool) or value is None:
+            return fallback
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    def _读取浮点数(self, section: str, key: str, fallback: float) -> float:
+        value = self._读取可选值(section, key)
+        if isinstance(value, bool) or value is None:
+            return fallback
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    def _读取可选值(self, section: str, key: str) -> Any | None:
         section_value = self._config.get(section, {})
         if not isinstance(section_value, dict):
             return None
-        value = section_value.get(key)
+        return section_value.get(key)
+
+    def _读取可选字符串(self, section: str, key: str) -> str | None:
+        value = self._读取可选值(section, key)
         if value is None:
             return None
         text = str(value).strip()

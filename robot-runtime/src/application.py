@@ -100,6 +100,20 @@ class 机器人运行时应用:
                 ros_summary["vendor_driver_ready"],
                 ros_summary["install_setup_ready"],
             )
+            lidar_driver_cfg = ros_summary["lidar_driver_config"]
+            logger.info(
+                "ROS 雷达参数摘要: transport=%s, params_file=%s, interface=%s, lidar_name=%s, frame_id=%s, serial_port=%s, device_ip=%s, host_ip=%s, msop_port=%s, difop_port=%s",
+                ros_summary["transport"],
+                ros_summary["lidar_params_file"],
+                lidar_driver_cfg["interface_selection"],
+                lidar_driver_cfg["lidar_name"],
+                lidar_driver_cfg["frame_id"],
+                lidar_driver_cfg["serial_port_"],
+                lidar_driver_cfg["device_ip"],
+                lidar_driver_cfg["device_ip_difop"],
+                lidar_driver_cfg["msop_port"],
+                lidar_driver_cfg["difop_port"],
+            )
             for item in ros_summary["missing_items"]:
                 logger.warning("ROS 工作空间未就绪: %s", item)
             for name, plan in self.ros工作空间服务.获取启动计划().items():
