@@ -176,7 +176,7 @@ class RobotClient:
             允许云端媒体推流=self._允许云端媒体推流,
             runtime_client=self.runtime_client,
             获取机器人UUID=lambda: str(self.config["robot"]["uuid"]),
-            获取初始重连间隔=lambda: self.config["server"].get("reconnect_interval", 5),
+            获取初始重连间隔=lambda: self.config.get("cloud", {}).get("reconnect_interval", 5),
         )
 
     def _处理配置变化(self, new_config: Dict[str, Any]) -> None:
@@ -184,12 +184,12 @@ class RobotClient:
         logger.info("检测到配置变更，正在更新...")
         self.config = new_config
         # 更新相关组件的配置
-        self.ws_manager.config = new_config
+        self.ws_manager.更新配置(new_config)
         self.audio_capture.config = new_config
         self.media_streamer.更新配置(new_config)
         # 更新重连间隔
         if hasattr(self, "runtime_coordinator"):
-            self.runtime_coordinator.更新初始重连间隔(self.config["server"].get("reconnect_interval", 5))
+            self.runtime_coordinator.更新初始重连间隔(self.config.get("cloud", {}).get("reconnect_interval", 5))
 
     def _获取当前配置(self) -> dict[str, Any]:
         """获取当前生效配置。"""
@@ -252,16 +252,13 @@ class RobotClient:
             log_file_prefix="application",
         )
 
-    async def 连接到服务器(self) -> bool:
-        """连接到服务器"""
+    async def 连接到服务器(self) -> list[str]:
+        """连接所有已启用上游。"""
         robot_uuid = self.config["robot"]["uuid"]
-        success = await self.ws_manager.连接(robot_uuid)
-        if success:
-            await self.message_sender.发送注册()
-            # 确保注册消息发送后连接仍然有效
-            if not self.ws_manager.connected:
-                return False
-        return success
+        新连接上游 = await self.ws_manager.连接(robot_uuid)
+        if 新连接上游:
+            await self.message_sender.发送注册(新连接上游)
+        return 新连接上游
 
     async def 断开连接到服务器(self, shutdown_resources: bool = False) -> None:
         """断开连接"""

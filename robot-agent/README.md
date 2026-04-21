@@ -144,14 +144,21 @@ model = "unitree-go2"
 uuid = "自动生成的UUIDv7"
 version = "0.0.0"  # 自动检测
 
-[server]
-base_url = "ws://localhost"
-ws_path = "/api/v1/robot/connect"
-business_url = "ws://localhost:9000/api/v1/robot/business"
-audio_upload_url = "ws://localhost:9000/api/v1/robot/audio/upload"
-audio_download_url = "ws://localhost:9000/api/v1/robot/audio/download"
+[cloud]
+enabled = true
+server_url = "ws://localhost:9000"
+business_url = "/api/v1/robot/business"
+audio_upload_url = "/api/v1/robot/audio/upload"
+audio_download_url = "/api/v1/robot/audio/download"
 reconnect_interval = 5
 heartbeat_interval = 30
+
+[studio]
+enabled = false
+server_url = "ws://192.168.5.8:9010"
+business_url = "/api/v1/web/business"
+reconnect_interval = 5
+heartbeat_interval = 15
 
 [audio]
 sample_rate = 16000

@@ -219,8 +219,15 @@ wifi_password = "password"
 volume = 80
 mute = false
 
-[server]
-cloud_url = "ws://192.168.1.100:9000"
+[cloud]
+enabled = true
+server_url = "ws://192.168.1.100:9000"
+business_url = "/api/v1/robot/business"
+
+[studio]
+enabled = false
+server_url = "ws://192.168.5.8:9010"
+business_url = "/api/v1/web/business"
 ```
 
 ## 与 robot-agent 的关系

@@ -55,7 +55,8 @@ class 配置字段:
 # 配置分组标题映射
 CONFIG_SECTION_TITLES: dict[str, str] = {
     "robot": "机器人信息",
-    "server": "服务器配置",
+    "cloud": "云端连接配置",
+    "studio": "电脑端连接配置",
     "media": "视频流媒体",
     "sdk": "SDK配置",
     "lidar": "激光雷达配置",
@@ -80,20 +81,27 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     配置字段("robot", "server_version", "0.0.0", "robot-server 版本", "string", readonly=True),
     配置字段("robot", "motion_control_version", "0.0.0", "机器人运控版本", "string", readonly=True),
 
+    # 云端连接配置 [cloud]
+    配置字段("cloud", "enabled", True, "是否启用云端连接", "bool"),
+    配置字段("cloud", "server_url", f"ws://{DEFAULT_SERVER_ADDR}", "云端服务器URL", "string"),
+    配置字段("cloud", "business_url", "/api/v1/robot/business", "云端业务连接URL", "string"),
+    配置字段("cloud", "audio_upload_url", "/api/v1/robot/audio/upload", "云端音频上传URL", "string"),
+    配置字段("cloud", "audio_download_url", "/api/v1/robot/audio/download", "云端音频下载URL", "string"),
+    配置字段("cloud", "reconnect_interval", 5, "云端重连间隔（秒）", "int"),
+    配置字段("cloud", "heartbeat_interval", 30, "云端心跳间隔（秒）", "int"),
 
-    # 服务器配置 [server]
-    配置字段("server", "server_url", f"ws://{DEFAULT_SERVER_ADDR}", "服务器URL", "string"), # 只有本地测试才要加 :9000
-    配置字段("server", "business_url", "/api/v1/robot/business", "业务连接URL", "string"),
-    配置字段("server", "audio_upload_url", "/api/v1/robot/audio/upload", "音频上传URL", "string"),
-    配置字段("server", "audio_download_url", "/api/v1/robot/audio/download", "音频下载URL", "string"),
-    配置字段("server", "reconnect_interval", 5, "重连间隔（秒）", "int"),
-    配置字段("server", "heartbeat_interval", 30, "心跳间隔（秒）", "int"),
+    # 电脑端连接配置 [studio]
+    配置字段("studio", "enabled", False, "是否启用电脑端工作站连接", "bool"),
+    配置字段("studio", "server_url", "", "电脑端工作站URL", "string"),
+    配置字段("studio", "business_url", "/api/v1/web/business", "电脑端业务连接URL", "string"),
+    配置字段("studio", "reconnect_interval", 5, "电脑端重连间隔（秒）", "int"),
+    配置字段("studio", "heartbeat_interval", 15, "电脑端心跳间隔（秒）", "int"),
 
     # 视频流媒体配置 [media]
     配置字段("media", "enable_cloud_streaming", True, "是否启用云端正式视频推流", "bool"),
     配置字段("media", "stream_on_demand", True, "是否启用按需推流（无人观看时停止 ffmpeg）", "bool"),
     配置字段("media", "source_rtsp_url", "rtsp://127.0.0.1:8554/test", "本地 RTSP 视频源地址", "string"),
-    配置字段("media", "publish_base_url", MEDIA_PUBLISH_BASE_URL_AUTO, "云端 MediaMTX RTSP 推流地址，默认跟随 server.server_url 主机", "string"),
+    配置字段("media", "publish_base_url", MEDIA_PUBLISH_BASE_URL_AUTO, "云端 MediaMTX RTSP 推流地址，默认跟随 cloud.server_url 主机", "string"),
     配置字段("media", "stream_path_prefix", "robots", "云端媒体流路径前缀", "string"),
     配置字段("media", "publish_user", "robotdog", "云端媒体推流用户名", "string"),
     配置字段("media", "publish_pass", "robotdog", "云端媒体推流密码", "string"),

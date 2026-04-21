@@ -1,362 +1,461 @@
 import asyncio
 import json
 import re
-from typing import Any, Awaitable, Callable, Dict, Optional, cast
-from urllib.parse import urljoin, urlparse, urlunparse
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable, Optional, cast
+from urllib.parse import urljoin
 
 import websockets
 from sparkrobot_common import DEFAULT_SERVER_ADDR, get_logger
 from websockets import ClientConnection
 
+业务通道名称 = "business"
+音频上传通道名称 = "audio_upload"
+音频下载通道名称 = "audio_download"
+
+云端上游名称 = "cloud"
+电脑端上游名称 = "studio"
+
+
+@dataclass
+class 上游配置:
+    名称: str
+    enabled: bool
+    server_url: str
+    business_url: str
+    audio_upload_url: str
+    audio_download_url: str
+    reconnect_interval: float
+    heartbeat_interval: float
+    支持音频通道: bool
+
+
+@dataclass
+class 上游连接状态:
+    配置: 上游配置
+    ws_business: Optional[ClientConnection] = None
+    ws_audio_upload: Optional[ClientConnection] = None
+    ws_audio_download: Optional[ClientConnection] = None
+    connected: bool = False
+    connected_audio_upload: bool = False
+    connected_audio_download: bool = False
+    _重连中通道: set[str] = field(default_factory=set)
+
 
 class WebSocketManager:
-    # 通道名称 -> 连接状态属性名
-    _CHANNEL_STATUS_ATTRS: Dict[str, str] = {
-        "business": "connected",
-        "audio_upload": "connected_audio_upload",
-        "audio_download": "connected_audio_download",
-    }
-    # 二级通道配置（不含business）: 通道名称 -> (ws属性名, url配置键)
-    _SECONDARY_CHANNEL_CONFIG: Dict[str, tuple] = {
-        "audio_upload": ("ws_audio_upload", "audio_upload"),
-        "audio_download": ("ws_audio_download", "audio_download"),
-    }
-
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         self.config = config
         self.logger = get_logger("robot-agent")
-        self.ws_business: Optional[ClientConnection] = None
-        self.ws_audio_upload: Optional[ClientConnection] = None
-        self.ws_audio_download: Optional[ClientConnection] = None
-        self.connected = False
-        self.connected_audio_upload = False
-        self.connected_audio_download = False
         self.robot_uuid: Optional[str] = None
-        self._reconnecting_channels: set = set()  # 正在重连的通道
+        self._上游状态 = self._创建上游状态表()
 
-    def _设置通道连接状态(self, channel: str, connected: bool) -> None:
-        """设置指定通道的连接状态"""
-        attr = self._CHANNEL_STATUS_ATTRS.get(channel)
-        if attr:
-            setattr(self, attr, connected)
+    @property
+    def connected(self) -> bool:
+        return self.上游业务已连接(云端上游名称)
 
-    def _确保URL有ws或wss头部(self, url: str) -> str:
-        """ _ensure_scheme """
-        if re.match(r"^wss?://", url):
-            return url
-        return f"ws://{url}"
+    @property
+    def connected_audio_upload(self) -> bool:
+        return self.通道已连接(云端上游名称, 音频上传通道名称)
 
-    def _替换URL的端口和路径(self, url: str, port: int, path: str) -> str:
-        """ _replace_port_and_path """
-        base = self._确保URL有ws或wss头部(url)
-        parsed = urlparse(base)
-        host = parsed.hostname or ""
-        scheme = parsed.scheme or "ws"
-        netloc = f"{host}:{port}"
-        return urlunparse((scheme, netloc, path, "", "", ""))
+    @property
+    def connected_audio_download(self) -> bool:
+        return self.通道已连接(云端上游名称, 音频下载通道名称)
 
-    def _解析服务器URL配置(self) -> Dict[str, str]:
-        """ _resolve_server_urls """
-        server_cfg = self.config.get("server", {})
-        server_url = server_cfg.get("server_url") or f"ws://{DEFAULT_SERVER_ADDR}"
+    @property
+    def ws_business(self) -> Optional[ClientConnection]:
+        return self.获取通道连接(云端上游名称, 业务通道名称)
 
-        business_url = server_cfg.get("business_url") or server_cfg.get("url")
-        if business_url and business_url.startswith("/"):
-            business_url = urljoin(server_url, business_url)
+    @property
+    def ws_audio_upload(self) -> Optional[ClientConnection]:
+        return self.获取通道连接(云端上游名称, 音频上传通道名称)
 
-        audio_upload_url = server_cfg.get("audio_upload_url")
-        if audio_upload_url and audio_upload_url.startswith("/"):
-            audio_upload_url = urljoin(server_url, audio_upload_url)
+    @property
+    def ws_audio_download(self) -> Optional[ClientConnection]:
+        return self.获取通道连接(云端上游名称, 音频下载通道名称)
 
-        audio_download_url = server_cfg.get("audio_download_url")
-        if audio_download_url and audio_download_url.startswith("/"):
-            audio_download_url = urljoin(server_url, audio_download_url)
+    def 更新配置(self, config: dict[str, Any]) -> None:
+        """更新配置快照，并同步各上游的目标地址。"""
+        self.config = config
+        self._上游状态 = self._创建上游状态表(保留旧状态=self._上游状态)
 
-        # 如果未配置，使用business_url作为所有通道的URL
-        if business_url:
-            if not audio_upload_url:
-                audio_upload_url = business_url
-            if not audio_download_url:
-                audio_download_url = business_url
+    def 获取已启用上游(self) -> list[str]:
+        return [名称 for 名称, 状态 in self._上游状态.items() if 状态.配置.enabled]
 
-        return {
-            "business": business_url or "",
-            "audio_upload": audio_upload_url or "",
-            "audio_download": audio_download_url or "",
-        }
+    def 获取已连接业务上游(self) -> list[str]:
+        return [名称 for 名称 in self.获取已启用上游() if self.上游业务已连接(名称)]
 
-    def _为URL添加机器人参数(self, url: str, robot_uuid: str) -> str:
-        """ _append_robot_params """
-        base = self._确保URL有ws或wss头部(url)
-        sep = "&" if "?" in base else "?"
-        return f"{base}{sep}robotId={robot_uuid}&role=robot"
+    def 任一业务已连接(self) -> bool:
+        return any(self.上游业务已连接(名称) for 名称 in self.获取已启用上游())
 
-    async def 连接(self, robot_uuid: str) -> bool:
-        """ 连接所有WebSocket通道 """
-        self.robot_uuid = robot_uuid
-        try:
-            urls = self._解析服务器URL配置()
-            business_url = urls.get("business")
-            if not business_url:
-                raise ValueError("未配置业务通道地址（server.business_url 或 server.url）")
-
-            business_full = self._为URL添加机器人参数(business_url, robot_uuid)
-            self.logger.info(f"正在连接业务通道: {business_full}")
-            self.ws_business = await websockets.connect(business_full)
-            self.connected = True
-            self.logger.info("✓ 业务通道连接成功")
-
-            audio_upload_url = urls.get("audio_upload")
-            if audio_upload_url:
-                audio_upload_full = self._为URL添加机器人参数(audio_upload_url, robot_uuid)
-                try:
-                    self.logger.info(f"正在连接音频上传通道: {audio_upload_full}")
-                    self.ws_audio_upload = await websockets.connect(audio_upload_full)
-                    self.connected_audio_upload = True
-                    self.logger.info("✓ 音频上传通道连接成功")
-                except Exception as e:
-                    self.logger.warning(f"✗ 音频上传通道连接失败: {e}")
-
-            audio_download_url = urls.get("audio_download")
-            if audio_download_url:
-                audio_download_full = self._为URL添加机器人参数(audio_download_url, robot_uuid)
-                try:
-                    self.logger.info(f"正在连接音频下载通道: {audio_download_full}")
-                    self.ws_audio_download = await websockets.connect(audio_download_full)
-                    self.connected_audio_download = True
-                    self.logger.info("✓ 音频下载通道连接成功")
-                except Exception as e:
-                    self.logger.warning(f"✗ 音频下载通道连接失败: {e}")
-
-            connected_count = sum([
-                self.connected,
-                self.connected_audio_upload,
-                self.connected_audio_download
-            ])
-            self.logger.info(f"已连接到服务器，机器狗UUID: {robot_uuid}，成功通道: {connected_count}/3")
-            return True
-        except Exception as e:
-            self.logger.error(f"连接失败: {e}")
-            self.connected = False
+    def 全部已启用业务已连接(self) -> bool:
+        已启用上游 = self.获取已启用上游()
+        if not 已启用上游:
             return False
+        return all(self.上游业务已连接(名称) for 名称 in 已启用上游)
 
-    async def 断开连接(self) -> None:
-        """ 断开所有WebSocket通道 """
-        _ws_attrs = [
-            ("ws_business", "connected"),
-            ("ws_audio_upload", "connected_audio_upload"),
-            ("ws_audio_download", "connected_audio_download"),
-        ]
-        for ws_attr, connected_attr in _ws_attrs:
-            ws = getattr(self, ws_attr)
-            if ws:
-                await ws.close()
-                setattr(self, ws_attr, None)
-            setattr(self, connected_attr, False)
+    def 存在缺失的已启用业务连接(self) -> bool:
+        return any(not self.上游业务已连接(名称) for 名称 in self.获取已启用上游())
+
+    def 上游支持音频通道(self, upstream: str) -> bool:
+        return self._获取上游状态(upstream).配置.支持音频通道
+
+    def 获取上游重连间隔(self, upstream: str) -> float:
+        return float(self._获取上游状态(upstream).配置.reconnect_interval)
+
+    def 上游业务已连接(self, upstream: str) -> bool:
+        return self.通道已连接(upstream, 业务通道名称)
+
+    def 通道已连接(self, upstream: str, channel: str) -> bool:
+        状态 = self._获取上游状态(upstream)
+        if channel == 业务通道名称:
+            return 状态.connected
+        if channel == 音频上传通道名称:
+            return 状态.connected_audio_upload
+        if channel == 音频下载通道名称:
+            return 状态.connected_audio_download
+        return False
+
+    def 获取通道连接(self, upstream: str, channel: str) -> Optional[ClientConnection]:
+        状态 = self._获取上游状态(upstream)
+        if channel == 业务通道名称:
+            return 状态.ws_business
+        if channel == 音频上传通道名称:
+            return 状态.ws_audio_upload
+        if channel == 音频下载通道名称:
+            return 状态.ws_audio_download
+        return None
+
+    async def 连接(self, robot_uuid: str) -> list[str]:
+        """连接所有已启用上游，返回本轮新连上的业务上游列表。"""
+        self.robot_uuid = robot_uuid
+        新连接上游: list[str] = []
+
+        for upstream in (云端上游名称, 电脑端上游名称):
+            状态 = self._获取上游状态(upstream)
+            if not 状态.配置.enabled:
+                if self._上游存在活动连接(状态):
+                    await self._断开单个上游(upstream)
+                continue
+
+            连接前已连 = 状态.connected
+            await self._连接单个上游(upstream, robot_uuid)
+            if 状态.connected and not 连接前已连:
+                新连接上游.append(upstream)
+
+        return 新连接上游
+
+    async def 断开连接(self, upstream: str | None = None) -> None:
+        """断开指定上游或全部上游连接。"""
+        if upstream:
+            await self._断开单个上游(upstream)
+            return
+
+        for 名称 in list(self._上游状态.keys()):
+            await self._断开单个上游(名称)
         self.robot_uuid = None
-        self._reconnecting_channels.clear()
-        self.logger.info("已断开连接")
+        self.logger.info("已断开所有上游连接")
 
-    async def 发送消息(self, message: Dict[str, Any], channel: str = "business") -> None:
-        """ 发送消息到指定通道 """
-        ws_map = {
-            "business": (self.ws_business, self.connected),
-            "audio_upload": (self.ws_audio_upload, self.connected_audio_upload),
-            "audio_download": (self.ws_audio_download, self.connected_audio_download),
-        }
-        ws, is_connected = ws_map.get(channel, (None, False))
+    async def 发送消息(self, message: dict[str, Any], channel: str = 业务通道名称, upstream: str = 云端上游名称) -> None:
+        """发送消息到指定上游通道。"""
+        状态 = self._获取上游状态(upstream)
+        if not 状态.配置.enabled:
+            self.logger.debug(f"上游未启用，忽略发送: upstream={upstream}, channel={channel}")
+            return
 
-        # 如果通道未连接且可以重连（非业务通道或有robot_uuid），尝试重连
-        if (not ws or not is_connected) and self.robot_uuid and channel != "business":
-            self.logger.info(f"通道 {channel} 未连接，尝试重连...")
-            reconnected = await self._重连单个通道(channel)
-            if reconnected:
-                # 重新获取连接
-                ws, is_connected = ws_map.get(channel, (None, False))
-                ws_map = {
-                    "business": (self.ws_business, self.connected),
-                    "audio_upload": (self.ws_audio_upload, self.connected_audio_upload),
-                    "audio_download": (self.ws_audio_download, self.connected_audio_download),
-                }
-                ws, is_connected = ws_map.get(channel, (None, False))
+        ws = self.获取通道连接(upstream, channel)
+        is_connected = self.通道已连接(upstream, channel)
+
+        if (not ws or not is_connected) and channel != 业务通道名称 and self.robot_uuid:
+            self.logger.info(f"通道未连接，尝试重连: upstream={upstream}, channel={channel}")
+            await self._重连单个通道(upstream, channel)
+            ws = self.获取通道连接(upstream, channel)
+            is_connected = self.通道已连接(upstream, channel)
 
         if not ws or not is_connected:
-            self.logger.warning(f"通道未连接，无法发送消息: {channel}")
+            self.logger.warning(f"通道未连接，无法发送消息: upstream={upstream}, channel={channel}")
             return
 
         try:
             await ws.send(json.dumps(message))
-            self.logger.debug(f"发送消息到 {channel}: {message['type']}")
-        except Exception as e:
-            self.logger.error(f"发送消息失败({channel}): {e}")
-            self._设置通道连接状态(channel, False)
+            self.logger.debug(f"发送消息: upstream={upstream}, channel={channel}, type={message.get('type')}")
+        except Exception as exc:
+            self.logger.error(f"发送消息失败: upstream={upstream}, channel={channel}, error={exc}")
+            self._设置通道连接状态(状态, channel, False)
+            self._设置通道连接对象(状态, channel, None)
 
     async def 接受消息循环(
-        self, channel: str, ws: ClientConnection, on_message: Callable[[Dict[str, Any]], Awaitable[None]]
+        self,
+        upstream: str,
+        channel: str,
+        ws: ClientConnection,
+        on_message: Callable[[dict[str, Any], str, str], Awaitable[None]],
     ) -> None:
-        """ 接收指定通道的消息循环 """
-        # 获取通道状态的引用
-        status_map = {
-            "business": lambda: self.connected,
-            "audio_upload": lambda: self.connected_audio_upload,
-            "audio_download": lambda: self.connected_audio_download,
-        }
+        """接收指定上游通道的消息循环。"""
+        状态 = self._获取上游状态(upstream)
 
-        get_status = status_map.get(channel, lambda: self.connected)
+        while 状态.配置.enabled:
+            if self.获取通道连接(upstream, channel) is not ws:
+                self.logger.info(f"检测到通道连接已替换，结束旧接收循环: upstream={upstream}, channel={channel}")
+                return
 
-        while self.connected:
-            # 如果当前通道状态变为未连接（可能被其他地方断开），退出循环
-            if not get_status():
-                self.logger.info(f"通道 {channel} 已标记为断开，退出接收循环")
-                break
+            if not self.通道已连接(upstream, channel):
+                await asyncio.sleep(1)
+                continue
 
             try:
                 message_str = await ws.recv()
                 message = json.loads(message_str)
-                await on_message(message)
-            except websockets.exceptions.ConnectionClosed as e:
-                self.logger.warning(f"连接已关闭: {channel}, code={e.code}, reason={e.reason}")
-                self._设置通道连接状态(channel, False)
-                if channel == "business":
-                    self.logger.info("业务通道断开，主连接将触发重连")
+                await on_message(message, upstream, channel)
+            except websockets.exceptions.ConnectionClosed as exc:
+                self.logger.warning(f"连接已关闭: upstream={upstream}, channel={channel}, code={exc.code}, reason={exc.reason}")
+                self._设置通道连接状态(状态, channel, False)
+                self._设置通道连接对象(状态, channel, None)
+
+                if channel == 业务通道名称:
                     return
 
-                if self.connected and self.robot_uuid:
-                    self.logger.info(f"尝试重连通道: {channel}")
-                    await self._自动重连通道(channel, on_message)
-                    ws_attr = self._SECONDARY_CHANNEL_CONFIG.get(channel, ("",))[0]
-                    new_ws = getattr(self, ws_attr, None) if ws_attr else None
-                    if new_ws and get_status():
-                        ws = cast(ClientConnection, new_ws)
-                        self.logger.info(f"通道 {channel} 已恢复，继续接收消息")
+                if 状态.connected and self.robot_uuid:
+                    await self._自动重连通道(upstream, channel)
+                    新连接 = self.获取通道连接(upstream, channel)
+                    if 新连接 and self.通道已连接(upstream, channel):
+                        ws = cast(ClientConnection, 新连接)
+                        self.logger.info(f"通道已恢复，继续接收消息: upstream={upstream}, channel={channel}")
                         continue
                 return
-            except Exception as e:
-                self.logger.error(f"接收消息失败({channel}): {e}")
+            except Exception as exc:
+                self.logger.error(f"接收消息失败: upstream={upstream}, channel={channel}, error={exc}")
                 await asyncio.sleep(1)
 
-    async def 发送心跳消息循环(self, robot_uuid: str, 构建心跳消息: Callable[[str], Dict[str, Any]]) -> None:
-        """ 发送心跳消息循环 """
-        interval = self.config.get("server", {}).get("heartbeat_interval", 30)
-        self.logger.info(f"心跳循环已启动，间隔: {interval}秒")
+    async def 发送心跳消息循环(self, upstream: str, robot_uuid: str, 构建心跳消息: Callable[[str], dict[str, Any]]) -> None:
+        """持续向指定上游发送心跳。"""
+        self.logger.info(f"心跳循环已启动: upstream={upstream}")
 
-        # 连接建立后立即发送首次心跳，避免等待
-        if self.connected:
-            message = 构建心跳消息(robot_uuid)
-            await self._发送心跳到所有通道(message)
-
-        while self.connected:
-            await asyncio.sleep(interval)
-            if self.connected:
+        while True:
+            状态 = self._获取上游状态(upstream)
+            interval = max(1.0, float(状态.配置.heartbeat_interval))
+            if 状态.connected:
                 message = 构建心跳消息(robot_uuid)
-                await self._发送心跳到所有通道(message)
+                await self._发送心跳到上游(upstream, message)
+            await asyncio.sleep(interval)
 
-    async def _发送心跳到所有通道(self, message: Dict[str, Any]) -> None:
-        """ 发送心跳到所有已连接的通道，确保每个通道的 lastActiveAt 都得到刷新 """
-        sent_channels = []
+    async def _发送心跳到上游(self, upstream: str, message: dict[str, Any]) -> None:
+        await self.发送消息(message, channel=业务通道名称, upstream=upstream)
+        状态 = self._获取上游状态(upstream)
+        if 状态.connected_audio_upload:
+            await self.发送消息(message, channel=音频上传通道名称, upstream=upstream)
+        if 状态.connected_audio_download:
+            await self.发送消息(message, channel=音频下载通道名称, upstream=upstream)
 
-        channel_checks = [
-            ("business", self.connected),
-            ("audio_upload", self.connected_audio_upload),
-            ("audio_download", self.connected_audio_download),
-        ]
+    def _创建上游状态表(self, 保留旧状态: dict[str, 上游连接状态] | None = None) -> dict[str, 上游连接状态]:
+        新状态表: dict[str, 上游连接状态] = {}
+        for upstream in (云端上游名称, 电脑端上游名称):
+            配置 = self._解析上游配置(upstream)
+            旧状态 = (保留旧状态 or {}).get(upstream)
+            if 旧状态 is None:
+                新状态表[upstream] = 上游连接状态(配置=配置)
+                continue
 
-        for channel, is_connected in channel_checks:
-            if is_connected:
-                try:
-                    await self.发送消息(message, channel=channel)
-                    sent_channels.append(channel)
-                except Exception as e:
-                    self.logger.warning(f"发送心跳到 {channel} 通道失败: {e}")
+            旧状态.配置 = 配置
+            新状态表[upstream] = 旧状态
+        return 新状态表
 
-        if sent_channels:
-            self.logger.debug(f"已发送心跳到通道: {', '.join(sent_channels)}")
+    def _解析上游配置(self, upstream: str) -> 上游配置:
+        if upstream == 云端上游名称:
+            原始配置 = self.config.get("cloud", {})
+            enabled = bool(原始配置.get("enabled", True))
+            server_url = str(原始配置.get("server_url") or f"ws://{DEFAULT_SERVER_ADDR}").strip()
+            business_url = self._解析相对地址(server_url, str(原始配置.get("business_url") or "/api/v1/robot/business").strip())
+            audio_upload_url = self._解析相对地址(
+                server_url,
+                str(原始配置.get("audio_upload_url") or "/api/v1/robot/audio/upload").strip(),
+            )
+            audio_download_url = self._解析相对地址(
+                server_url,
+                str(原始配置.get("audio_download_url") or "/api/v1/robot/audio/download").strip(),
+            )
+            reconnect_interval = float(原始配置.get("reconnect_interval", 5))
+            heartbeat_interval = float(原始配置.get("heartbeat_interval", 30))
+            return 上游配置(
+                名称=upstream,
+                enabled=enabled,
+                server_url=server_url,
+                business_url=business_url,
+                audio_upload_url=audio_upload_url,
+                audio_download_url=audio_download_url,
+                reconnect_interval=reconnect_interval,
+                heartbeat_interval=heartbeat_interval,
+                支持音频通道=True,
+            )
 
-    async def _重连单个通道(self, channel: str) -> bool:
-        """ 重连单个通道 """
-        if not self.robot_uuid:
-            self.logger.error(f"无法重连 {channel}，robot_uuid 未设置")
-            return False
+        原始配置 = self.config.get("studio", {})
+        enabled = bool(原始配置.get("enabled", False))
+        server_url = str(原始配置.get("server_url") or "").strip()
+        business_url = self._解析相对地址(server_url, str(原始配置.get("business_url") or "/api/v1/web/business").strip())
+        reconnect_interval = float(原始配置.get("reconnect_interval", 5))
+        heartbeat_interval = float(原始配置.get("heartbeat_interval", 15))
+        return 上游配置(
+            名称=upstream,
+            enabled=enabled,
+            server_url=server_url,
+            business_url=business_url,
+            audio_upload_url="",
+            audio_download_url="",
+            reconnect_interval=reconnect_interval,
+            heartbeat_interval=heartbeat_interval,
+            支持音频通道=False,
+        )
 
-        # 防止重复重连
-        if channel in self._reconnecting_channels:
-            self.logger.debug(f"通道 {channel} 正在重连中，跳过")
-            return False
+    def _解析相对地址(self, server_url: str, raw_url: str) -> str:
+        if not raw_url:
+            return ""
+        if raw_url.startswith("/"):
+            if not server_url:
+                return ""
+            return urljoin(server_url, raw_url)
+        return raw_url
 
-        if channel not in self._SECONDARY_CHANNEL_CONFIG:
-            self.logger.warning(f"不支持重连通道: {channel}")
-            return False
+    def _确保URL有ws或wss头部(self, url: str) -> str:
+        if re.match(r"^wss?://", url):
+            return url
+        return f"ws://{url}"
 
-        self._reconnecting_channels.add(channel)
-        ws_attr, url_key = self._SECONDARY_CHANNEL_CONFIG[channel]
-        try:
-            urls = self._解析服务器URL配置()
-            url = urls.get(url_key)
-            if not url:
-                self.logger.warning(f"未配置{channel}通道地址")
-                return False
+    def _为URL添加机器人参数(self, url: str, robot_uuid: str) -> str:
+        base = self._确保URL有ws或wss头部(url)
+        sep = "&" if "?" in base else "?"
+        return f"{base}{sep}robotId={robot_uuid}&role=robot"
 
-            full_url = self._为URL添加机器人参数(url, self.robot_uuid)
-            self.logger.info(f"重连{channel}通道: {full_url}")
-
-            old_ws = getattr(self, ws_attr)
-            if old_ws:
-                try:
-                    await old_ws.close()
-                except Exception:
-                    pass
-
-            new_ws = await websockets.connect(full_url)
-            setattr(self, ws_attr, new_ws)
-            self._设置通道连接状态(channel, True)
-            self.logger.info(f"{channel}通道重连成功")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"重连通道 {channel} 失败: {e}")
-            return False
-        finally:
-            self._reconnecting_channels.discard(channel)
-
-    async def _自动重连通道(self, channel: str, on_message: Callable[[Dict[str, Any]], Awaitable[None]]) -> None:
-        """ 自动重连通道并重启接收循环 """
-        max_retries = 3
-        retry_delay = 5  # 秒
-
-        # 防止重复重连
-        if channel in self._reconnecting_channels:
-            self.logger.debug(f"通道 {channel} 已在重连中，跳过")
+    async def _连接单个上游(self, upstream: str, robot_uuid: str) -> None:
+        状态 = self._获取上游状态(upstream)
+        if not 状态.配置.enabled:
             return
 
-        self._reconnecting_channels.add(channel)
+        if not 状态.connected:
+            await self._连接通道(upstream, 业务通道名称, 状态.配置.business_url, robot_uuid)
 
+        if not 状态.connected or not 状态.配置.支持音频通道:
+            return
+
+        if not 状态.connected_audio_upload and 状态.配置.audio_upload_url:
+            await self._连接通道(upstream, 音频上传通道名称, 状态.配置.audio_upload_url, robot_uuid)
+
+        if not 状态.connected_audio_download and 状态.配置.audio_download_url:
+            await self._连接通道(upstream, 音频下载通道名称, 状态.配置.audio_download_url, robot_uuid)
+
+    async def _连接通道(self, upstream: str, channel: str, url: str, robot_uuid: str) -> bool:
+        状态 = self._获取上游状态(upstream)
+        if not url:
+            if channel == 业务通道名称:
+                self.logger.warning(f"未配置业务通道地址: upstream={upstream}")
+            return False
+
+        full_url = self._为URL添加机器人参数(url, robot_uuid)
         try:
-            for attempt in range(1, max_retries + 1):
-                if not self.connected:
-                    self.logger.info(f"主连接已断开，停止重连 {channel}")
-                    return
+            self.logger.info(f"正在连接通道: upstream={upstream}, channel={channel}, url={full_url}")
+            new_ws = await websockets.connect(full_url)
+            旧连接 = self.获取通道连接(upstream, channel)
+            if 旧连接:
+                try:
+                    await 旧连接.close()
+                except Exception:
+                    pass
+            self._设置通道连接对象(状态, channel, new_ws)
+            self._设置通道连接状态(状态, channel, True)
+            self.logger.info(f"通道连接成功: upstream={upstream}, channel={channel}")
+            return True
+        except Exception as exc:
+            self.logger.error(f"连接通道失败: upstream={upstream}, channel={channel}, error={exc}")
+            self._设置通道连接状态(状态, channel, False)
+            self._设置通道连接对象(状态, channel, None)
+            return False
 
-                self.logger.info(f"尝试重连 {channel} (第 {attempt}/{max_retries} 次，间隔: {retry_delay}秒)")
+    async def _断开单个上游(self, upstream: str) -> None:
+        状态 = self._获取上游状态(upstream)
+        for channel in (业务通道名称, 音频上传通道名称, 音频下载通道名称):
+            ws = self.获取通道连接(upstream, channel)
+            if ws:
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
+            self._设置通道连接对象(状态, channel, None)
+            self._设置通道连接状态(状态, channel, False)
+        状态._重连中通道.clear()
+        self.logger.info(f"已断开上游连接: upstream={upstream}")
 
-                # 等待一段时间再重连，避免立即重连导致的循环
-                if attempt > 1:
-                    await asyncio.sleep(retry_delay)
-                else:
-                    # 第一次重连也稍微等待一下，避免服务器还没准备好
-                    await asyncio.sleep(1)
+    def _上游存在活动连接(self, 状态: 上游连接状态) -> bool:
+        return bool(
+            状态.ws_business
+            or 状态.ws_audio_upload
+            or 状态.ws_audio_download
+            or 状态.connected
+            or 状态.connected_audio_upload
+            or 状态.connected_audio_download
+        )
 
-                if not self.connected:
-                    self.logger.info(f"主连接已断开，停止重连 {channel}")
-                    return
+    def _获取上游状态(self, upstream: str) -> 上游连接状态:
+        状态 = self._上游状态.get(upstream)
+        if 状态 is None:
+            raise KeyError(f"未知上游: {upstream}")
+        return 状态
 
-                success = await self._重连单个通道(channel)
-                if success:
-                    self.logger.info(f"✓ 通道 {channel} 重连成功")
-                    return
+    def _设置通道连接状态(self, 状态: 上游连接状态, channel: str, connected: bool) -> None:
+        if channel == 业务通道名称:
+            状态.connected = connected
+            return
+        if channel == 音频上传通道名称:
+            状态.connected_audio_upload = connected
+            return
+        if channel == 音频下载通道名称:
+            状态.connected_audio_download = connected
 
-                if attempt < max_retries:
-                    self.logger.warning(f"✗ 重连 {channel} 失败，{retry_delay} 秒后重试...")
+    def _设置通道连接对象(
+        self,
+        状态: 上游连接状态,
+        channel: str,
+        ws: Optional[ClientConnection],
+    ) -> None:
+        if channel == 业务通道名称:
+            状态.ws_business = ws
+            return
+        if channel == 音频上传通道名称:
+            状态.ws_audio_upload = ws
+            return
+        if channel == 音频下载通道名称:
+            状态.ws_audio_download = ws
 
-            self.logger.error(f"✗ 重连 {channel} 失败，已达到最大重试次数 ({max_retries})")
+    async def _重连单个通道(self, upstream: str, channel: str) -> bool:
+        状态 = self._获取上游状态(upstream)
+        if not self.robot_uuid:
+            self.logger.error(f"无法重连通道，robot_uuid 未设置: upstream={upstream}, channel={channel}")
+            return False
+
+        if channel in 状态._重连中通道:
+            self.logger.debug(f"通道正在重连中，跳过: upstream={upstream}, channel={channel}")
+            return False
+
+        if channel == 音频上传通道名称:
+            url = 状态.配置.audio_upload_url
+        elif channel == 音频下载通道名称:
+            url = 状态.配置.audio_download_url
+        else:
+            url = 状态.配置.business_url
+
+        状态._重连中通道.add(channel)
+        try:
+            return await self._连接通道(upstream, channel, url, self.robot_uuid)
         finally:
-            self._reconnecting_channels.discard(channel)
+            状态._重连中通道.discard(channel)
+
+    async def _自动重连通道(self, upstream: str, channel: str) -> None:
+        状态 = self._获取上游状态(upstream)
+        max_retries = 3
+        retry_delay = max(1.0, 状态.配置.reconnect_interval)
+
+        for attempt in range(1, max_retries + 1):
+            if not 状态.connected:
+                return
+            if attempt > 1:
+                await asyncio.sleep(retry_delay)
+            success = await self._重连单个通道(upstream, channel)
+            if success:
+                return

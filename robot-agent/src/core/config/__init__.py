@@ -317,37 +317,56 @@ class Config:
         return self.获取("robot.version") or "0.0.0"
 
     @property
-    def server_url(self) -> str:
-        return self.获取("server.server_url") or ""
+    def cloud_server_url(self) -> str:
+        return self.获取("cloud.server_url") or ""
 
     @property
-    def server_business_url(self) -> str:
-        url = self.获取("server.business_url") or ""
+    def cloud_business_url(self) -> str:
+        url = self.获取("cloud.business_url") or ""
         if url.startswith("/"):
-            return urljoin(self.server_url, url)
+            return urljoin(self.cloud_server_url, url)
         return url
 
     @property
-    def server_audio_upload_url(self) -> str:
-        url = self.获取("server.audio_upload_url") or ""
+    def cloud_audio_upload_url(self) -> str:
+        url = self.获取("cloud.audio_upload_url") or ""
         if url.startswith("/"):
-            return urljoin(self.server_url, url)
+            return urljoin(self.cloud_server_url, url)
         return url
 
     @property
-    def server_audio_download_url(self) -> str:
-        url = self.获取("server.audio_download_url") or ""
+    def cloud_audio_download_url(self) -> str:
+        url = self.获取("cloud.audio_download_url") or ""
         if url.startswith("/"):
-            return urljoin(self.server_url, url)
+            return urljoin(self.cloud_server_url, url)
         return url
 
     @property
-    def server_reconnect_interval(self) -> int:
-        return self.获取("server.reconnect_interval") or 5
+    def cloud_reconnect_interval(self) -> int:
+        return self.获取("cloud.reconnect_interval") or 5
 
     @property
-    def server_heartbeat_interval(self) -> int:
-        return self.获取("server.heartbeat_interval") or 30
+    def cloud_heartbeat_interval(self) -> int:
+        return self.获取("cloud.heartbeat_interval") or 30
+
+    @property
+    def studio_server_url(self) -> str:
+        return self.获取("studio.server_url") or ""
+
+    @property
+    def studio_business_url(self) -> str:
+        url = self.获取("studio.business_url") or ""
+        if url.startswith("/"):
+            return urljoin(self.studio_server_url, url)
+        return url
+
+    @property
+    def studio_reconnect_interval(self) -> int:
+        return self.获取("studio.reconnect_interval") or 5
+
+    @property
+    def studio_heartbeat_interval(self) -> int:
+        return self.获取("studio.heartbeat_interval") or 15
 
     @property
     def sdk_robot_ip(self) -> str:

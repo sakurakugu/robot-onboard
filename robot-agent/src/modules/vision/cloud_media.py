@@ -168,7 +168,7 @@ class 云端媒体推流管理器:
             logger.warning("机器人 UUID 为空，暂不启动云端媒体推流")
             return None
 
-        server_cfg = self._config.get("server", {})
+        server_cfg = self._config.get("cloud", {})
         source_rtsp_url = str(media_cfg.get("source_rtsp_url", "rtsp://127.0.0.1:8554/test")).strip()
         publish_base_url = self._解析推流基地址(
             str(media_cfg.get("publish_base_url", "")).strip(),
