@@ -55,6 +55,10 @@ class ROS导航桥客户端:
         """获取桥接节点当前导航状态。"""
         return await self._调用("navigation.get_status", {}, timeout_sec=timeout_sec)
 
+    async def 获取激光扫描(self, timeout_sec: float | None = None) -> dict[str, Any]:
+        """获取最近一帧激光扫描。"""
+        return await self._调用("lidar.get_scan", {}, timeout_sec=timeout_sec)
+
     async def _调用(self, method: str, params: dict[str, Any], timeout_sec: float | None = None) -> dict[str, Any]:
         """执行一次请求响应式调用。"""
         self._校验平台()

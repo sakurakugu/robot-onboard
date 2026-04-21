@@ -5,6 +5,7 @@ import math
 import queue
 import socketserver
 import threading
+import time
 import uuid
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from sensor_msgs.msg import LaserScan
 
 
 @dataclass
@@ -106,6 +108,7 @@ class 运行时桥接节点(Node):
         self.declare_parameter("odom_topic", "/odom")
         self.declare_parameter("imu_topic", "/imu")
         self.declare_parameter("scan_topic", "/scan")
+        self.declare_parameter("scan_max_points", 720)
         self.declare_parameter("navigation_action_name", "navigate_to_pose")
         self.declare_parameter("socket_path", "/tmp/sparkrobot/ros-nav-bridge.sock")
         self.declare_parameter("action_server_wait_sec", 10.0)
@@ -128,6 +131,14 @@ class 运行时桥接节点(Node):
         self._remaining_distance: float | None = None
         self._failure_reason: str | None = None
         self._last_result: dict[str, Any] | None = None
+        self._scan_max_points = self._读取整数参数("scan_max_points", 720)
+        self._latest_scan: dict[str, Any] = self._构建空激光扫描()
+        self._scan_subscription = self.create_subscription(
+            LaserScan,
+            self._读取字符串参数("scan_topic", "/scan"),
+            self._处理激光扫描,
+            10,
+        )
 
         self._启动socket服务()
         self._command_timer = self.create_timer(0.1, self._处理命令队列)
@@ -195,6 +206,10 @@ class 运行时桥接节点(Node):
 
         if command.方法 == "navigation.get_status":
             self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建导航状态摘要()))
+            return
+
+        if command.方法 == "lidar.get_scan":
+            self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_scan)))
             return
 
         if command.方法 == "navigation.navigate_to":
@@ -417,6 +432,58 @@ class 运行时桥接节点(Node):
             "action_server_ready": bool(self._action_client.server_is_ready()),
         }
 
+    def _构建空激光扫描(self) -> dict[str, Any]:
+        return {
+            "available": False,
+            "frame_id": self._读取字符串参数("scan_topic", "/scan"),
+            "angle_min": 0.0,
+            "angle_max": 0.0,
+            "angle_increment": 0.0,
+            "range_min": 0.0,
+            "range_max": 0.0,
+            "scan_time": None,
+            "time_increment": None,
+            "ranges": [],
+            "point_count": 0,
+            "captured_at": 0,
+        }
+
+    def _处理激光扫描(self, message: LaserScan) -> None:
+        ranges = [self._归一化量测值(item) for item in message.ranges]
+        sampled_ranges, actual_step = self._压缩激光扫描(ranges)
+        angle_increment = float(message.angle_increment) * actual_step
+        angle_min = float(message.angle_min)
+        angle_max = angle_min + angle_increment * max(len(sampled_ranges) - 1, 0)
+        point_count = sum(1 for item in sampled_ranges if item is not None)
+
+        self._latest_scan = {
+            "available": True,
+            "frame_id": message.header.frame_id or "laser",
+            "angle_min": angle_min,
+            "angle_max": angle_max,
+            "angle_increment": angle_increment,
+            "range_min": float(message.range_min),
+            "range_max": float(message.range_max),
+            "scan_time": float(message.scan_time) if math.isfinite(float(message.scan_time)) else None,
+            "time_increment": float(message.time_increment) if math.isfinite(float(message.time_increment)) else None,
+            "ranges": sampled_ranges,
+            "point_count": point_count,
+            "captured_at": int(time.time() * 1000),
+        }
+
+    def _压缩激光扫描(self, ranges: list[float | None]) -> tuple[list[float | None], int]:
+        if len(ranges) <= self._scan_max_points:
+            return ranges, 1
+
+        step = max(1, math.ceil(len(ranges) / self._scan_max_points))
+        return ranges[::step], step
+
+    def _归一化量测值(self, value: float) -> float | None:
+        number = float(value)
+        if not math.isfinite(number):
+            return None
+        return number
+
     def _构建导航消息(self, goal: dict[str, Any]) -> NavigateToPose.Goal:
         message = NavigateToPose.Goal()
         pose = PoseStamped()
@@ -467,6 +534,13 @@ class 运行时桥接节点(Node):
         value: Any = self.get_parameter(key).value
         try:
             return float(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    def _读取整数参数(self, key: str, fallback: int) -> int:
+        value: Any = self.get_parameter(key).value
+        try:
+            return int(value)
         except (TypeError, ValueError):
             return fallback
 

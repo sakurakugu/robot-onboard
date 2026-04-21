@@ -44,6 +44,7 @@ class 客户端运行时协调器:
         self.audio_task: asyncio.Task[Any] | None = None
         self._ipc_status_task: asyncio.Task[Any] | None = None
         self._runtime_status_task: asyncio.Task[Any] | None = None
+        self._lidar_scan_task: asyncio.Task[Any] | None = None
         self._media_stream_task: asyncio.Task[Any] | None = None
         self._ipc_status_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self.initial_reconnect_interval = float(获取初始重连间隔())
@@ -210,6 +211,37 @@ class 客户端运行时协调器:
                 continue
             await asyncio.sleep(0.5)
 
+    async def _发送激光扫描循环(self) -> None:
+        last_captured_at: int | None = None
+        while True:
+            if not self.ws_manager.connected:
+                await asyncio.sleep(1)
+                continue
+
+            try:
+                scan = await self.runtime_client.获取激光扫描()
+                if scan.get("available") is not True:
+                    await asyncio.sleep(0.5)
+                    continue
+
+                captured_at = scan.get("captured_at")
+                captured_at_number = int(captured_at) if isinstance(captured_at, (int, float)) else None
+                if captured_at_number is None:
+                    await asyncio.sleep(0.2)
+                    continue
+
+                if captured_at_number != last_captured_at:
+                    last_captured_at = captured_at_number
+                    await self.message_sender.发送激光扫描(scan)
+
+                await asyncio.sleep(0.2)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                error = self.runtime_client.格式化异常(exc)
+                logger.warning(f"读取激光扫描失败: {error}")
+                await asyncio.sleep(2)
+
     def _是否是音频设备异常(self, error: Exception) -> bool:
         message = str(error).lower()
         patterns = (
@@ -247,6 +279,9 @@ class 客户端运行时协调器:
         if not self._runtime_status_task or self._runtime_status_task.done():
             self._runtime_status_task = asyncio.create_task(self._发送运行时状态循环())
         tasks.append(self._runtime_status_task)
+        if not self._lidar_scan_task or self._lidar_scan_task.done():
+            self._lidar_scan_task = asyncio.create_task(self._发送激光扫描循环())
+        tasks.append(self._lidar_scan_task)
         tasks.append(
             asyncio.create_task(self.ws_manager.发送心跳消息循环(self._获取机器人UUID(), 构建心跳消息))
         )

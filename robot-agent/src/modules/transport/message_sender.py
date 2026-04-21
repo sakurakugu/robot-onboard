@@ -16,6 +16,7 @@ from src.modules.transport.protocol import (
     构建日志标记响应消息,
     构建机器人摘要消息,
     构建机器人注册消息,
+    构建激光扫描消息,
     构建状态消息,
     构建配置响应消息,
     构建音量响应消息,
@@ -140,6 +141,10 @@ class 消息发送器:
                 ),
                 channel="business",
             )
+
+    async def 发送激光扫描(self, scan: dict[str, Any]) -> None:
+        """发送激光扫描消息。"""
+        await self.发送消息(构建激光扫描消息(self._机器人UUID(), scan), channel="business")
 
     async def 发送拍照响应(
         self, request_id: str, success: bool, image: str | None = None, error: str | None = None

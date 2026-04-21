@@ -235,6 +235,12 @@ class 运行时控制服务:
         lidar.扫描正常 = bool(lidar.启用 and bringup_running)
         self.状态存储.更新激光雷达状态(lidar)
 
+    async def 获取激光扫描(self) -> dict[str, Any]:
+        """获取最近一帧激光扫描，并附带当前位姿。"""
+        payload = await self.ros导航桥客户端.获取激光扫描()
+        payload["pose"] = self._构建当前平面位姿()
+        return payload
+
     async def _同步机器狗遥测状态(self) -> None:
         try:
             payload = await asyncio.to_thread(self.机器狗遥测服务.获取完整遥测)
@@ -376,6 +382,17 @@ class 运行时控制服务:
             return
         self._上次机器狗遥测错误时间 = current_time
         logger.warning("同步机器狗遥测失败: %s", message)
+
+    def _构建当前平面位姿(self) -> dict[str, Any]:
+        snapshot = self._获取快照()
+        pose = snapshot.位姿
+        half_yaw = pose.yaw / 2.0
+        return {
+            "position": [pose.x, pose.y, 0.0],
+            "orientation": [0.0, 0.0, math.sin(half_yaw), math.cos(half_yaw)],
+            "yaw": pose.yaw,
+            "confidence": 1.0,
+        }
 
     def _获取活动任务类型(self) -> str | None:
         if self.ros进程服务.是否运行("mapping"):

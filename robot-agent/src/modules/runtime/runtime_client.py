@@ -37,6 +37,10 @@ class 本地运行时客户端:
             if isinstance(payload, dict):
                 yield payload
 
+    async def 获取激光扫描(self) -> dict[str, Any]:
+        """获取最近一帧激光扫描。"""
+        return await self.创建客户端().调用("lidar.get_scan")
+
     async def 执行导航命令(self, data: dict[str, Any]) -> dict[str, Any]:
         """执行导航命令。"""
         client = self.创建客户端()

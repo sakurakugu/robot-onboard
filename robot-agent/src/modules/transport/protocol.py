@@ -202,6 +202,14 @@ def 构建传感器状态消息(
     return _构建状态广播消息("sensor_state", robot_uuid, data)
 
 
+def 构建激光扫描消息(
+    robot_uuid: str,
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """构建激光扫描消息。"""
+    return _构建状态广播消息("lidar_scan", robot_uuid, data)
+
+
 def 构建拍照响应消息(
     robot_uuid: str,        # 机器人 UUID
     request_id: str,        # 请求ID
