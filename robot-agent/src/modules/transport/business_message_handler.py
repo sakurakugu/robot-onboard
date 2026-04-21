@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import re
+import tarfile
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -16,6 +17,28 @@ from src.modules.transport.message_sender import 消息发送器
 from src.modules.vision import capture_photo
 
 logger = get_logger("robot-agent")
+
+
+def _解出整包内子包(full_package_path: Path, packages_dir: Path) -> list[str]:
+    """将 full 整包内的 packages/*.tar.gz 解到 packages 目录。"""
+    extracted: list[str] = []
+    with tarfile.open(full_package_path, "r:*") as tar:
+        for member in tar.getmembers():
+            if not member.isfile():
+                continue
+            member_path = Path(member.name)
+            if "packages" not in member_path.parts:
+                continue
+            if member_path.suffixes[-2:] != [".tar", ".gz"]:
+                continue
+
+            target_path = packages_dir / member_path.name
+            file_obj = tar.extractfile(member)
+            if file_obj is None:
+                continue
+            target_path.write_bytes(file_obj.read())
+            extracted.append(member_path.name)
+    return extracted
 
 
 class 业务消息处理器:
@@ -276,9 +299,7 @@ class 业务消息处理器:
         download_paths: dict[str, str] = data.get("downloadPaths", {})
         hashes: dict[str, str] = data.get("hashes", {})
         package_filenames = {
-            "agent": "robot-agent.tar.gz",
-            "server": "robot-server.tar.gz",
-            "common": "sparkrobot-common.tar.gz",
+            "full": "robot-full.tar.gz",
         }
 
         logger.info(f"收到安装包下载请求: {request_id}, 包含: {list(download_paths.keys())}")
@@ -324,6 +345,10 @@ class 业务消息处理器:
                             actual_hash = sha256.hexdigest()
                             if actual_hash.lower() != expected_hash.lower():
                                 raise ValueError(f"{pkg_type} 哈希校验失败: 期望 {expected_hash}，实际 {actual_hash}")
+
+                        if pkg_type == "full":
+                            extracted = _解出整包内子包(target_path, packages_dir)
+                            logger.info(f"full 整包已解出子包: {extracted}")
 
                         downloaded.append(pkg_type)
                         logger.info(f"{pkg_type} 下载完成: {target_path}")

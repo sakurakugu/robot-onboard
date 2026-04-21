@@ -1,8 +1,10 @@
 """本体套件打包工具"""
 
 import fnmatch
+import json
 import os
 import tarfile
+import tempfile
 import zipfile
 from pathlib import Path
 from typing import Literal
@@ -42,7 +44,7 @@ def 解析压缩格式(raw_value: str) -> tuple[str, str]:
     if value in format_mapping:
         return format_mapping[value]
 
-    print("✗ 未识别的压缩格式，已使用默认 tar.gz")
+    print("[ERR] 未识别的压缩格式，已使用默认 tar.gz")
     return "gztar", ".tar.gz"
 
 
@@ -103,7 +105,7 @@ def 获取打包输出目录() -> Path:
 def 打包单个项目(name: str, source_dir: Path, package_ext: str | None = None) -> Path | None:
     """按指定扩展名打包单个项目"""
     if not source_dir.exists():
-        print(f"✗ 找不到目录: {source_dir}")
+        print(f"[ERR] 找不到目录: {source_dir}")
         return None
 
     archive_format, ext = 解析压缩格式(package_ext or "tar.gz")
@@ -144,17 +146,60 @@ def 打包项目集合(project_names: list[str], archive_format: str, ext: str) 
     for name in project_names:
         path = project_mapping.get(name)
         if path is None:
-            print(f"✗ 未知项目: {name}")
+            print(f"[ERR] 未知项目: {name}")
             continue
         if not path.exists():
-            print(f"✗ 找不到目录: {path}")
+            print(f"[ERR] 找不到目录: {path}")
             continue
         output_path = PACKAGES_DIR / f"{name}{ext}"
         写入压缩包(output_path, path, archive_format)
         outputs.append(output_path)
-        print(f"✓ 已生成: {output_path}")
+        print(f"[OK] 已生成: {output_path}")
 
     return outputs
+
+
+def 打包整包(project_names: list[str], archive_format: str, ext: str) -> Path | None:
+    """将多个项目子包打成一个 full 整包。"""
+    PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = PACKAGES_DIR / f"robot-full{ext}"
+    project_mapping = 获取本体项目映射()
+
+    with tempfile.TemporaryDirectory(prefix="robot-full-") as temp_dir_raw:
+        temp_dir = Path(temp_dir_raw)
+        packages_dir = temp_dir / "packages"
+        packages_dir.mkdir(parents=True, exist_ok=True)
+
+        bundled_names: list[str] = []
+        for name in project_names:
+            path = project_mapping.get(name)
+            if path is None:
+                print(f"[ERR] 未知项目: {name}")
+                continue
+            if not path.exists():
+                print(f"[ERR] 找不到目录: {path}")
+                continue
+            child_output = packages_dir / f"{name}.tar.gz"
+            写入压缩包(child_output, path, "gztar")
+            bundled_names.append(name)
+
+        if not bundled_names:
+            return None
+
+        manifest = {
+            "bundle": "robot-full",
+            "projects": bundled_names,
+            "package_archive_ext": ".tar.gz",
+            "bundle_archive_ext": ext,
+        }
+        (temp_dir / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        写入压缩包(output_path, temp_dir, archive_format)
+
+    print(f"[OK] 已生成: {output_path}")
+    return output_path
 
 
 def 获取robot_agent项目列表() -> list[tuple[str, Path]]:
@@ -187,15 +232,19 @@ def 执行打包流程(
         archive_format, ext = 解析压缩格式(package_format)
 
     target_names = project_names or 获取默认打包项目名称列表()
-    outputs = 打包项目集合(target_names, archive_format, ext)
+    if len(target_names) > 1:
+        full_output = 打包整包(target_names, archive_format, ext)
+        outputs = [full_output] if full_output else []
+    else:
+        outputs = 打包项目集合(target_names, archive_format, ext)
     if outputs:
         print("\n" + "=" * 50)
-        print("✓ 打包完成")
+        print("[OK] 打包完成")
         print("=" * 50)
         if open_explorer and hasattr(os, "startfile"):
             os.startfile(str(PACKAGES_DIR))
     else:
         print("\n" + "=" * 50)
-        print("✗ 打包失败")
+        print("[ERR] 打包失败")
         print("=" * 50)
     return archive_format, ext, outputs
