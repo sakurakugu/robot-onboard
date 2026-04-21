@@ -197,6 +197,7 @@ class 服务安装管理器:
         print("✓ 本体全套软件安装完成")
         return True
 
+    # 还有 狗 69 是用这个的，这个狗69清理完成就可以把他删除了 D10069 uuid：019c27f7-d344-778b-ba0f-3abcfb1eb3c3
     def 清理旧版服务(self) -> bool:
         """清理旧版 robot-server 和 robot-agent 服务。"""
         print("\n正在清理旧版 robot-server / robot-agent 服务...")
