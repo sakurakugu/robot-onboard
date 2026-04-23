@@ -10,6 +10,7 @@ from .服务.mdns_service import 初始化并启动_mDNS_服务
 from .路由 import auth as 认证路由
 from .路由 import config as 配置路由
 from .路由 import logs as 日志路由
+from .路由 import maps as 地图路由
 from .路由 import packages as 软件包路由
 from .路由 import runtime as 运行时路由
 from .路由 import sdk as SDK路由
@@ -39,6 +40,7 @@ app.include_router(无线路由.router)
 app.include_router(系统路由.router)
 app.include_router(音量路由.router)
 app.include_router(日志路由.router)
+app.include_router(地图路由.router)
 app.include_router(软件包路由.router)
 
 static_dir = Path(__file__).resolve().parent.parent / "static"
