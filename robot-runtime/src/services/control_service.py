@@ -241,6 +241,13 @@ class 运行时控制服务:
         payload["pose"] = self._构建当前平面位姿()
         return payload
 
+    async def 获取地图预览(self) -> dict[str, Any]:
+        """获取最近一帧建图地图预览。"""
+        payload = await self.ros导航桥客户端.获取地图预览()
+        snapshot = self._获取快照()
+        payload["map_name"] = snapshot.建图.当前地图 or snapshot.建图.最近地图 or ""
+        return payload
+
     async def _同步机器狗遥测状态(self) -> None:
         try:
             payload = await asyncio.to_thread(self.机器狗遥测服务.获取完整遥测)

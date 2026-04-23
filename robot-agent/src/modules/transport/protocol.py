@@ -210,6 +210,14 @@ def 构建激光扫描消息(
     return _构建状态广播消息("lidar_scan", robot_uuid, data)
 
 
+def 构建地图预览消息(
+    robot_uuid: str,
+    data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """构建建图实时预览消息。"""
+    return _构建状态广播消息("map_preview", robot_uuid, data)
+
+
 def 构建拍照响应消息(
     robot_uuid: str,        # 机器人 UUID
     request_id: str,        # 请求ID

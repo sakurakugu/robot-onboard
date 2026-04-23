@@ -226,6 +226,10 @@ class 运行时IPC客户端:
         """获取完整运行时状态。"""
         return await self.调用("runtime.get_state")
 
+    async def 获取地图预览(self) -> dict[str, Any]:
+        """获取最近一帧建图地图预览。"""
+        return await self.调用("mapping.get_preview")
+
     async def 开始建图(self, map_name: str | None = None) -> dict[str, Any]:
         """开始建图。"""
         params = {"map_name": map_name} if map_name else {}

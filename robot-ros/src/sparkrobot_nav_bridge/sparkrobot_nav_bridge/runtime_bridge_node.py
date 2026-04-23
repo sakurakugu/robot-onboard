@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import math
 import queue
@@ -15,6 +16,7 @@ from typing import Any, cast
 import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import OccupancyGrid
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
@@ -108,7 +110,9 @@ class 运行时桥接节点(Node):
         self.declare_parameter("odom_topic", "/odom")
         self.declare_parameter("imu_topic", "/imu")
         self.declare_parameter("scan_topic", "/scan")
+        self.declare_parameter("map_topic", "/map")
         self.declare_parameter("scan_max_points", 720)
+        self.declare_parameter("map_preview_max_cells", 360000)
         self.declare_parameter("navigation_action_name", "navigate_to_pose")
         self.declare_parameter("socket_path", "/tmp/sparkrobot/ros-nav-bridge.sock")
         self.declare_parameter("action_server_wait_sec", 10.0)
@@ -133,10 +137,18 @@ class 运行时桥接节点(Node):
         self._last_result: dict[str, Any] | None = None
         self._scan_max_points = self._读取整数参数("scan_max_points", 720)
         self._latest_scan: dict[str, Any] = self._构建空激光扫描()
+        self._map_preview_max_cells = self._读取整数参数("map_preview_max_cells", 360000)
+        self._latest_map_preview: dict[str, Any] = self._构建空地图预览()
         self._scan_subscription = self.create_subscription(
             LaserScan,
             self._读取字符串参数("scan_topic", "/scan"),
             self._处理激光扫描,
+            10,
+        )
+        self._map_subscription = self.create_subscription(
+            OccupancyGrid,
+            self._读取字符串参数("map_topic", "/map"),
+            self._处理地图预览,
             10,
         )
 
@@ -210,6 +222,10 @@ class 运行时桥接节点(Node):
 
         if command.方法 == "lidar.get_scan":
             self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_scan)))
+            return
+
+        if command.方法 == "mapping.get_preview":
+            self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_map_preview)))
             return
 
         if command.方法 == "navigation.navigate_to":
@@ -448,6 +464,20 @@ class 运行时桥接节点(Node):
             "captured_at": 0,
         }
 
+    def _构建空地图预览(self) -> dict[str, Any]:
+        return {
+            "available": False,
+            "frame_id": self._读取字符串参数("map_topic", "/map"),
+            "resolution": 0.0,
+            "width": 0,
+            "height": 0,
+            "origin": [0.0, 0.0, 0.0],
+            "encoding": "int8-base64",
+            "data": "",
+            "captured_at": 0,
+            "sequence": 0,
+        }
+
     def _处理激光扫描(self, message: LaserScan) -> None:
         ranges = [self._归一化量测值(item) for item in message.ranges]
         sampled_ranges, actual_step = self._压缩激光扫描(ranges)
@@ -471,6 +501,42 @@ class 运行时桥接节点(Node):
             "captured_at": int(time.time() * 1000),
         }
 
+    def _处理地图预览(self, message: OccupancyGrid) -> None:
+        width = int(message.info.width)
+        height = int(message.info.height)
+        if width <= 0 or height <= 0:
+            return
+
+        cells, preview_width, preview_height, resolution = self._压缩地图栅格(
+            list(message.data),
+            width,
+            height,
+            float(message.info.resolution),
+        )
+        raw = bytes((self._编码地图栅格值(item) for item in cells))
+        origin = message.info.origin
+        self._latest_map_preview = {
+            "available": True,
+            "frame_id": message.header.frame_id or "map",
+            "resolution": resolution,
+            "width": preview_width,
+            "height": preview_height,
+            "origin": [
+                float(origin.position.x),
+                float(origin.position.y),
+                self._从四元数解析偏航角(
+                    float(origin.orientation.x),
+                    float(origin.orientation.y),
+                    float(origin.orientation.z),
+                    float(origin.orientation.w),
+                ),
+            ],
+            "encoding": "int8-base64",
+            "data": base64.b64encode(raw).decode("ascii"),
+            "captured_at": int(time.time() * 1000),
+            "sequence": int(message.header.stamp.sec) * 1_000_000_000 + int(message.header.stamp.nanosec),
+        }
+
     def _压缩激光扫描(self, ranges: list[float | None]) -> tuple[list[float | None], int]:
         if len(ranges) <= self._scan_max_points:
             return ranges, 1
@@ -483,6 +549,71 @@ class 运行时桥接节点(Node):
         if not math.isfinite(number):
             return None
         return number
+
+    def _压缩地图栅格(
+        self,
+        cells: list[int],
+        width: int,
+        height: int,
+        resolution: float,
+    ) -> tuple[list[int], int, int, float]:
+        max_cells = max(10000, self._map_preview_max_cells)
+        total_cells = width * height
+        if total_cells <= max_cells:
+            return cells, width, height, resolution
+
+        step = max(1, math.ceil(math.sqrt(total_cells / max_cells)))
+        preview_width = math.ceil(width / step)
+        preview_height = math.ceil(height / step)
+        sampled: list[int] = []
+        for preview_y in range(preview_height):
+            source_y_start = preview_y * step
+            source_y_end = min(source_y_start + step, height)
+            for preview_x in range(preview_width):
+                source_x_start = preview_x * step
+                source_x_end = min(source_x_start + step, width)
+                sampled.append(self._合并地图栅格块(cells, width, source_x_start, source_x_end, source_y_start, source_y_end))
+        return sampled, preview_width, preview_height, resolution * step
+
+    def _合并地图栅格块(
+        self,
+        cells: list[int],
+        width: int,
+        x_start: int,
+        x_end: int,
+        y_start: int,
+        y_end: int,
+    ) -> int:
+        has_unknown = False
+        has_free = False
+        max_occupied = -1
+        for y in range(y_start, y_end):
+            row_offset = y * width
+            for x in range(x_start, x_end):
+                value = int(cells[row_offset + x])
+                if value < 0:
+                    has_unknown = True
+                    continue
+                if value >= 65:
+                    max_occupied = max(max_occupied, value)
+                    continue
+                has_free = True
+
+        if max_occupied >= 0:
+            return max_occupied
+        if has_free:
+            return 0
+        return -1 if has_unknown else 0
+
+    def _编码地图栅格值(self, value: int) -> int:
+        if value < 0:
+            return 255
+        return max(0, min(int(value), 100))
+
+    def _从四元数解析偏航角(self, x: float, y: float, z: float, w: float) -> float:
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        return math.atan2(siny_cosp, cosy_cosp)
 
     def _构建导航消息(self, goal: dict[str, Any]) -> NavigateToPose.Goal:
         message = NavigateToPose.Goal()

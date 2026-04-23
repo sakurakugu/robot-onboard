@@ -70,6 +70,7 @@ class 客户端运行时协调器:
             asyncio.create_task(self._运行音频采集任务(), name="audio-capture"),
             asyncio.create_task(self._发送运行时状态循环(), name="runtime-summary"),
             asyncio.create_task(self._发送激光扫描循环(), name="lidar-scan"),
+            asyncio.create_task(self._发送地图预览循环(), name="map-preview"),
         ]
 
         for upstream in (云端上游名称, 电脑端上游名称):
@@ -243,6 +244,37 @@ class 客户端运行时协调器:
             except Exception as exc:
                 error = self.runtime_client.格式化异常(exc)
                 logger.warning(f"读取激光扫描失败: {error}")
+                await asyncio.sleep(2)
+
+    async def _发送地图预览循环(self) -> None:
+        last_sequence: int | None = None
+        while True:
+            if not self.ws_manager.上游业务已连接(电脑端上游名称):
+                await asyncio.sleep(1)
+                continue
+
+            try:
+                preview = await self.runtime_client.获取地图预览()
+                if preview.get("available") is not True:
+                    await asyncio.sleep(0.8)
+                    continue
+
+                sequence = preview.get("sequence") or preview.get("captured_at")
+                sequence_number = int(sequence) if isinstance(sequence, (int, float)) else None
+                if sequence_number is None:
+                    await asyncio.sleep(0.8)
+                    continue
+
+                if sequence_number != last_sequence:
+                    last_sequence = sequence_number
+                    await self.message_sender.发送地图预览(preview)
+
+                await asyncio.sleep(0.8)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                error = self.runtime_client.格式化异常(exc)
+                logger.warning(f"读取建图预览失败: {error}")
                 await asyncio.sleep(2)
 
     def _是否是音频设备异常(self, error: Exception) -> bool:

@@ -136,6 +136,9 @@ class 运行时IPC服务器:
             if method == "lidar.get_scan":
                 return 构建运行时成功响应(request_id, await self.控制服务.获取激光扫描())
 
+            if method == "mapping.get_preview":
+                return 构建运行时成功响应(request_id, await self.控制服务.获取地图预览())
+
             if method == "mapping.start":
                 return self._转换控制结果(request_id, await self.控制服务.开始建图(self._可选字符串(params, "map_name")))
 

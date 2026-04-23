@@ -6,6 +6,7 @@ from src.modules.transport.protocol import (
     构建传感器状态消息,
     构建地图响应消息,
     构建地图状态消息,
+    构建地图预览消息,
     构建安装包下载响应消息,
     构建导航响应消息,
     构建导航状态消息,
@@ -151,6 +152,11 @@ class 消息发送器:
         """仅向电脑端工作站发送激光扫描消息。"""
         if self.ws_manager.上游业务已连接(电脑端上游名称):
             await self.发送消息(构建激光扫描消息(self._机器人UUID(), scan), channel="business", upstream=电脑端上游名称)
+
+    async def 发送地图预览(self, preview: dict[str, Any]) -> None:
+        """仅向电脑端工作站发送建图实时预览消息。"""
+        if self.ws_manager.上游业务已连接(电脑端上游名称):
+            await self.发送消息(构建地图预览消息(self._机器人UUID(), preview), channel="business", upstream=电脑端上游名称)
 
     async def 发送拍照响应(
         self,
