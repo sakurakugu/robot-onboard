@@ -31,6 +31,20 @@ from sparkrobot_common import (
 APP_NAME = "robot-agent"
 logger = get_logger(APP_NAME)
 
+
+def _规范化WebSocket基础地址(url: str) -> str:
+    """把配置里的主机地址规范化成可供 urljoin 使用的 ws/wss 基地址。"""
+    规范化地址 = str(url or "").strip().rstrip("/")
+    if not 规范化地址:
+        return ""
+    if 规范化地址.startswith("wss://") or 规范化地址.startswith("ws://"):
+        return 规范化地址
+    if 规范化地址.startswith("https://"):
+        return f"wss://{规范化地址[8:]}"
+    if 规范化地址.startswith("http://"):
+        return f"ws://{规范化地址[7:]}"
+    return f"ws://{规范化地址}"
+
 # 尝试导入 watchdog
 try:
     from watchdog.events import FileModifiedEvent, FileSystemEventHandler
@@ -318,7 +332,7 @@ class Config:
 
     @property
     def cloud_server_url(self) -> str:
-        return self.获取("cloud.server_url") or ""
+        return _规范化WebSocket基础地址(self.获取("cloud.server_url") or "")
 
     @property
     def cloud_business_url(self) -> str:
@@ -351,7 +365,7 @@ class Config:
 
     @property
     def studio_server_url(self) -> str:
-        return self.获取("studio.server_url") or ""
+        return _规范化WebSocket基础地址(self.获取("studio.server_url") or "")
 
     @property
     def studio_business_url(self) -> str:

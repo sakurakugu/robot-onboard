@@ -9,6 +9,8 @@
 - `sparkrobot-common`：两者共享的公共库
 - `tools`：打包、安装、联机测试脚本
 
+- 一些参考文档在根目录 `robot-system` 的 `other/` 目录下
+
 ## 常用目录
 
 - `robot-agent/`

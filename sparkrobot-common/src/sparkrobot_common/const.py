@@ -83,7 +83,7 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
 
     # 云端连接配置 [cloud]
     配置字段("cloud", "enabled", True, "是否启用云端连接", "bool"),
-    配置字段("cloud", "server_url", f"ws://{DEFAULT_SERVER_ADDR}", "云端服务器URL", "string"),
+    配置字段("cloud", "server_url", DEFAULT_SERVER_ADDR, "云端服务器地址（只填主机或主机:端口，连接时自动补 ws://）", "string"),
     配置字段("cloud", "business_url", "/api/v1/robot/business", "云端业务连接URL", "string"),
     配置字段("cloud", "audio_upload_url", "/api/v1/robot/audio/upload", "云端音频上传URL", "string"),
     配置字段("cloud", "audio_download_url", "/api/v1/robot/audio/download", "云端音频下载URL", "string"),
@@ -92,7 +92,7 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
 
     # 电脑端连接配置 [studio]
     配置字段("studio", "enabled", False, "是否启用电脑端工作站连接", "bool"),
-    配置字段("studio", "server_url", "", "电脑端工作站URL", "string"),
+    配置字段("studio", "server_url", "", "电脑端工作站地址（只填主机或主机:端口，连接时自动补 ws://）", "string"),
     配置字段("studio", "business_url", "/api/v1/web/business", "电脑端业务连接URL", "string"),
     配置字段("studio", "reconnect_interval", 5, "电脑端重连间隔（秒）", "int"),
     配置字段("studio", "heartbeat_interval", 15, "电脑端心跳间隔（秒）", "int"),

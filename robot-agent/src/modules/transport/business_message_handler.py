@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import re
 import tarfile
 import time
 from pathlib import Path
@@ -17,6 +16,27 @@ from src.modules.transport.message_sender import 消息发送器
 from src.modules.vision import capture_photo
 
 logger = get_logger("robot-agent")
+
+
+def _转换服务地址为HTTP基地址(server_url: str) -> str:
+    """把云端服务地址转换成 HTTP 下载基地址，兼容未填写 ws:// 的配置。"""
+    规范化地址 = server_url.strip().rstrip("/")
+    if not 规范化地址:
+        return ""
+
+    if 规范化地址.startswith("wss://"):
+        http_base = f"https://{规范化地址[6:]}"
+    elif 规范化地址.startswith("ws://"):
+        http_base = f"http://{规范化地址[5:]}"
+    elif 规范化地址.startswith("https://") or 规范化地址.startswith("http://"):
+        http_base = 规范化地址
+    else:
+        http_base = f"http://{规范化地址}"
+
+    parsed = urlparse(http_base)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def _解出整包内子包(full_package_path: Path, packages_dir: Path) -> list[str]:
@@ -389,15 +409,9 @@ class 业务消息处理器:
 
         server_cfg = self._云端配置()
         server_url = str(server_cfg.get("server_url", ""))
-        if server_url.startswith("wss://"):
-            http_base = "https://" + server_url[6:]
-        elif server_url.startswith("ws://"):
-            http_base = "http://" + server_url[5:]
-        else:
-            http_base = re.sub(r"^ws://", "http://", server_url)
-
-        parsed = urlparse(http_base)
-        http_base = f"{parsed.scheme}://{parsed.netloc}"
+        http_base = _转换服务地址为HTTP基地址(server_url)
+        if not http_base:
+            raise RuntimeError("云端 server_url 未配置或格式无效")
 
         packages_dir = self.workspace / "packages"
         packages_dir.mkdir(parents=True, exist_ok=True)

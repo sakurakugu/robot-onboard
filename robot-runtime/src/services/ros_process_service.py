@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+import signal
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -132,6 +133,7 @@ class ROS进程管理服务:
                 cwd=计划.工作空间目录,
                 stdout=日志句柄,
                 stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True,
             )
         except Exception as exc:
             日志句柄.close()
@@ -171,13 +173,13 @@ class ROS进程管理服务:
         logger.info("准备停止 ROS 进程: name=%s pid=%s", 名称, record.进程.pid)
 
         if record.进程.returncode is None:
-            record.进程.terminate()
+            self._结束进程组(record, int(signal.SIGTERM))
 
         try:
             await asyncio.wait_for(record.进程.wait(), timeout=timeout_sec)
         except TimeoutError:
             logger.warning("ROS 进程超时未退出，准备强制杀死: name=%s pid=%s", 名称, record.进程.pid)
-            record.进程.kill()
+            self._结束进程组(record, int(getattr(signal, "SIGKILL", signal.SIGTERM)))
             await asyncio.wait_for(record.进程.wait(), timeout=5.0)
 
         await record.监控任务
@@ -215,6 +217,25 @@ class ROS进程管理服务:
         maybe_result = self._退出回调(名称, exit_code, record.预期停止)
         if inspect.isawaitable(maybe_result):
             await maybe_result
+
+    def _结束进程组(self, record: ROS进程记录, sig: int) -> None:
+        """优先结束整个进程组，避免 ros2 launch 子进程残留。"""
+        if record.进程.returncode is not None or record.进程.pid is None:
+            return
+
+        killpg = getattr(os, "killpg", None)
+        try:
+            if callable(killpg):
+                killpg(record.进程.pid, sig)
+                return
+            raise OSError("killpg unavailable")
+        except ProcessLookupError:
+            return
+        except OSError:
+            if sig == int(signal.SIGTERM):
+                record.进程.terminate()
+            else:
+                record.进程.kill()
 
     def _校验运行环境(self) -> None:
         if os.name != "posix":

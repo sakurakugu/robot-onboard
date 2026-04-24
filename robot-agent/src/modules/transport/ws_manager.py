@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Optional, cast
 from urllib.parse import urljoin
@@ -263,7 +262,10 @@ class WebSocketManager:
         if upstream == 云端上游名称:
             原始配置 = self.config.get("cloud", {})
             enabled = bool(原始配置.get("enabled", True))
-            server_url = str(原始配置.get("server_url") or f"ws://{DEFAULT_SERVER_ADDR}").strip()
+            server_url = self._规范化WebSocket服务地址(
+                str(原始配置.get("server_url") or "").strip(),
+                默认地址=DEFAULT_SERVER_ADDR,
+            )
             business_url = self._解析相对地址(server_url, str(原始配置.get("business_url") or "/api/v1/robot/business").strip())
             audio_upload_url = self._解析相对地址(
                 server_url,
@@ -289,7 +291,7 @@ class WebSocketManager:
 
         原始配置 = self.config.get("studio", {})
         enabled = bool(原始配置.get("enabled", False))
-        server_url = str(原始配置.get("server_url") or "").strip()
+        server_url = self._规范化WebSocket服务地址(str(原始配置.get("server_url") or "").strip())
         business_url = self._解析相对地址(server_url, str(原始配置.get("business_url") or "/api/v1/web/business").strip())
         reconnect_interval = float(原始配置.get("reconnect_interval", 5))
         heartbeat_interval = float(原始配置.get("heartbeat_interval", 15))
@@ -311,13 +313,23 @@ class WebSocketManager:
         if raw_url.startswith("/"):
             if not server_url:
                 return ""
-            return urljoin(server_url, raw_url)
+            return urljoin(self._确保URL有ws或wss头部(server_url), raw_url)
         return raw_url
 
+    def _规范化WebSocket服务地址(self, url: str, 默认地址: str = "") -> str:
+        原始地址 = (url or 默认地址).strip().rstrip("/")
+        if not 原始地址:
+            return ""
+        if 原始地址.startswith("wss://") or 原始地址.startswith("ws://"):
+            return 原始地址
+        if 原始地址.startswith("https://"):
+            return f"wss://{原始地址[8:]}"
+        if 原始地址.startswith("http://"):
+            return f"ws://{原始地址[7:]}"
+        return f"ws://{原始地址}"
+
     def _确保URL有ws或wss头部(self, url: str) -> str:
-        if re.match(r"^wss?://", url):
-            return url
-        return f"ws://{url}"
+        return self._规范化WebSocket服务地址(url)
 
     def _为URL添加机器人参数(self, url: str, robot_uuid: str) -> str:
         base = self._确保URL有ws或wss头部(url)
