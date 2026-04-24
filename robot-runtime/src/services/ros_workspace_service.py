@@ -203,13 +203,13 @@ class ROS工作空间服务:
 
     def _构建雷达驱动参数(self) -> dict[str, str | int | float | bool]:
         transport = self._获取雷达传输方式()
-        host_ip = self._读取可选字符串("lidar", "host_ip") or "192.168.1.102"
+        host_ip = self._读取可选字符串("lidar", "host_ip") or "192.168.168.168"
 
         return {
             "frame_id": self._获取激光坐标系(),
             "group_ip": "224.1.1.2",
             "add_multicast": False,
-            "device_ip": self._读取可选字符串("lidar", "device_ip") or "192.168.1.200",
+            "device_ip": self._读取可选字符串("lidar", "device_ip") or "192.168.168.200",
             "device_ip_difop": host_ip,
             "msop_port": self._读取整数("lidar", "msop_port", 2368),
             "difop_port": self._读取整数("lidar", "difop_port", 2369),

@@ -351,6 +351,18 @@ def 连接机器狗(name: str, ip: str):
         print_error("未找到 ssh 命令，请确保已安装 OpenSSH Client")
 
 
+def 输出ROS安装前提示() -> None:
+    """输出 robot-ros 安装前的雷达网络提示。"""
+    print_warn("当前推荐把网口雷达放到独立有线网段")
+    print("  推荐配置:")
+    print("    机器狗 eth0: 192.168.168.168/24")
+    print("    雷达 IP: 192.168.168.200")
+    print("    雷达数据目标 IP: 192.168.168.168")
+    print("  不再推荐给 eth0 额外挂 192.168.1.102/24")
+    print("  若 wlan0 也在 192.168.1.x，同机双网卡落在同一子网会导致 SSH 回包走错")
+    print("  若雷达仍是厂商默认 192.168.1.200，请先用上位机改到 192.168.168.200")
+
+
 def 执行安装任务(
     task_name: str,
     robot_ip: str,
@@ -359,6 +371,9 @@ def 执行安装任务(
     pause_after: bool = True,
 ) -> bool:
     """执行机器狗软件安装任务"""
+    if task_name in {"install_ros", "install_full"}:
+        输出ROS安装前提示()
+
     try:
         确保存在包("paramiko")
         确保存在包("ruamel.yaml")
