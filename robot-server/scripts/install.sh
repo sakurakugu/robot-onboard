@@ -75,5 +75,12 @@ if systemctl is-active --quiet $SERVICE_NAME; then
 else
     echo -e "${RED}服务启动失败，请检查日志。${NC}"
     systemctl status $SERVICE_NAME --no-pager
+    echo
+    echo -e "${BLUE}最近 50 行服务日志:${NC}"
+    journalctl -u $SERVICE_NAME -n 50 --no-pager
+    echo
+    echo -e "${BLUE}端口 8080 占用情况:${NC}"
+    ss -ltnp | grep ':8080 ' || true
+    ss -lunp | grep ':8080 ' || true
     exit 1
 fi
