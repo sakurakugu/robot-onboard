@@ -393,8 +393,6 @@ def 执行安装任务(
             success = configurator.安装RobotRos工作区(package_ext)
         elif task_name == "install_full":
             success = configurator.安装本体全套(package_ext)
-        elif task_name == "cleanup_legacy":
-            success = configurator.清理旧版服务()
         else:
             print_error(f"未知的安装任务: {task_name}")
 
@@ -431,7 +429,6 @@ def 安装软件菜单():
         print("  5) 安装 robot-runtime 服务")
         print("  6) 安装 robot-ros 工作区（含 rosdep / colcon）")
         print("  7) 一键打包并安装本体全套")
-        print("  8) 清理旧版 robot-server / robot-agent 服务")
         print("  0) 返回")
         print("------------------------------------------")
 
@@ -460,8 +457,6 @@ def 安装软件菜单():
             执行安装任务("install_ros", robot_ip, robot_port)
         elif choice == "7":
             执行安装任务("install_full", robot_ip, robot_port)
-        elif choice == "8":
-            执行安装任务("cleanup_legacy", robot_ip, robot_port)
         else:
             print_error("无效选项")
 
@@ -536,7 +531,6 @@ def 解析命令行参数() -> argparse.Namespace:
             "示例:\n"
             "  python tools\\1.常用命令.py --package full --format zip\n"
             "  python tools\\1.常用命令.py --install full --robot-ip 192.168.1.106\n"
-            "  python tools\\1.常用命令.py --cleanup-legacy-services --robot-ip 192.168.1.106\n"
             "  python tools\\1.常用命令.py --robot-ip 192.168.1.106 --robot-port 43988 --save-target"
         ),
     )
@@ -554,11 +548,6 @@ def 解析命令行参数() -> argparse.Namespace:
         help="执行本地打包任务：common/server/agent/runtime/ros/full",
     )
     parser.add_argument("--format", default="tar.gz", help="打包格式，支持 tar.gz、zip、tar、tar.bz2、tar.xz")
-    parser.add_argument(
-        "--cleanup-legacy-services",
-        action="store_true",
-        help="清理目标机器上旧版 robot-server / robot-agent 服务",
-    )
     return parser.parse_args()
 
 
@@ -583,12 +572,6 @@ def 执行命令行模式(args: argparse.Namespace) -> int:
     """执行命令行模式"""
     if args.install and args.package:
         print_error("--install 和 --package 不能同时使用")
-        return 1
-    if args.install and args.cleanup_legacy_services:
-        print_error("--install 和 --cleanup-legacy-services 不能同时使用")
-        return 1
-    if args.package and args.cleanup_legacy_services:
-        print_error("--package 和 --cleanup-legacy-services 不能同时使用")
         return 1
 
     if args.robot_ip and not 校验命令行IP(args.robot_ip):
@@ -621,8 +604,6 @@ def 执行命令行模式(args: argparse.Namespace) -> int:
     install_task_name: Optional[str] = None
     if args.install:
         install_task_name = 命令行安装任务映射[args.install]
-    elif args.cleanup_legacy_services:
-        install_task_name = "cleanup_legacy"
 
     if install_task_name:
         if not target_ip:
@@ -640,7 +621,7 @@ def 执行命令行模式(args: argparse.Namespace) -> int:
     if args.save_target:
         return 0
 
-    print_error("未指定任何任务，请使用 --install、--package、--cleanup-legacy-services 或 --save-target")
+    print_error("未指定任何任务，请使用 --install、--package 或 --save-target")
     return 1
 
 def 获取当前时间戳() -> str:

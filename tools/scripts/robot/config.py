@@ -101,10 +101,6 @@ class 机器狗配置器:
         """安装本体全套"""
         return self.服务.安装本体全套(package_ext)
 
-    def 清理旧版服务(self) -> bool:
-        """清理旧版服务"""
-        return self.服务.清理旧版服务()
-
     # ========== 用户交互方法 ==========
     def 获取用户输入的IP(self, prompt_prefix: str = "本机", show_network_info: bool = True) -> Optional[str]:
         """获取用户输入的IP地址，支持自动检测和查看网络信息"""

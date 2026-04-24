@@ -18,17 +18,6 @@ yaml https://mirrors.tuna.tsinghua.edu.cn/rosdistro/rosdep/ruby.yaml
 class 服务安装管理器:
     """服务安装管理器。"""
 
-    旧版服务进程模式 = {
-        "robot-server": "robot-server.*main.py",
-        "robot-agent": "robot-agent.*main.py",
-        "robot-runtime": "robot-runtime.*main.py",
-    }
-    旧版服务主程序路径 = {
-        "robot-server": "/home/firefly/sparkrobot/robot-server/main.py",
-        "robot-agent": "/home/firefly/sparkrobot/robot-agent/main.py",
-        "robot-runtime": "/home/firefly/sparkrobot/robot-runtime/main.py",
-    }
-
     def __init__(self, ssh管理器):
         self.ssh = ssh管理器
 
@@ -78,7 +67,6 @@ class 服务安装管理器:
             package_ext=package_ext,
             success_tip=f"请打开: http://{self.ssh.机器人IP}:8080 进行配置",
             service_name="sparkrobot-server.service",
-            legacy_services=["robot-server"],
             occupied_ports=[8080],
         )
 
@@ -93,7 +81,6 @@ class 服务安装管理器:
             package_ext=package_ext,
             success_tip=f"请打开: http://{self.ssh.机器人IP}:8080 进行配置",
             service_name="sparkrobot-server.service",
-            legacy_services=["robot-server"],
             occupied_ports=[8080],
         ):
             return False
@@ -103,7 +90,6 @@ class 服务安装管理器:
             remote_path="/home/firefly/sparkrobot/robot-agent",
             package_ext=package_ext,
             service_name="sparkrobot-agent.service",
-            legacy_services=["robot-agent"],
         )
 
     def 安装RobotRuntime(self, package_ext: str | None = None) -> bool:
@@ -195,7 +181,6 @@ class 服务安装管理器:
             package_ext=package_ext,
             success_tip=f"请打开: http://{self.ssh.机器人IP}:8080 进行配置",
             service_name="sparkrobot-server.service",
-            legacy_services=["robot-server"],
             occupied_ports=[8080],
         ):
             return False
@@ -205,7 +190,6 @@ class 服务安装管理器:
             remote_path="/home/firefly/sparkrobot/robot-agent",
             package_ext=package_ext,
             service_name="sparkrobot-agent.service",
-            legacy_services=["robot-agent"],
         ):
             return False
         if not self.安装RobotRos工作区(package_ext):
@@ -220,20 +204,6 @@ class 服务安装管理器:
             return False
 
         print("✓ 本体全套软件安装完成")
-        return True
-
-    # 还有 狗 69 是用这个的，这个狗69清理完成就可以把他删除了 D10069 uuid：019c27f7-d344-778b-ba0f-3abcfb1eb3c3
-    def 清理旧版服务(self) -> bool:
-        """清理旧版 robot-server 和 robot-agent 服务。"""
-        print("\n正在清理旧版 robot-server / robot-agent 服务...")
-        success, output, error = self._执行服务清理(["robot-server", "robot-agent"])
-        if not success:
-            details = self._构建错误详情(output, error)
-            print(f"✗ 清理旧版服务失败: {details}")
-            return False
-
-        print("✓ 旧版服务清理完成")
-        print("已处理: robot-server.service / robot-agent.service")
         return True
 
     def _确保rosdep已初始化(self) -> bool:
@@ -281,7 +251,6 @@ class 服务安装管理器:
         package_ext: str | None,
         success_tip: str | None = None,
         service_name: str | None = None,
-        legacy_services: list[str] | None = None,
         occupied_ports: list[int] | None = None,
     ) -> bool:
         """安装并启动 Python 服务项目。"""
@@ -294,15 +263,6 @@ class 服务安装管理器:
         archive_path = self._打包项目(project_name, local_project_path, package_ext)
         if archive_path is None:
             return False
-
-        if legacy_services:
-            print(f"正在清理 {display_name} 旧版服务...")
-            success, output, error = self._执行服务清理(legacy_services)
-            if not success:
-                details = self._构建错误详情(output, error)
-                print(f"✗ 清理旧版服务失败: {details}")
-                return False
-            print("✓ 旧版服务清理完成")
 
         if not self._准备远程目录(remote_path):
             return False
@@ -435,71 +395,6 @@ class 服务安装管理器:
         if not details:
             return "未返回错误信息"
         return details
-
-    def _执行服务清理(self, service_names: list[str]) -> tuple[bool, str, str]:
-        services = " ".join(service_names)
-        target_paths = [
-            self.旧版服务主程序路径[service_name]
-            for service_name in service_names
-            if service_name in self.旧版服务主程序路径
-        ]
-        script_lines = [
-            "set -e",
-            f"for service in {services}; do",
-            '    systemctl stop "${service}.service" 2>/dev/null || true',
-            '    systemctl disable "${service}.service" 2>/dev/null || true',
-            '    rm -f "/etc/systemd/system/${service}.service"',
-            '    rm -f "/etc/systemd/system/multi-user.target.wants/${service}.service"',
-            '    rm -f "/home/firefly/sparkrobot/logs/pid/${service}.pid"',
-            "done",
-        ]
-        if target_paths:
-            targets_literal = ", ".join(f'"{path}"' for path in target_paths)
-            script_lines.extend(
-                [
-                    "python3 - <<'PY'",
-                    "from pathlib import Path",
-                    "import os",
-                    "import signal",
-                    f"targets = [{targets_literal}]",
-                    "killed = []",
-                    "for proc_dir in Path('/proc').iterdir():",
-                    "    if not proc_dir.name.isdigit():",
-                    "        continue",
-                    "    try:",
-                    "        exe_name = (proc_dir / 'exe').resolve().name.lower()",
-                    "    except OSError:",
-                    "        continue",
-                    "    if 'python' not in exe_name:",
-                    "        continue",
-                    "    try:",
-                    "        cmdline = (proc_dir / 'cmdline').read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'ignore').strip()",
-                    "    except OSError:",
-                    "        continue",
-                    "    if not cmdline:",
-                    "        continue",
-                    "    if not any(target in cmdline for target in targets):",
-                    "        continue",
-                    "    try:",
-                    "        os.kill(int(proc_dir.name), signal.SIGTERM)",
-                    "        killed.append(proc_dir.name)",
-                    "    except (ProcessLookupError, PermissionError):",
-                    "        continue",
-                    "if killed:",
-                    "    print('已终止残留进程:', ' '.join(killed))",
-                    "PY",
-                ]
-            )
-
-        script_lines.extend(
-            [
-                "systemctl daemon-reload",
-                "systemctl reset-failed || true",
-            ]
-        )
-        cleanup_script = "\n".join(script_lines)
-        cleanup_cmd = f"bash <<'BASH'\n{cleanup_script}\nBASH"
-        return self.ssh.执行命令(cleanup_cmd, use_sudo=True)
 
     def _收集服务诊断信息(self, service_name: str, occupied_ports: list[int] | None = None) -> str:
         diagnostics: list[str] = []
