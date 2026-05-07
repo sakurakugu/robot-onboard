@@ -142,6 +142,8 @@ class 运行时控制服务:
         self.默认地图配置 = self._读取可选字符串("localization", "default_map")
         self.建图自动保存 = self._读取布尔值("mapping", "auto_save_on_stop", True)
         self.导航请求超时秒数 = self._读取浮点值("navigation", "goal_timeout_sec", 120.0)
+        self.导航桥Action就绪等待秒数 = self._读取浮点值("navigation", "action_ready_timeout_sec", 30.0)
+        self.导航桥Action轮询秒数 = self._读取浮点值("navigation", "action_ready_poll_interval_sec", 0.5)
         self.巡逻默认等待秒数 = self._读取浮点值("patrol", "arrival_wait_sec", 2.0)
         self.巡逻默认循环 = self._读取布尔值("patrol", "loop", False)
 
@@ -796,12 +798,50 @@ class 运行时控制服务:
         navigation_info = await self.ros进程服务.启动("navigation")
         await self._等待生命周期节点激活("/bt_navigator", timeout_sec=15.0)
         bridge_status = await self.ros导航桥客户端.等待就绪(timeout_sec=10.0)
-        if not bool(bridge_status.get("status", {}).get("action_server_ready", False)):
-            raise ROS导航桥错误("nav_action_unavailable", "导航桥已启动，但 Nav2 Action 仍未就绪")
+        bridge_status = await self._等待导航桥Action就绪(bridge_status)
         self._更新导航状态("idle", None, None, None)
         env["navigation"] = navigation_info
         env["bridge"] = bridge_status
         return env
+
+    async def _等待导航桥Action就绪(self, 初始桥状态: dict[str, Any] | None = None) -> dict[str, Any]:
+        截止时间 = asyncio.get_running_loop().time() + max(self.导航桥Action就绪等待秒数, 0.0)
+        轮询间隔 = max(self.导航桥Action轮询秒数, 0.1)
+        最近桥状态 = 初始桥状态 or {}
+        最近异常: ROS导航桥错误 | None = None
+
+        while True:
+            状态摘要 = 最近桥状态.get("status", {})
+            if isinstance(状态摘要, dict) and bool(状态摘要.get("action_server_ready", False)):
+                return 最近桥状态
+
+            if not self.ros进程服务.是否运行("navigation"):
+                raise ROS导航桥错误("nav_process_not_running", "导航进程未在运行，Nav2 Action 无法就绪", {"status": 状态摘要})
+
+            当前时间 = asyncio.get_running_loop().time()
+            if 当前时间 >= 截止时间:
+                if 最近异常 is not None:
+                    raise ROS导航桥错误(
+                        "nav_action_unavailable",
+                        f"导航桥已启动，但 Nav2 Action 在 {self.导航桥Action就绪等待秒数:.1f} 秒内仍未就绪: {最近异常.message}",
+                        {
+                            "status": 状态摘要 if isinstance(状态摘要, dict) else {},
+                            "bridge_error_code": 最近异常.code,
+                            "bridge_error_details": 最近异常.details,
+                        },
+                    ) from 最近异常
+                raise ROS导航桥错误(
+                    "nav_action_unavailable",
+                    f"导航桥已启动，但 Nav2 Action 在 {self.导航桥Action就绪等待秒数:.1f} 秒内仍未就绪",
+                    {"status": 状态摘要 if isinstance(状态摘要, dict) else {}},
+                )
+
+            await asyncio.sleep(min(轮询间隔, max(截止时间 - 当前时间, 0.0)))
+            try:
+                最近桥状态 = await self.ros导航桥客户端.获取导航状态(timeout_sec=轮询间隔)
+                最近异常 = None
+            except ROS导航桥错误 as exc:
+                最近异常 = exc
 
     async def _发送导航目标到桥(self, goal: 导航目标) -> dict[str, Any]:
         return await self.ros导航桥客户端.导航到目标(goal.导出字典())
