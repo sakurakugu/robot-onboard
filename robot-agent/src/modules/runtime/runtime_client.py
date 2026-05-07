@@ -100,6 +100,16 @@ class 本地运行时客户端:
         if command in {"stop_localization", "localization.stop"}:
             return await client.停止定位()
 
+        if command in {"set_initial_pose", "localization.set_initial_pose"}:
+            pose = self._提取目标(data)
+            return await client.设置初始位姿(
+                x=self._读取浮点(pose, "x"),
+                y=self._读取浮点(pose, "y"),
+                yaw=self._读取浮点(pose, "yaw"),
+                frame_id=self._读取字符串(pose, "frame_id", "frameId", 默认值="map"),
+                map_name=self._读取可选字符串(pose, "map_name", "mapName"),
+            )
+
         raise ValueError(f"不支持的地图命令: {command}")
 
     async def 执行巡逻命令(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -133,6 +143,9 @@ class 本地运行时客户端:
         goal = data.get("goal")
         if isinstance(goal, dict):
             return goal
+        pose = data.get("pose")
+        if isinstance(pose, dict):
+            return pose
         return data
 
     def _读取字符串(self, data: dict[str, Any], *keys: str, 默认值: str | None = None) -> str:

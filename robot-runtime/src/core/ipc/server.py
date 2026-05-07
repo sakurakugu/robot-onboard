@@ -155,6 +155,18 @@ class 运行时IPC服务器:
             if method == "localization.stop":
                 return self._转换控制结果(request_id, await self.控制服务.停止定位())
 
+            if method == "localization.set_initial_pose":
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.设置初始位姿(
+                        x=self._浮点值(params, "x"),
+                        y=self._浮点值(params, "y"),
+                        yaw=self._浮点值(params, "yaw"),
+                        frame_id=self._可选字符串(params, "frame_id") or "map",
+                        地图名称=self._可选字符串(params, "map_name"),
+                    ),
+                )
+
             if method == "navigation.navigate_to":
                 goal = 导航目标(
                     x=self._浮点值(params, "x"),

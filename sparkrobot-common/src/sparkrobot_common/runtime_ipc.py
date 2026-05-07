@@ -15,7 +15,7 @@ logger = get_logger("runtime-ipc")
 
 运行时默认项目名 = "robot-runtime"
 运行时状态事件名 = "state"
-运行时默认超时秒数 = 5.0
+运行时默认超时秒数 = 20.0
 
 
 class 运行时IPC错误(RuntimeError):
@@ -252,6 +252,25 @@ class 运行时IPC客户端:
     async def 停止定位(self) -> dict[str, Any]:
         """停止定位。"""
         return await self.调用("localization.stop")
+
+    async def 设置初始位姿(
+        self,
+        x: float,
+        y: float,
+        yaw: float,
+        frame_id: str = "map",
+        map_name: str | None = None,
+    ) -> dict[str, Any]:
+        """发布定位初始位姿。"""
+        params: dict[str, Any] = {
+            "x": x,
+            "y": y,
+            "yaw": yaw,
+            "frame_id": frame_id,
+        }
+        if map_name:
+            params["map_name"] = map_name
+        return await self.调用("localization.set_initial_pose", params)
 
     async def 导航到目标(
         self,

@@ -15,7 +15,7 @@ from typing import Any, cast
 
 import rclpy
 from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from nav_msgs.msg import OccupancyGrid
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
@@ -139,6 +139,7 @@ class 运行时桥接节点(Node):
         self._latest_scan: dict[str, Any] = self._构建空激光扫描()
         self._map_preview_max_cells = self._读取整数参数("map_preview_max_cells", 360000)
         self._latest_map_preview: dict[str, Any] = self._构建空地图预览()
+        self._initial_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, "/initialpose", 10)
         self._scan_subscription = self.create_subscription(
             LaserScan,
             self._读取字符串参数("scan_topic", "/scan"),
@@ -228,6 +229,10 @@ class 运行时桥接节点(Node):
             self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_map_preview)))
             return
 
+        if command.方法 == "localization.set_initial_pose":
+            self._执行设置初始位姿(command)
+            return
+
         if command.方法 == "navigation.navigate_to":
             self._执行导航到目标(command)
             return
@@ -286,6 +291,43 @@ class 运行时桥接节点(Node):
         goal_msg = self._构建导航消息(goal)
         send_future = self._action_client.send_goal_async(goal_msg, feedback_callback=self._导航反馈回调)
         send_future.add_done_callback(lambda future, command=command, goal=goal: self._导航目标响应回调(future, command, goal))
+
+    def _执行设置初始位姿(self, command: 桥接命令) -> None:
+        try:
+            pose = self._解析目标参数(command.参数, include_goal_id=False)
+        except ValueError as exc:
+            self._设置响应结果(
+                command,
+                self.构建错误响应(command.请求ID, "invalid_initial_pose", str(exc)),
+            )
+            return
+
+        message = PoseWithCovarianceStamped()
+        message.header.frame_id = str(pose.get("frame_id") or "map")
+        message.header.stamp = self.get_clock().now().to_msg()
+        message.pose.pose.position.x = float(pose["x"])
+        message.pose.pose.position.y = float(pose["y"])
+        message.pose.pose.position.z = 0.0
+
+        yaw = float(pose["yaw"])
+        message.pose.pose.orientation.x = 0.0
+        message.pose.pose.orientation.y = 0.0
+        message.pose.pose.orientation.z = math.sin(yaw / 2.0)
+        message.pose.pose.orientation.w = math.cos(yaw / 2.0)
+        message.pose.covariance[0] = 0.25
+        message.pose.covariance[7] = 0.25
+        message.pose.covariance[35] = 0.0685
+        self._initial_pose_publisher.publish(message)
+        self._设置响应结果(
+            command,
+            self.构建成功响应(
+                command.请求ID,
+                {
+                    "accepted": True,
+                    "pose": pose,
+                },
+            ),
+        )
 
     def _执行取消导航(self, command: 桥接命令) -> None:
         if self._goal_request_inflight:
@@ -632,7 +674,7 @@ class 运行时桥接节点(Node):
         message.pose = pose
         return message
 
-    def _解析目标参数(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _解析目标参数(self, params: dict[str, Any], include_goal_id: bool = True) -> dict[str, Any]:
         try:
             x = float(params["x"])
             y = float(params["y"])
@@ -643,16 +685,17 @@ class 运行时桥接节点(Node):
             raise ValueError(f"导航目标参数格式错误: {exc}") from exc
 
         frame_id = str(params.get("frame_id") or "map").strip() or "map"
-        goal_id = str(params.get("id") or params.get("goal_id") or uuid.uuid4()).strip()
         map_name = str(params.get("map_name") or "").strip()
-        return {
-            "id": goal_id,
+        result = {
             "map_name": map_name or None,
             "frame_id": frame_id,
             "x": x,
             "y": y,
             "yaw": yaw,
         }
+        if include_goal_id:
+            result["id"] = str(params.get("id") or params.get("goal_id") or uuid.uuid4()).strip()
+        return result
 
     def _读取字符串参数(self, key: str, fallback: str) -> str:
         value: Any = self.get_parameter(key).value

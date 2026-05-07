@@ -46,6 +46,27 @@ class 导航目标:
 
 
 @dataclass(frozen=True)
+class 初始位姿目标:
+    """运行时侧定位初始位姿。"""
+
+    x: float
+    y: float
+    yaw: float
+    frame_id: str = "map"
+    地图名称: str | None = None
+
+    def 导出字典(self) -> dict[str, Any]:
+        """导出为字典。"""
+        return {
+            "map_name": self.地图名称,
+            "frame_id": self.frame_id,
+            "x": self.x,
+            "y": self.y,
+            "yaw": self.yaw,
+        }
+
+
+@dataclass(frozen=True)
 class 命令执行结果:
     """统一控制命令执行结果。"""
 
@@ -628,6 +649,55 @@ class 运行时控制服务:
                 "stopped": bool(stop_results),
                 "processes": stop_results,
                 "map_name": current_map or None,
+            },
+        )
+
+    async def 设置初始位姿(self, x: float, y: float, yaw: float, frame_id: str = "map", 地图名称: str | None = None) -> 命令执行结果:
+        """向定位模块发布初始位姿。"""
+        if not self._读取布尔值("localization", "enabled", False):
+            return 命令执行结果.失败结果("localization_disabled", "当前配置未启用定位能力")
+
+        if not self.ros进程服务.是否运行("localization"):
+            return 命令执行结果.失败结果("localization_not_running", "请先启动定位后再设置初始位姿")
+
+        try:
+            resolved_map_name, _ = self._解析定位地图(地图名称)
+        except (ValueError, FileNotFoundError) as exc:
+            return 命令执行结果.失败结果("map_not_found", str(exc))
+
+        pose = 初始位姿目标(
+            x=x,
+            y=y,
+            yaw=yaw,
+            frame_id=frame_id,
+            地图名称=resolved_map_name,
+        )
+
+        try:
+            bridge = await self.ros导航桥客户端.设置初始位姿(pose.导出字典())
+        except ROS导航桥错误 as exc:
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+
+        snapshot = self._获取快照()
+        runtime_pose = snapshot.位姿
+        runtime_pose.坐标系 = pose.frame_id
+        runtime_pose.x = pose.x
+        runtime_pose.y = pose.y
+        runtime_pose.yaw = pose.yaw
+        runtime_pose.四元数 = [
+            0.0,
+            0.0,
+            math.sin(pose.yaw / 2.0),
+            math.cos(pose.yaw / 2.0),
+        ]
+        self.状态存储.更新位姿状态(runtime_pose)
+        self._更新定位状态("running", 地图名称=resolved_map_name, 置信度=1.0)
+
+        return 命令执行结果.成功结果(
+            "初始位姿已设置",
+            {
+                "pose": pose.导出字典(),
+                "bridge": bridge,
             },
         )
 
