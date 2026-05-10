@@ -6,7 +6,7 @@ from sparkrobot_common import WORKSPACE_DIR, configure_logger, get_logger
 from src.core.config import 运行时配置
 from src.core.ipc import 运行时IPC服务器
 from src.core.state import 机器人状态存储
-from src.services import ROS导航桥客户端, ROS工作空间服务, ROS进程管理服务, 运行时控制服务, 运行时状态服务
+from src.services import ROS导航桥客户端, ROS工作空间服务, ROS进程管理服务, 机器人代理IPC客户端, 运行时控制服务, 运行时状态服务
 
 from . import __version__ as ROBOT_RUNTIME_VERSION
 
@@ -33,12 +33,14 @@ class 机器人运行时应用:
         self.ros工作空间服务 = ROS工作空间服务(self.配置摘要, Path(__file__).resolve().parent.parent)
         self.ros进程服务 = ROS进程管理服务(self.ros工作空间服务, self.log_dir / "ros")
         self.ros导航桥客户端 = ROS导航桥客户端()
+        self.机器人代理IPC客户端 = 机器人代理IPC客户端()
         self.控制服务 = 运行时控制服务(
             self.状态存储,
             self.配置摘要,
             self.ros工作空间服务,
             self.ros进程服务,
             self.ros导航桥客户端,
+            self.机器人代理IPC客户端,
         )
         self.ros进程服务.设置退出回调(self.控制服务.处理ROS进程退出)
         self.ipc_server = 运行时IPC服务器(APP_NAME, self.状态服务, self.控制服务)

@@ -3,9 +3,12 @@ from typing import Any
 from src.core.state import (
     任务状态,
     健康状态,
+    动作控制状态,
     定位状态,
     导航状态,
     建图状态,
+    手动控制状态,
+    控制域状态,
     机器人状态存储,
     激光雷达状态,
     运控桥状态,
@@ -84,6 +87,17 @@ class 运行时状态服务:
                 任务ID=None,
             )
         )
+        self.状态存储.更新控制域状态(
+            控制域状态(
+                当前控制源="idle",
+                当前控制模式="idle",
+                急停=False,
+                允许运动=False,
+                仲裁原因="idle",
+                手动控制=手动控制状态(),
+                动作控制=动作控制状态(),
+            )
+        )
 
     def 构建摘要(self) -> dict[str, Any]:
         """构建用于日志和对外暴露的状态摘要。"""
@@ -138,6 +152,29 @@ class 运行时状态服务:
                 "state": snapshot.任务.状态,
                 "task_type": snapshot.任务.任务类型,
                 "task_id": snapshot.任务.任务ID,
+            },
+            "control": {
+                "active_source": snapshot.控制域.当前控制源,
+                "active_mode": snapshot.控制域.当前控制模式,
+                "emergency_stop": snapshot.控制域.急停,
+                "motion_allowed": snapshot.控制域.允许运动,
+                "arbitration_reason": snapshot.控制域.仲裁原因,
+                "manual": {
+                    "session_id": snapshot.控制域.手动控制.会话ID,
+                    "mode": snapshot.控制域.手动控制.模式,
+                    "source": snapshot.控制域.手动控制.来源,
+                    "active": snapshot.控制域.手动控制.激活,
+                    "velocity": snapshot.控制域.手动控制.速度,
+                    "updated_at_ms": snapshot.控制域.手动控制.更新时间戳毫秒,
+                },
+                "action": {
+                    "action_id": snapshot.控制域.动作控制.动作ID,
+                    "name": snapshot.控制域.动作控制.动作名称,
+                    "state": snapshot.控制域.动作控制.状态,
+                    "source": snapshot.控制域.动作控制.来源,
+                    "parameters": snapshot.控制域.动作控制.参数,
+                    "updated_at_ms": snapshot.控制域.动作控制.更新时间戳毫秒,
+                },
             },
         }
 

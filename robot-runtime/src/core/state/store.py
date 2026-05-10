@@ -6,9 +6,12 @@ from .models import (
     任务状态,
     位姿状态,
     健康状态,
+    动作控制状态,
     定位状态,
     导航状态,
     建图状态,
+    手动控制状态,
+    控制域状态,
     机器人状态快照,
     激光雷达状态,
     运控桥状态,
@@ -67,3 +70,15 @@ class 机器人状态存储:
     def 更新任务状态(self, state: 任务状态) -> None:
         with self._lock:
             self._snapshot.任务 = copy.deepcopy(state)
+
+    def 更新控制域状态(self, state: 控制域状态) -> None:
+        with self._lock:
+            self._snapshot.控制域 = copy.deepcopy(state)
+
+    def 更新手动控制状态(self, state: 手动控制状态) -> None:
+        with self._lock:
+            self._snapshot.控制域.手动控制 = copy.deepcopy(state)
+
+    def 更新动作控制状态(self, state: 动作控制状态) -> None:
+        with self._lock:
+            self._snapshot.控制域.动作控制 = copy.deepcopy(state)

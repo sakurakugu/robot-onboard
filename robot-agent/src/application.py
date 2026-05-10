@@ -28,7 +28,6 @@ from src.modules.audio.capture import AudioCapture
 from src.modules.audio.playback import 停止当前音频播放
 from src.modules.control.direct_control_handler import 直连控制处理器
 from src.modules.control.ipc import IpcServer
-from src.modules.control.joystick import JoystickController
 from src.modules.control.process import ProcessController
 from src.modules.control.sdk_mode_manager import SDK模式管理器
 from src.modules.control.ws_control_server import WsControlServer
@@ -79,7 +78,6 @@ class RobotClient:
         self.message_sender = 消息发送器(self.ws_manager, self._获取当前配置, self._获取注册版本信息)
         self.robot_server_client = RobotServerClient()
         self.交互式子进程控制器 = ProcessController()
-        self.joystick_controller = JoystickController(self.交互式子进程控制器)
         self._action_executor = ThreadPoolExecutor(max_workers=4)
         self.audio_task: Optional[asyncio.Task] = None
         self._ipc_status_task: Optional[asyncio.Task] = None
@@ -99,7 +97,7 @@ class RobotClient:
         )
 
         """ 初始化 IPC 服务器 """
-        self.ipc_server = IpcServer(self.project_name, self._处理IPC状态)
+        self.ipc_server = IpcServer(self.project_name, self._处理IPC状态, self._处理IPC请求)
         self.media_streamer = 云端媒体推流管理器(self.config)
         self.runtime_client = 本地运行时客户端()
 
@@ -146,17 +144,15 @@ class RobotClient:
             获取配置=self._获取当前配置,
             获取动作执行器=self._确保动作执行器,
             提交动作=self.提交动作,
-            joystick_controller=self.joystick_controller,
             audio_capture=self.audio_capture,
             sdk_mode_manager=self.sdk_mode_manager,
             runtime_client=self.runtime_client,
             设置云端媒体租约到期时间=self._设置云端媒体推流租约到期时间,
         )
         self.直连控制处理器 = 直连控制处理器(
-            joystick_controller=self.joystick_controller,
             audio_capture=self.audio_capture,
-            提交动作=self.提交动作,
             sdk_mode_manager=self.sdk_mode_manager,
+            runtime_client=self.runtime_client,
         )
         self.ws_control_server = WsControlServer(
             self.直连控制处理器.处理控制指令,
@@ -271,6 +267,62 @@ class RobotClient:
 
     async def _处理IPC状态(self, status_msg: Dict[str, Any]) -> None:
         await self.runtime_coordinator.处理IPC状态(status_msg)
+
+    async def _处理IPC请求(self, request_msg: Dict[str, Any]) -> Dict[str, Any]:
+        request_id = str(request_msg.get("id") or "unknown")
+        method = str(request_msg.get("method") or "").strip()
+        params = request_msg.get("params", {})
+        if not isinstance(params, dict):
+            return self._构建IPC错误响应(request_id, "invalid_params", "params 必须是对象")
+
+        try:
+            if method == "action.execute":
+                action_name = str(params.get("action_name") or "").strip()
+                if not action_name:
+                    return self._构建IPC错误响应(request_id, "invalid_action", "动作名称不能为空")
+                parameters = params.get("parameters", {})
+                if not isinstance(parameters, dict):
+                    return self._构建IPC错误响应(request_id, "invalid_parameters", "parameters 必须是对象")
+                accepted = self.提交动作(action_name, parameters)
+                if not accepted:
+                    return self._构建IPC错误响应(request_id, "action_rejected", "动作请求未被接受")
+                return self._构建IPC成功响应(
+                    request_id,
+                    {
+                        "accepted": True,
+                        "action_name": action_name,
+                        "parameters": parameters,
+                    },
+                )
+
+            if method == "action.cancel":
+                self.动作调度器.清空并中断()
+                return self._构建IPC成功响应(request_id, {"cancelled": True})
+
+            return self._构建IPC错误响应(request_id, "method_not_found", f"未支持的方法: {method}")
+        except Exception as exc:
+            logger.error(f"处理本地 IPC 请求失败: method={method}, error={exc}", exc_info=True)
+            return self._构建IPC错误响应(request_id, "internal_error", str(exc))
+
+    def _构建IPC成功响应(self, request_id: str, result: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "type": "response",
+            "id": request_id,
+            "success": True,
+            "result": result,
+        }
+
+    def _构建IPC错误响应(self, request_id: str, code: str, message: str) -> Dict[str, Any]:
+        return {
+            "type": "response",
+            "id": request_id,
+            "success": False,
+            "error": {
+                "code": code,
+                "message": message,
+                "details": {},
+            },
+        }
 
     async def _按配置执行SDK关闭动作(self, 日志前缀: str = "") -> None:
         process = self.交互式子进程控制器.process

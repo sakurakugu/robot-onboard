@@ -10,7 +10,7 @@
 - **客户端注册**: 连接时自动注册到服务器
 - **音频采集**: 麦克风采集 → Opus 压缩 → 服务端 ASR
 - **音频播放**: 接收服务端语音回复并在音箱播放
-- **动作执行**: 接收并执行服务端发送的动作指令
+- **动作桥接**: 接收服务端动作指令并转发到 `robot-runtime`
 - **运行时桥接**: 将导航、建图、巡逻命令转发给 `robot-runtime`
 - **状态汇聚上报**: 订阅 `robot-runtime` 摘要状态并转发到云端
 - **视觉识别**: 支持摄像头拍照和视觉分析
@@ -43,8 +43,9 @@ robot-agent/
 │   │   │   └── playback.py      # 音频播放
 │   │   ├── control/             # 控制模块
 │   │   │   ├── ipc.py           # IPC 通信
-│   │   │   ├── joystick.py      # 摇杆控制
-│   │   │   └── process.py       # 进程控制
+│   │   │   ├── direct_control_handler.py # 本地直连控制桥接
+│   │   │   ├── process.py       # 进程控制
+│   │   │   └── ws_control_server.py # 本地直连控制服务
 │   │   ├── runtime/             # 本地运行时桥接
 │   │   │   ├── coordinator.py   # 客户端运行时协调器
 │   │   │   └── runtime_client.py# robot-runtime IPC 客户端包装
@@ -109,8 +110,8 @@ robot-agent/
 | --------- | ---------------------------- |
 | actions   | 动作执行，解析和执行动作指令 |
 | audio     | 音频采集和播放               |
-| control   | IPC 通信、摇杆控制、进程控制 |
-| runtime   | 与 `robot-runtime` 交互、转发导航与建图命令 |
+| control   | IPC 通信、本地直连桥接、进程控制 |
+| runtime   | 与 `robot-runtime` 交互、转发手动控制、动作、导航与建图命令 |
 | transport | WebSocket 通信管理           |
 | vision    | 摄像头和视觉识别             |
 
@@ -204,7 +205,7 @@ tail -f ~/sparkrobot/logs/robot-agent/robot-agent_$(date +%Y%m%d).log
 | 通道           | 用途     | 消息类型             |
 | -------------- | -------- | -------------------- |
 | business       | 业务消息 | 注册、文本、动作指令 |
-| control        | 控制消息 | 心跳、状态、摇杆数据 |
+| control        | 控制消息 | 心跳、状态同步 |
 | audio_upload   | 音频上传 | 语音输入流           |
 | audio_download | 音频下载 | 语音回复流           |
 
@@ -335,6 +336,24 @@ tail -f ~/sparkrobot/logs/robot-agent/robot-agent_$(date +%Y%m%d).log
 }
 ```
 
+**手动控制指令**:
+
+```json
+{
+  "type": "manual_command",
+  "robotId": "uuid",
+  "timestamp": 1234567890,
+  "data": {
+    "command": "update_velocity",
+    "mode": "move",
+    "vx": 0.3,
+    "vy": 0.0,
+    "wz": 0.2,
+    "source": "cloud-ui"
+  }
+}
+```
+
 **建图命令**:
 
 ```json
@@ -401,20 +420,14 @@ tail -f ~/sparkrobot/logs/robot-agent/robot-agent_$(date +%Y%m%d).log
       │
       ▼
 ┌─────────────────┐
-│  mapping.py     │
-│  解析动作格式    │
+│ robot-runtime   │
+│ 统一动作控制域   │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  executor.py    │
-│  执行动作        │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  sdk.py         │
-│  调用底层 SDK    │
+│ 过渡执行后端     │
+│ runtime -> agent │
 └─────────────────┘
 ```
 
@@ -466,7 +479,7 @@ WebSocket 下载
 
 ## SDK 模式
 
-robot-agent 支持两种控制模式：
+robot-agent 支持两种 SDK 工作模式：
 
 - **SDK 模式**: 通过 SDK 直接控制机器狗
 - **遥控模式**: 通过外部遥控器控制
@@ -526,6 +539,6 @@ sudo journalctl -u sparkrobot-agent -f
 
 ### 动作执行问题
 
-1. 确认 SDK 模式已启用
-2. 检查动作名称和参数
-3. 查看 SDK 日志
+1. 确认 `robot-runtime` 正常运行
+2. 确认 SDK 模式已启用
+3. 检查动作名称和参数

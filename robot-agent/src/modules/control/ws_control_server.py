@@ -6,12 +6,10 @@
 端口: 8082
 连接地址: ws://<机器狗IP>:8082
 
-支持的消息格式（两种均可）：
-  格式1（服务器风格）:
-    {"type": "control_command", "data": {"command": "joystick", ...}}
-
-  格式2（直接格式）:
-    {"command": "joystick", "mode": "move", "x": 0.5, "y": 0.0, "speed": 5}
+支持的消息格式：
+  新协议:
+    {"type": "manual_command", "data": {"command": "update_velocity", ...}}
+    {"type": "action_command", "data": {"action_name": "stand_up", ...}}
 
 command 取值:
   - "joystick"          摇杆移动
@@ -82,15 +80,17 @@ class WsControlServer:
                 except Exception:
                     continue
 
-                # 解析消息格式
-                if msg.get("type") == "control_command":
-                    # 格式1：{"type": "control_command", "data": {...}}
-                    data = msg.get("data", {})
-                elif "command" in msg:
-                    # 格式2：{"command": "...", ...}
-                    data = msg
+                # 接收统一运动协议与设备控制协议
+                if msg.get("type") == "manual_command":
+                    data = self._归一化手动控制数据(msg.get("data", {}))
+                elif msg.get("type") == "action_command":
+                    data = self._归一化动作数据(msg.get("data", {}))
+                elif msg.get("type") == "device_command":
+                    payload = msg.get("data", {})
+                    data = payload if isinstance(payload, dict) else {}
                 else:
-                    data = msg
+                    logger.warning(f"[直连控制] 不支持的消息类型: {msg.get('type')}")
+                    continue
 
                 command = data.get("command", "")
 
@@ -127,6 +127,43 @@ class WsControlServer:
                 pass
             finally:
                 logger.info("[直连控制] 本地控制服务已停止")
+
+    def _归一化手动控制数据(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        command = data.get("command", "")
+        if command == "update_velocity":
+            return {
+                "command": "joystick",
+                "mode": data.get("mode", "move"),
+                "x": data.get("vx", 0.0),
+                "y": data.get("vy", 0.0),
+                "wz": data.get("wz", 0.0),
+                "vx": data.get("vx", 0.0),
+                "vy": data.get("vy", 0.0),
+                "source": data.get("source"),
+            }
+        if command == "stop":
+            return {
+                "command": "joystick_stop",
+                "mode": data.get("mode", "move"),
+                "source": data.get("source"),
+            }
+        if command == "emergency_stop":
+            return {
+                "command": "estop",
+                "enabled": data.get("enabled", True),
+                "source": data.get("source"),
+            }
+        return data
+
+    def _归一化动作数据(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        action_name = data.get("action_name") or data.get("action")
+        return {
+            "command": "action",
+            "action": action_name,
+            "parameters": data.get("parameters", {}),
+            "source": data.get("source"),
+            "action_id": data.get("action_id") or data.get("actionId"),
+        }
 
     def _获取serve函数(self) -> Any:
         try:

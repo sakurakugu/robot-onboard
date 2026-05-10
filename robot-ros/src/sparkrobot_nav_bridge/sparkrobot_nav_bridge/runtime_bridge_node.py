@@ -15,13 +15,14 @@ from typing import Any, cast
 
 import rclpy
 from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import OccupancyGrid
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
+from std_msgs.msg import Bool
 
 
 @dataclass
@@ -141,6 +142,9 @@ class 运行时桥接节点(Node):
         self._map_preview_max_cells = self._读取整数参数("map_preview_max_cells", 360000)
         self._latest_map_preview: dict[str, Any] = self._构建空地图预览()
         self._latest_localization_pose: dict[str, Any] = self._构建空定位位姿()
+        self._latest_control_state: dict[str, Any] = self._构建初始控制状态()
+        self._cmd_vel_publisher = self.create_publisher(Twist, self._读取字符串参数("cmd_vel_topic", "/cmd_vel"), 10)
+        self._emergency_stop_publisher = self.create_publisher(Bool, "/sparkrobot/emergency_stop", 10)
         self._initial_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, "/initialpose", 10)
         self._scan_subscription = self.create_subscription(
             LaserScan,
@@ -227,6 +231,22 @@ class 运行时桥接节点(Node):
 
         if command.方法 == "navigation.get_status":
             self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建导航状态摘要()))
+            return
+
+        if command.方法 == "control.get_state":
+            self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_control_state)))
+            return
+
+        if command.方法 == "control.set_velocity":
+            self._执行设置控制速度(command)
+            return
+
+        if command.方法 == "control.stop":
+            self._执行停止控制(command)
+            return
+
+        if command.方法 == "control.set_emergency_stop":
+            self._执行设置急停(command)
             return
 
         if command.方法 == "lidar.get_scan":
@@ -358,6 +378,63 @@ class 运行时桥接节点(Node):
 
         cancel_future = self._goal_handle.cancel_goal_async()
         cancel_future.add_done_callback(lambda future, command=command: self._导航取消响应回调(future, command))
+
+    def _执行设置控制速度(self, command: 桥接命令) -> None:
+        try:
+            vx = float(command.参数.get("vx", 0.0))
+            vy = float(command.参数.get("vy", 0.0))
+            wz = float(command.参数.get("wz", 0.0))
+        except (TypeError, ValueError) as exc:
+            self._设置响应结果(
+                command,
+                self.构建错误响应(command.请求ID, "invalid_control_velocity", f"控制速度参数无效: {exc}"),
+            )
+            return
+
+        source = self._可选字符串(command.参数.get("source"))
+        mode = self._可选字符串(command.参数.get("mode")) or "move"
+        session_id = self._可选字符串(command.参数.get("session_id"))
+
+        twist = Twist()
+        twist.linear.x = vx
+        twist.linear.y = vy
+        twist.angular.z = wz
+        self._cmd_vel_publisher.publish(twist)
+
+        self._latest_control_state = {
+            "available": True,
+            "active": True,
+            "mode": mode,
+            "source": source,
+            "session_id": session_id,
+            "emergency_stop": bool(self._latest_control_state.get("emergency_stop", False)),
+            "velocity": {"vx": vx, "vy": vy, "wz": wz},
+            "updated_at": int(time.time() * 1000),
+        }
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_control_state)))
+
+    def _执行停止控制(self, command: 桥接命令) -> None:
+        twist = Twist()
+        self._cmd_vel_publisher.publish(twist)
+        self._latest_control_state = {
+            **self._latest_control_state,
+            "active": False,
+            "velocity": {"vx": 0.0, "vy": 0.0, "wz": 0.0},
+            "updated_at": int(time.time() * 1000),
+        }
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_control_state)))
+
+    def _执行设置急停(self, command: 桥接命令) -> None:
+        enabled = bool(command.参数.get("enabled", True))
+        message = Bool()
+        message.data = enabled
+        self._emergency_stop_publisher.publish(message)
+        self._latest_control_state = {
+            **self._latest_control_state,
+            "emergency_stop": enabled,
+            "updated_at": int(time.time() * 1000),
+        }
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_control_state)))
 
     def _导航目标响应回调(self, future: Any, command: 桥接命令, goal: dict[str, Any]) -> None:
         self._goal_request_inflight = False
@@ -500,6 +577,18 @@ class 运行时桥接节点(Node):
             "failure_reason": self._failure_reason,
             "last_result": self._last_result,
             "action_server_ready": bool(self._action_client.server_is_ready()),
+        }
+
+    def _构建初始控制状态(self) -> dict[str, Any]:
+        return {
+            "available": True,
+            "active": False,
+            "mode": "move",
+            "source": None,
+            "session_id": None,
+            "emergency_stop": False,
+            "velocity": {"vx": 0.0, "vy": 0.0, "wz": 0.0},
+            "updated_at": 0,
         }
 
     def _构建空激光扫描(self) -> dict[str, Any]:
@@ -782,6 +871,12 @@ class 运行时桥接节点(Node):
             return int(value)
         except (TypeError, ValueError):
             return fallback
+
+    def _可选字符串(self, value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
     def _设置响应结果(self, command: 桥接命令, response: dict[str, Any]) -> None:
         if not command.响应Future.done():

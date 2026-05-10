@@ -115,7 +115,7 @@ class 运行时IPC服务器:
         await self._发送消息(writer, response)
         return False
 
-    async def _执行请求(self, request_id: str, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def _执行请求(self, request_id: str, method: str, params: dict[str, Any]) -> dict[str, Any]:  # noqa: C901
         """执行 RPC 方法。"""
         try:
             if method == "runtime.ping":
@@ -138,6 +138,62 @@ class 运行时IPC服务器:
 
             if method == "mapping.get_preview":
                 return 构建运行时成功响应(request_id, await self.控制服务.获取地图预览())
+
+            if method == "manual.start_session":
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.开始手动控制(
+                        模式=self._可选字符串(params, "mode") or "move",
+                        来源=self._可选字符串(params, "source") or "runtime",
+                        session_id=self._可选字符串(params, "session_id"),
+                    ),
+                )
+
+            if method == "manual.update_velocity":
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.更新手动速度(
+                        模式=self._可选字符串(params, "mode") or "move",
+                        vx=self._浮点值(params, "vx"),
+                        vy=self._解析可选浮点(params.get("vy")) or 0.0,
+                        wz=self._解析可选浮点(params.get("wz")) or 0.0,
+                        来源=self._可选字符串(params, "source") or "runtime",
+                        session_id=self._可选字符串(params, "session_id"),
+                    ),
+                )
+
+            if method == "manual.stop":
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.停止手动控制(self._可选字符串(params, "session_id")),
+                )
+
+            if method == "action.execute":
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.执行动作(
+                        action_name=self._必填字符串(params, "action_name"),
+                        parameters=self._可选字典(params, "parameters"),
+                        来源=self._可选字符串(params, "source") or "runtime",
+                        action_id=self._可选字符串(params, "action_id"),
+                    ),
+                )
+
+            if method == "action.cancel":
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.取消动作(self._可选字符串(params, "action_id")),
+                )
+
+            if method == "safety.emergency_stop":
+                enabled = self._可选布尔值(params, "enabled")
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.设置急停(
+                        enabled=True if enabled is None else enabled,
+                        来源=self._可选字符串(params, "source") or "runtime",
+                    ),
+                )
 
             if method == "mapping.start":
                 return self._转换控制结果(request_id, await self.控制服务.开始建图(self._可选字符串(params, "map_name")))
@@ -292,6 +348,22 @@ class 运行时IPC服务器:
         if value is None:
             return None
         return bool(value)
+
+    def _可选字典(self, params: dict[str, Any], key: str) -> dict[str, Any] | None:
+        value = params.get(key)
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError(f"{key} 必须是对象")
+        return value
+
+    def _解析可选浮点(self, value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            raise ValueError("浮点参数格式不正确") from None
 
     def _解析订阅模式(self, value: Any) -> str:
         mode = str(value or "summary").strip().lower()

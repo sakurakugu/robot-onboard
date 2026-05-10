@@ -96,6 +96,37 @@ class 任务状态:
 
 
 @dataclass
+class 手动控制状态:
+    会话ID: str | None = None
+    模式: str = "move"
+    来源: str | None = None
+    激活: bool = False
+    速度: dict[str, float] = field(default_factory=lambda: {"vx": 0.0, "vy": 0.0, "wz": 0.0})
+    更新时间戳毫秒: int | None = None
+
+
+@dataclass
+class 动作控制状态:
+    动作名称: str | None = None
+    状态: str = "idle"
+    来源: str | None = None
+    参数: dict[str, Any] = field(default_factory=dict)
+    动作ID: str | None = None
+    更新时间戳毫秒: int | None = None
+
+
+@dataclass
+class 控制域状态:
+    当前控制源: str = "idle"
+    当前控制模式: str = "idle"
+    急停: bool = False
+    允许运动: bool = False
+    仲裁原因: str = "idle"
+    手动控制: 手动控制状态 = field(default_factory=手动控制状态)
+    动作控制: 动作控制状态 = field(default_factory=动作控制状态)
+
+
+@dataclass
 class 机器人状态快照:
     健康: 健康状态 = field(default_factory=健康状态)
     运控桥: 运控桥状态 = field(default_factory=运控桥状态)
@@ -107,6 +138,7 @@ class 机器人状态快照:
     定位: 定位状态 = field(default_factory=定位状态)
     导航: 导航状态 = field(default_factory=导航状态)
     任务: 任务状态 = field(default_factory=任务状态)
+    控制域: 控制域状态 = field(default_factory=控制域状态)
 
     def 导出字典(self) -> dict[str, Any]:
         """导出为字典。"""

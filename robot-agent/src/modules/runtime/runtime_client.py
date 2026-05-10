@@ -45,6 +45,51 @@ class 本地运行时客户端:
         """获取最近一帧建图地图预览。"""
         return await self.创建客户端().获取地图预览()
 
+    async def 执行动作命令(self, data: dict[str, Any], source: str = "robot-agent") -> dict[str, Any]:
+        """执行统一动作命令。"""
+        client = self.创建客户端()
+        action_name = self._读取字符串(data, "action", "action_name", 默认值="")
+        if not action_name:
+            raise ValueError("缺少必要参数: action/action_name")
+        parameters = data.get("parameters", {})
+        if not isinstance(parameters, dict):
+            raise ValueError("parameters 必须是对象")
+        action_id = self._读取可选字符串(data, "action_id", "actionId", "requestId")
+        return await client.执行动作(action_name, parameters, source=source, action_id=action_id)
+
+    async def 取消动作命令(self, data: dict[str, Any] | None = None) -> dict[str, Any]:
+        """取消统一动作命令。"""
+        payload = data or {}
+        client = self.创建客户端()
+        action_id = self._读取可选字符串(payload, "action_id", "actionId", "requestId")
+        return await client.取消动作(action_id)
+
+    async def 执行控制命令(self, data: dict[str, Any], source: str = "robot-agent") -> dict[str, Any]:
+        """执行统一手动控制命令。"""
+        client = self.创建客户端()
+        command = self._提取命令(data, 默认命令="joystick")
+        if command == "estop":
+            return await client.设置急停(True, source=source)
+
+        if command in {"joystick_stop", "stop"}:
+            session_id = self._读取可选字符串(data, "session_id", "sessionId")
+            return await client.停止手动控制(session_id)
+
+        if command != "joystick":
+            raise ValueError(f"不支持的控制命令: {command}")
+
+        mode = self._读取可选字符串(data, "mode") or "move"
+        velocity = self._解析控制速度(data)
+        session_id = self._读取可选字符串(data, "session_id", "sessionId")
+        return await client.更新手动速度(
+            mode=mode,
+            vx=velocity["vx"],
+            vy=velocity["vy"],
+            wz=velocity["wz"],
+            source=source,
+            session_id=session_id,
+        )
+
     async def 执行导航命令(self, data: dict[str, Any]) -> dict[str, Any]:
         """执行导航命令。"""
         client = self.创建客户端()
@@ -170,6 +215,70 @@ class 本地运行时客户端:
         value = data.get(key)
         if value is None:
             raise ValueError(f"缺少必要参数: {key}")
+        return float(value)
+
+    def _解析控制速度(self, data: dict[str, Any]) -> dict[str, float]:
+        if any(key in data for key in ("vx", "vy", "wz")):
+            return {
+                "vx": self._读取可选浮点(data, "vx") or 0.0,
+                "vy": self._读取可选浮点(data, "vy") or 0.0,
+                "wz": self._读取可选浮点(data, "wz") or 0.0,
+            }
+
+        joystick_raw = data.get("joystick")
+        mode = (self._读取可选字符串(data, "mode") or "move").strip().lower()
+        speed = self._读取可选浮点(data, "speed") or 5.0
+        speed_ratio = max(0.0, min(1.0, speed / 30.0))
+
+        axis0 = 0.0
+        axis1 = 0.0
+        axis2 = 0.0
+        axis3 = 0.0
+        if isinstance(joystick_raw, list) and len(joystick_raw) >= 4:
+            axis0 = float(joystick_raw[0] or 0)
+            axis1 = float(joystick_raw[1] or 0)
+            axis2 = float(joystick_raw[2] or 0)
+            axis3 = float(joystick_raw[3] or 0)
+        else:
+            x = self._读取可选浮点(data, "x") or 0.0
+            y = self._读取可选浮点(data, "y") or 0.0
+            channel = (self._读取可选字符串(data, "channel") or "").strip().lower()
+            if mode == "pose" or channel == "pose":
+                axis2 = x
+                axis3 = y
+            elif mode == "two_leg" or channel == "two_leg":
+                axis0 = x
+                axis1 = y
+            elif channel == "look":
+                axis2 = y
+            else:
+                axis0 = x
+                axis1 = y
+
+        if mode == "two_leg":
+            return {
+                "vx": axis0 * 3.0 * speed_ratio,
+                "vy": 0.0,
+                "wz": axis1 * 1.0 * speed_ratio,
+            }
+
+        if mode == "pose":
+            return {
+                "vx": 0.0,
+                "vy": 0.0,
+                "wz": 0.0,
+            }
+
+        return {
+            "vx": axis0 * 3.0 * speed_ratio,
+            "vy": axis1 * 1.0 * speed_ratio,
+            "wz": axis2 * 3.0 * speed_ratio,
+        }
+
+    def _读取可选浮点(self, data: dict[str, Any], key: str) -> float | None:
+        value = data.get(key)
+        if value is None:
+            return None
         return float(value)
 
     def _读取可选布尔值(self, data: dict[str, Any], *keys: str) -> bool | None:

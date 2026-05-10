@@ -11,8 +11,9 @@ from typing import Any
 
 from sparkrobot_common import WORKSPACE_DIR, get_logger
 
-from src.core.state import 任务状态, 导航状态, 机器人状态存储
+from src.core.state import 任务状态, 动作控制状态, 导航状态, 手动控制状态, 机器人状态存储
 
+from .agent_ipc_service import 机器人代理IPC客户端, 机器人代理IPC错误
 from .patrol_route_service import 巡逻路线, 巡逻路线加载错误, 巡逻路线服务
 from .robot_telemetry_service import 机器狗遥测服务, 机器狗遥测错误
 from .ros_nav_bridge_service import ROS导航桥客户端, ROS导航桥错误
@@ -118,6 +119,48 @@ class 巡逻上下文:
     已暂停: bool = False
 
 
+@dataclass(frozen=True)
+class 手动控制指令:
+    """运行时侧手动控制指令。"""
+
+    会话ID: str
+    模式: str
+    来源: str
+    vx: float = 0.0
+    vy: float = 0.0
+    wz: float = 0.0
+
+    def 导出字典(self) -> dict[str, Any]:
+        return {
+            "session_id": self.会话ID,
+            "mode": self.模式,
+            "source": self.来源,
+            "velocity": {
+                "vx": self.vx,
+                "vy": self.vy,
+                "wz": self.wz,
+            },
+        }
+
+
+@dataclass(frozen=True)
+class 动作执行请求:
+    """运行时侧动作执行请求。"""
+
+    动作名称: str
+    来源: str
+    参数: dict[str, Any] = field(default_factory=dict)
+    动作ID: str | None = None
+
+    def 导出字典(self) -> dict[str, Any]:
+        return {
+            "action_id": self.动作ID,
+            "name": self.动作名称,
+            "source": self.来源,
+            "parameters": self.参数,
+        }
+
+
 class 运行时控制服务:
     """运行时控制服务。"""
 
@@ -128,12 +171,14 @@ class 运行时控制服务:
         ros工作空间服务: ROS工作空间服务,
         ros进程服务: ROS进程管理服务,
         ros导航桥客户端: ROS导航桥客户端,
+        机器人代理客户端: 机器人代理IPC客户端,
     ) -> None:
         self.状态存储 = 状态存储
         self.config = config
         self.ros工作空间服务 = ros工作空间服务
         self.ros进程服务 = ros进程服务
         self.ros导航桥客户端 = ros导航桥客户端
+        self.机器人代理客户端 = 机器人代理客户端
         self.巡逻路线服务 = 巡逻路线服务()
         self.机器狗遥测服务 = 机器狗遥测服务()
 
@@ -150,6 +195,8 @@ class 运行时控制服务:
         self._导航上下文: 导航任务上下文 | None = None
         self._巡逻上下文: 巡逻上下文 | None = None
         self._上次机器狗遥测错误时间 = 0.0
+        self._手动控制会话: 手动控制指令 | None = None
+        self._当前动作请求: 动作执行请求 | None = None
 
     def _解析目录配置(self, section: str, key: str, fallback: Path) -> Path:
         """解析目录配置。"""
@@ -248,6 +295,87 @@ class 运行时控制服务:
                 任务类型=task_type,
                 任务ID=task_id,
             )
+        )
+
+    def _更新控制域状态(
+        self,
+        当前控制源: str | None = None,
+        当前控制模式: str | None = None,
+        急停: bool | None = None,
+        允许运动: bool | None = None,
+        仲裁原因: str | None = None,
+    ) -> None:
+        snapshot = self._获取快照()
+        control = snapshot.控制域
+        if 当前控制源 is not None:
+            control.当前控制源 = 当前控制源
+        if 当前控制模式 is not None:
+            control.当前控制模式 = 当前控制模式
+        if 急停 is not None:
+            control.急停 = 急停
+        if 允许运动 is not None:
+            control.允许运动 = 允许运动
+        if 仲裁原因 is not None:
+            control.仲裁原因 = 仲裁原因
+        self.状态存储.更新控制域状态(control)
+
+    def _更新手动控制状态(self, state: 手动控制状态) -> None:
+        self.状态存储.更新手动控制状态(state)
+
+    def _更新动作控制状态(self, state: 动作控制状态) -> None:
+        self.状态存储.更新动作控制状态(state)
+
+    def _当前时间戳毫秒(self) -> int:
+        return int(datetime.now().timestamp() * 1000)
+
+    def _刷新控制域仲裁(self) -> None:
+        snapshot = self._获取快照()
+        dog_bridge_ready = snapshot.运控桥.在线 and snapshot.运控桥.运动控制启用 and snapshot.运控桥.SDK就绪
+        if snapshot.控制域.急停:
+            self._更新控制域状态(
+                当前控制源="system",
+                当前控制模式="emergency_stop",
+                允许运动=False,
+                仲裁原因="emergency_stop",
+            )
+            return
+        if self._手动控制会话 is not None:
+            self._更新控制域状态(
+                当前控制源="manual",
+                当前控制模式=self._手动控制会话.模式,
+                允许运动=dog_bridge_ready,
+                仲裁原因="manual_control",
+            )
+            return
+        if self._当前动作请求 is not None:
+            self._更新控制域状态(
+                当前控制源="action",
+                当前控制模式="action",
+                允许运动=dog_bridge_ready,
+                仲裁原因="action_active",
+            )
+            return
+        if self._巡逻上下文 is not None:
+            self._更新控制域状态(
+                当前控制源="patrol",
+                当前控制模式="navigation",
+                允许运动=dog_bridge_ready,
+                仲裁原因="patrol_active",
+            )
+            return
+        if self._导航上下文 is not None:
+            self._更新控制域状态(
+                当前控制源="navigation",
+                当前控制模式="navigation",
+                允许运动=dog_bridge_ready,
+                仲裁原因="navigation_active",
+            )
+            return
+        self._更新控制域状态(
+            当前控制源="idle",
+            当前控制模式="idle",
+            允许运动=False,
+            仲裁原因="idle",
         )
 
     def _更新激光雷达状态(self) -> None:
@@ -448,6 +576,299 @@ class 运行时控制服务:
             return
         self._上次机器狗遥测错误时间 = current_time
         logger.warning("同步机器狗遥测失败: %s", message)
+
+    async def 开始手动控制(
+        self,
+        模式: str,
+        来源: str = "runtime",
+        session_id: str | None = None,
+    ) -> 命令执行结果:
+        """开启或接管手动控制会话。"""
+        if self._巡逻上下文 is not None or self._导航上下文 is not None:
+            terminate_result = await self.终止当前任务()
+            if not terminate_result.成功:
+                return terminate_result
+
+        normalized_mode = self._标准化手动控制模式(模式)
+        manual_session_id = session_id or str(uuid.uuid4())
+        self._手动控制会话 = 手动控制指令(
+            会话ID=manual_session_id,
+            模式=normalized_mode,
+            来源=来源,
+            vx=0.0,
+            vy=0.0,
+            wz=0.0,
+        )
+        self._更新手动控制状态(
+            手动控制状态(
+                会话ID=manual_session_id,
+                模式=normalized_mode,
+                来源=来源,
+                激活=True,
+                速度={"vx": 0.0, "vy": 0.0, "wz": 0.0},
+                更新时间戳毫秒=self._当前时间戳毫秒(),
+            )
+        )
+        self._刷新控制域仲裁()
+        try:
+            control_output = await self.ros导航桥客户端.设置控制速度(
+                {
+                    "session_id": manual_session_id,
+                    "mode": normalized_mode,
+                    "source": 来源,
+                    "vx": 0.0,
+                    "vy": 0.0,
+                    "wz": 0.0,
+                },
+                timeout_sec=1.0,
+            )
+        except ROS导航桥错误 as exc:
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+        return 命令执行结果.成功结果(
+            "手动控制已激活",
+            {
+                "session": self._手动控制会话.导出字典(),
+                "control_output": control_output,
+            },
+        )
+
+    async def 更新手动速度(
+        self,
+        模式: str,
+        vx: float,
+        vy: float,
+        wz: float,
+        来源: str = "runtime",
+        session_id: str | None = None,
+    ) -> 命令执行结果:
+        """更新手动控制速度。"""
+        if self._手动控制会话 is None:
+            start_result = await self.开始手动控制(模式=模式, 来源=来源, session_id=session_id)
+            if not start_result.成功:
+                return start_result
+        elif session_id and self._手动控制会话.会话ID != session_id:
+            return 命令执行结果.失败结果("manual_session_mismatch", "手动控制会话不匹配")
+
+        assert self._手动控制会话 is not None
+        normalized_mode = self._标准化手动控制模式(模式)
+        self._手动控制会话 = replace(
+            self._手动控制会话,
+            模式=normalized_mode,
+            来源=来源,
+            vx=float(vx),
+            vy=float(vy),
+            wz=float(wz),
+        )
+        self._更新手动控制状态(
+            手动控制状态(
+                会话ID=self._手动控制会话.会话ID,
+                模式=self._手动控制会话.模式,
+                来源=self._手动控制会话.来源,
+                激活=True,
+                速度={"vx": self._手动控制会话.vx, "vy": self._手动控制会话.vy, "wz": self._手动控制会话.wz},
+                更新时间戳毫秒=self._当前时间戳毫秒(),
+            )
+        )
+        self._刷新控制域仲裁()
+        try:
+            control_output = await self.ros导航桥客户端.设置控制速度(
+                {
+                    "session_id": self._手动控制会话.会话ID,
+                    "mode": self._手动控制会话.模式,
+                    "source": self._手动控制会话.来源,
+                    "vx": self._手动控制会话.vx,
+                    "vy": self._手动控制会话.vy,
+                    "wz": self._手动控制会话.wz,
+                },
+                timeout_sec=1.0,
+            )
+        except ROS导航桥错误 as exc:
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+        return 命令执行结果.成功结果(
+            "手动速度已更新",
+            {
+                "session": self._手动控制会话.导出字典(),
+                "control_output": control_output,
+            },
+        )
+
+    async def 停止手动控制(self, session_id: str | None = None) -> 命令执行结果:
+        """停止手动控制会话。"""
+        if self._手动控制会话 is None:
+            return 命令执行结果.成功结果("当前没有活动手动控制会话")
+        if session_id and self._手动控制会话.会话ID != session_id:
+            return 命令执行结果.失败结果("manual_session_mismatch", "手动控制会话不匹配")
+
+        stopped_session = self._手动控制会话
+        self._手动控制会话 = None
+        self._更新手动控制状态(
+            手动控制状态(
+                会话ID=stopped_session.会话ID,
+                模式=stopped_session.模式,
+                来源=stopped_session.来源,
+                激活=False,
+                速度={"vx": 0.0, "vy": 0.0, "wz": 0.0},
+                更新时间戳毫秒=self._当前时间戳毫秒(),
+            )
+        )
+        self._刷新控制域仲裁()
+        try:
+            control_output = await self.ros导航桥客户端.停止控制(timeout_sec=1.0)
+        except ROS导航桥错误 as exc:
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+        return 命令执行结果.成功结果(
+            "手动控制已停止",
+            {"session_id": stopped_session.会话ID, "control_output": control_output},
+        )
+
+    async def 执行动作(
+        self,
+        action_name: str,
+        parameters: dict[str, Any] | None = None,
+        来源: str = "runtime",
+        action_id: str | None = None,
+    ) -> 命令执行结果:
+        """登记动作执行请求。"""
+        normalized_action = str(action_name).strip()
+        if not normalized_action:
+            return 命令执行结果.失败结果("invalid_action", "动作名称不能为空")
+        if self._巡逻上下文 is not None or self._导航上下文 is not None:
+            terminate_result = await self.终止当前任务()
+            if not terminate_result.成功:
+                return terminate_result
+
+        request = 动作执行请求(
+            动作名称=normalized_action,
+            来源=来源,
+            参数=dict(parameters or {}),
+            动作ID=action_id or str(uuid.uuid4()),
+        )
+        self._当前动作请求 = request
+        self._更新动作控制状态(
+            动作控制状态(
+                动作名称=request.动作名称,
+                状态="queued",
+                来源=request.来源,
+                参数=request.参数,
+                动作ID=request.动作ID,
+                更新时间戳毫秒=self._当前时间戳毫秒(),
+            )
+        )
+        self._刷新控制域仲裁()
+        try:
+            action_output = await self.机器人代理客户端.执行动作(
+                request.动作名称,
+                request.参数,
+                timeout_sec=1.5,
+            )
+        except 机器人代理IPC错误 as exc:
+            self._当前动作请求 = None
+            self._更新动作控制状态(
+                动作控制状态(
+                    动作名称=request.动作名称,
+                    状态="error",
+                    来源=request.来源,
+                    参数=request.参数,
+                    动作ID=request.动作ID,
+                    更新时间戳毫秒=self._当前时间戳毫秒(),
+                )
+            )
+            self._刷新控制域仲裁()
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+
+        self._更新动作控制状态(
+            动作控制状态(
+                动作名称=request.动作名称,
+                状态="running",
+                来源=request.来源,
+                参数=request.参数,
+                动作ID=request.动作ID,
+                更新时间戳毫秒=self._当前时间戳毫秒(),
+            )
+        )
+        return 命令执行结果.成功结果(
+            "动作请求已登记",
+            {"action": request.导出字典(), "agent": action_output},
+        )
+
+    async def 取消动作(self, action_id: str | None = None) -> 命令执行结果:
+        """取消当前动作请求。"""
+        if self._当前动作请求 is None:
+            return 命令执行结果.成功结果("当前没有活动动作请求")
+        if action_id and self._当前动作请求.动作ID != action_id:
+            return 命令执行结果.失败结果("action_id_mismatch", "动作请求 ID 不匹配")
+
+        current_request = self._当前动作请求
+        self._当前动作请求 = None
+        self._更新动作控制状态(
+            动作控制状态(
+                动作名称=current_request.动作名称,
+                状态="cancelled",
+                来源=current_request.来源,
+                参数=current_request.参数,
+                动作ID=current_request.动作ID,
+                更新时间戳毫秒=self._当前时间戳毫秒(),
+            )
+        )
+        self._刷新控制域仲裁()
+        try:
+            agent_output = await self.机器人代理客户端.取消动作(timeout_sec=1.0)
+        except 机器人代理IPC错误 as exc:
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+        return 命令执行结果.成功结果(
+            "动作请求已取消",
+            {"action_id": current_request.动作ID, "agent": agent_output},
+        )
+
+    async def 设置急停(self, enabled: bool, 来源: str = "runtime") -> 命令执行结果:
+        """设置统一急停状态。"""
+        snapshot = self._获取快照()
+        control = snapshot.控制域
+        dog_bridge = snapshot.运控桥
+        control.急停 = bool(enabled)
+        if enabled:
+            self._手动控制会话 = None
+            self._当前动作请求 = None
+            self._更新手动控制状态(
+                手动控制状态(
+                    会话ID=None,
+                    模式="move",
+                    来源=来源,
+                    激活=False,
+                    速度={"vx": 0.0, "vy": 0.0, "wz": 0.0},
+                    更新时间戳毫秒=self._当前时间戳毫秒(),
+                )
+            )
+            self._更新动作控制状态(
+                动作控制状态(
+                    动作名称=None,
+                    状态="cancelled",
+                    来源=来源,
+                    参数={},
+                    动作ID=None,
+                    更新时间戳毫秒=self._当前时间戳毫秒(),
+                )
+            )
+        self.状态存储.更新控制域状态(control)
+        dog_bridge.急停 = bool(enabled)
+        self.状态存储.更新运控桥状态(dog_bridge)
+        self._刷新控制域仲裁()
+        try:
+            bridge_result = await self.ros导航桥客户端.设置急停(bool(enabled), timeout_sec=1.0)
+            if enabled:
+                await self.ros导航桥客户端.停止控制(timeout_sec=1.0)
+        except ROS导航桥错误 as exc:
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+        return 命令执行结果.成功结果(
+            "急停状态已更新",
+            {"enabled": bool(enabled), "bridge": bridge_result},
+        )
+
+    def _标准化手动控制模式(self, mode: str) -> str:
+        normalized = str(mode).strip().lower()
+        if normalized not in {"move", "pose", "two_leg"}:
+            return "move"
+        return normalized
 
     def _构建当前平面位姿(self) -> dict[str, Any]:
         snapshot = self._获取快照()

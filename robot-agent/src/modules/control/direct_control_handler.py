@@ -3,6 +3,7 @@ from typing import Any, Awaitable, Callable
 
 from sparkrobot_common import get_logger
 
+from src.modules.runtime.runtime_client import 本地运行时客户端
 from src.modules.vision import capture_photo
 
 logger = get_logger("robot-agent")
@@ -15,25 +16,19 @@ class 直连控制处理器:
 
     def __init__(
         self,
-        joystick_controller: Any,
         audio_capture: Any,
-        提交动作: Callable[[str, dict[str, Any] | None], bool],
         sdk_mode_manager: Any,
+        runtime_client: 本地运行时客户端,
     ) -> None:
-        self.joystick_controller = joystick_controller
         self.audio_capture = audio_capture
-        self.提交动作 = 提交动作
         self.sdk_mode_manager = sdk_mode_manager
+        self.runtime_client = runtime_client
 
     def 处理控制指令(self, data: dict[str, Any]) -> None:
         """处理来自手机直连 WebSocket 的同步控制指令。"""
         command = data.get("command", "")
         if command in ("joystick", "joystick_stop", "estop"):
-            self.joystick_controller.处理命令(data)
-        elif command == "action":
-            action = data.get("action", "")
-            if action:
-                self.提交动作(action, data.get("parameters", {}))
+            asyncio.create_task(self._优先转发控制命令(data))
         elif command == "mic_control":
             enabled = bool(data.get("enabled", True))
             self.audio_capture.audio_streaming_enabled = enabled
@@ -102,3 +97,6 @@ class 直连控制处理器:
             return
 
         logger.debug(f"[直连控制] 未知异步指令: {command}")
+
+    async def _优先转发控制命令(self, data: dict[str, Any]) -> None:
+        await self.runtime_client.执行控制命令(data, source="direct-control")

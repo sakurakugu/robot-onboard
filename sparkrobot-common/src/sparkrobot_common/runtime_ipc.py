@@ -230,6 +230,73 @@ class 运行时IPC客户端:
         """获取最近一帧建图地图预览。"""
         return await self.调用("mapping.get_preview")
 
+    async def 开始手动控制(
+        self,
+        mode: str = "move",
+        source: str = "runtime",
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        """开始手动控制会话。"""
+        params: dict[str, Any] = {
+            "mode": mode,
+            "source": source,
+        }
+        if session_id:
+            params["session_id"] = session_id
+        return await self.调用("manual.start_session", params)
+
+    async def 更新手动速度(
+        self,
+        mode: str,
+        vx: float,
+        vy: float = 0.0,
+        wz: float = 0.0,
+        source: str = "runtime",
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        """更新手动控制速度。"""
+        params: dict[str, Any] = {
+            "mode": mode,
+            "vx": vx,
+            "vy": vy,
+            "wz": wz,
+            "source": source,
+        }
+        if session_id:
+            params["session_id"] = session_id
+        return await self.调用("manual.update_velocity", params)
+
+    async def 停止手动控制(self, session_id: str | None = None) -> dict[str, Any]:
+        """停止手动控制会话。"""
+        params = {"session_id": session_id} if session_id else {}
+        return await self.调用("manual.stop", params)
+
+    async def 执行动作(
+        self,
+        action_name: str,
+        parameters: dict[str, Any] | None = None,
+        source: str = "runtime",
+        action_id: str | None = None,
+    ) -> dict[str, Any]:
+        """执行动作请求。"""
+        params: dict[str, Any] = {
+            "action_name": action_name,
+            "parameters": parameters or {},
+            "source": source,
+        }
+        if action_id:
+            params["action_id"] = action_id
+        return await self.调用("action.execute", params)
+
+    async def 取消动作(self, action_id: str | None = None) -> dict[str, Any]:
+        """取消动作请求。"""
+        params = {"action_id": action_id} if action_id else {}
+        return await self.调用("action.cancel", params)
+
+    async def 设置急停(self, enabled: bool = True, source: str = "runtime") -> dict[str, Any]:
+        """设置急停状态。"""
+        return await self.调用("safety.emergency_stop", {"enabled": enabled, "source": source})
+
     async def 开始建图(self, map_name: str | None = None) -> dict[str, Any]:
         """开始建图。"""
         params = {"map_name": map_name} if map_name else {}

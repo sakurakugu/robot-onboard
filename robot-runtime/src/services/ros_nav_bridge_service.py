@@ -55,6 +55,22 @@ class ROS导航桥客户端:
         """获取桥接节点当前导航状态。"""
         return await self._调用("navigation.get_status", {}, timeout_sec=timeout_sec)
 
+    async def 获取控制状态(self, timeout_sec: float | None = None) -> dict[str, Any]:
+        """获取桥接节点当前控制状态。"""
+        return await self._调用("control.get_state", {}, timeout_sec=timeout_sec)
+
+    async def 设置控制速度(self, payload: dict[str, Any], timeout_sec: float | None = None) -> dict[str, Any]:
+        """发布手动控制速度到 ROS 控制桥。"""
+        return await self._调用("control.set_velocity", payload, timeout_sec=timeout_sec)
+
+    async def 停止控制(self, timeout_sec: float | None = None) -> dict[str, Any]:
+        """发布零速度停止控制。"""
+        return await self._调用("control.stop", {}, timeout_sec=timeout_sec)
+
+    async def 设置急停(self, enabled: bool, timeout_sec: float | None = None) -> dict[str, Any]:
+        """切换 ROS 控制桥急停状态。"""
+        return await self._调用("control.set_emergency_stop", {"enabled": enabled}, timeout_sec=timeout_sec)
+
     async def 获取激光扫描(self, timeout_sec: float | None = None) -> dict[str, Any]:
         """获取最近一帧激光扫描。"""
         return await self._调用("lidar.get_scan", {}, timeout_sec=timeout_sec)

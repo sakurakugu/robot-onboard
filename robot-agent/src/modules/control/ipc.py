@@ -6,10 +6,17 @@ from sparkrobot_common import ORG_NAME, 获取IPC路径, get_logger
 
 logger = get_logger("robot-agent")
 
+
 class IpcServer:
-    def __init__(self, project_name: str, on_status: Callable[[Dict[str, Any]], Awaitable[None]]):
+    def __init__(
+        self,
+        project_name: str,
+        on_status: Callable[[Dict[str, Any]], Awaitable[None]],
+        on_request: Optional[Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = None,
+    ):
         self.project_name = project_name
         self.on_status = on_status
+        self.on_request = on_request
         self._server: Optional[asyncio.AbstractServer] = None
 
     async def 启动(self) -> None:
@@ -32,6 +39,11 @@ class IpcServer:
                         continue
                     if isinstance(message, dict) and message.get("type") == "status":
                         await self.on_status(message)
+                        continue
+                    if isinstance(message, dict) and message.get("type") == "request" and self.on_request is not None:
+                        response = await self.on_request(message)
+                        writer.write((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+                        await writer.drain()
             except Exception as e:
                 logger.warning(f"IPC连接异常: {e}")
             finally:

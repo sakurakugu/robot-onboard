@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import httpx
 from sparkrobot_common import get_logger
 
-from src.modules.actions.mapping import 处理动作指令, 处理文本响应
+from src.modules.actions.mapping import 处理文本响应
 from src.modules.audio.playback import 停止当前音频播放, 处理音频响应并播放
 from src.modules.runtime.runtime_client import 本地运行时客户端
 from src.modules.transport.message_sender import 消息发送器
@@ -72,7 +72,6 @@ class 业务消息处理器:
         获取配置: Callable[[], dict[str, Any]],
         获取动作执行器: Callable[[], Any],
         提交动作: Callable[[str, dict[str, Any] | None], bool],
-        joystick_controller: Any,
         audio_capture: Any,
         sdk_mode_manager: Any,
         runtime_client: 本地运行时客户端,
@@ -84,7 +83,6 @@ class 业务消息处理器:
         self._获取配置 = 获取配置
         self._获取动作执行器 = 获取动作执行器
         self._提交动作 = 提交动作
-        self.joystick_controller = joystick_controller
         self.audio_capture = audio_capture
         self.sdk_mode_manager = sdk_mode_manager
         self.runtime_client = runtime_client
@@ -93,10 +91,10 @@ class 业务消息处理器:
             "text_response": self.处理文本响应,
             "audio_response": self.处理音频响应并播放,
             "action_command": self.处理动作指令,
+            "manual_command": self.处理手动控制指令,
             "navigation_command": self.处理导航命令,
             "map_command": self.处理地图命令,
             "patrol_command": self.处理巡逻命令,
-            "control_command": self.处理控制指令,
             "audio_control": self.处理音频控制,
             "stop_audio": self.处理停止音频播放,
             "error": self.处理服务器错误,
@@ -480,17 +478,11 @@ class 业务消息处理器:
 
     async def 处理动作指令(self, data: dict[str, Any], upstream: str) -> None:
         """处理动作指令消息。"""
-        await 处理动作指令(data, self._提交动作, self._获取动作执行器())
+        await self.runtime_client.执行动作命令(data, source=f"robot-agent:{upstream}")
 
-    async def 处理控制指令(self, data: dict[str, Any], upstream: str) -> None:
-        """处理控制指令消息。"""
-        command = data.get("command", "")
-        if command == "action":
-            action = data.get("action", "")
-            if action:
-                self._提交动作(action, data.get("parameters", {}))
-            return
-        self.joystick_controller.处理命令(data)
+    async def 处理手动控制指令(self, data: dict[str, Any], upstream: str) -> None:
+        """处理统一手动控制消息。"""
+        await self.runtime_client.执行控制命令(data, source=f"robot-agent:{upstream}")
 
     async def 处理服务器错误(self, data: dict[str, Any], upstream: str) -> None:
         """处理服务器错误消息。"""
