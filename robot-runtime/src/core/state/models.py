@@ -33,6 +33,7 @@ class 位姿状态:
     x: float = 0.0
     y: float = 0.0
     yaw: float = 0.0
+    置信度: float | None = None
     四元数: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
 
 

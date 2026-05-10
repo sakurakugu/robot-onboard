@@ -111,6 +111,7 @@ class 运行时桥接节点(Node):
         self.declare_parameter("imu_topic", "/imu")
         self.declare_parameter("scan_topic", "/scan")
         self.declare_parameter("map_topic", "/map")
+        self.declare_parameter("amcl_pose_topic", "/amcl_pose")
         self.declare_parameter("scan_max_points", 720)
         self.declare_parameter("map_preview_max_cells", 360000)
         self.declare_parameter("navigation_action_name", "navigate_to_pose")
@@ -139,6 +140,7 @@ class 运行时桥接节点(Node):
         self._latest_scan: dict[str, Any] = self._构建空激光扫描()
         self._map_preview_max_cells = self._读取整数参数("map_preview_max_cells", 360000)
         self._latest_map_preview: dict[str, Any] = self._构建空地图预览()
+        self._latest_localization_pose: dict[str, Any] = self._构建空定位位姿()
         self._initial_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, "/initialpose", 10)
         self._scan_subscription = self.create_subscription(
             LaserScan,
@@ -150,6 +152,12 @@ class 运行时桥接节点(Node):
             OccupancyGrid,
             self._读取字符串参数("map_topic", "/map"),
             self._处理地图预览,
+            10,
+        )
+        self._amcl_pose_subscription = self.create_subscription(
+            PoseWithCovarianceStamped,
+            self._读取字符串参数("amcl_pose_topic", "/amcl_pose"),
+            self._处理定位位姿,
             10,
         )
 
@@ -227,6 +235,10 @@ class 运行时桥接节点(Node):
 
         if command.方法 == "mapping.get_preview":
             self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_map_preview)))
+            return
+
+        if command.方法 == "localization.get_pose":
+            self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_localization_pose)))
             return
 
         if command.方法 == "localization.set_initial_pose":
@@ -520,6 +532,18 @@ class 运行时桥接节点(Node):
             "sequence": 0,
         }
 
+    def _构建空定位位姿(self) -> dict[str, Any]:
+        return {
+            "available": False,
+            "frame_id": "map",
+            "position": [0.0, 0.0, 0.0],
+            "orientation": [0.0, 0.0, 0.0, 1.0],
+            "yaw": 0.0,
+            "confidence": None,
+            "covariance": [],
+            "captured_at": 0,
+        }
+
     def _处理激光扫描(self, message: LaserScan) -> None:
         ranges = [self._归一化量测值(item) for item in message.ranges]
         sampled_ranges, actual_step = self._压缩激光扫描(ranges)
@@ -577,6 +601,34 @@ class 运行时桥接节点(Node):
             "data": base64.b64encode(raw).decode("ascii"),
             "captured_at": int(time.time() * 1000),
             "sequence": int(message.header.stamp.sec) * 1_000_000_000 + int(message.header.stamp.nanosec),
+        }
+
+    def _处理定位位姿(self, message: PoseWithCovarianceStamped) -> None:
+        orientation = message.pose.pose.orientation
+        covariance = list(message.pose.covariance)
+        self._latest_localization_pose = {
+            "available": True,
+            "frame_id": message.header.frame_id or "map",
+            "position": [
+                float(message.pose.pose.position.x),
+                float(message.pose.pose.position.y),
+                float(message.pose.pose.position.z),
+            ],
+            "orientation": [
+                float(orientation.x),
+                float(orientation.y),
+                float(orientation.z),
+                float(orientation.w),
+            ],
+            "yaw": self._从四元数解析偏航角(
+                float(orientation.x),
+                float(orientation.y),
+                float(orientation.z),
+                float(orientation.w),
+            ),
+            "confidence": self._计算定位置信度(covariance),
+            "covariance": covariance,
+            "captured_at": int(time.time() * 1000),
         }
 
     def _压缩激光扫描(self, ranges: list[float | None]) -> tuple[list[float | None], int]:
@@ -656,6 +708,19 @@ class 运行时桥接节点(Node):
         siny_cosp = 2.0 * (w * z + x * y)
         cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
         return math.atan2(siny_cosp, cosy_cosp)
+
+    def _计算定位置信度(self, covariance: list[float]) -> float | None:
+        if len(covariance) < 36:
+            return None
+
+        cov_x = covariance[0]
+        cov_y = covariance[7]
+        cov_yaw = covariance[35]
+        if not all(math.isfinite(value) and value >= 0.0 for value in (cov_x, cov_y, cov_yaw)):
+            return None
+
+        score = 1.0 / (1.0 + cov_x + cov_y + (cov_yaw * 4.0))
+        return max(0.0, min(1.0, score))
 
     def _构建导航消息(self, goal: dict[str, Any]) -> NavigateToPose.Goal:
         message = NavigateToPose.Goal()

@@ -271,6 +271,42 @@ class 运行时控制服务:
         payload["map_name"] = snapshot.建图.当前地图 or snapshot.建图.最近地图 or ""
         return payload
 
+    async def _同步ROS定位位姿(self) -> bool:
+        if not self.ros进程服务.是否运行("localization"):
+            return False
+
+        try:
+            payload = await self.ros导航桥客户端.获取定位位姿(timeout_sec=1.0)
+        except ROS导航桥错误:
+            return False
+
+        if payload.get("available") is not True:
+            return False
+
+        snapshot = self._获取快照()
+        pose = snapshot.位姿
+        position = self._解析可选向量(payload.get("position"), 3)
+        orientation = self._解析可选向量(payload.get("orientation"), 4)
+        confidence = self._解析可选浮点(payload.get("confidence"))
+        frame_id = self._解析可选字符串值(payload.get("frame_id"))
+        if position is not None:
+            pose.x = position[0]
+            pose.y = position[1]
+        if frame_id:
+            pose.坐标系 = frame_id
+        if orientation is not None:
+            pose.四元数 = list(orientation)
+            yaw = self._从四元数解析偏航角(orientation)
+            if yaw is not None:
+                pose.yaw = yaw
+        pose.置信度 = confidence
+        self.状态存储.更新位姿状态(pose)
+
+        localization = snapshot.定位
+        localization.置信度 = confidence
+        self.状态存储.更新定位状态(localization)
+        return True
+
     async def _同步机器狗遥测状态(self) -> None:
         try:
             payload = await asyncio.to_thread(self.机器狗遥测服务.获取完整遥测)
@@ -421,7 +457,7 @@ class 运行时控制服务:
             "position": [pose.x, pose.y, 0.0],
             "orientation": [0.0, 0.0, math.sin(half_yaw), math.cos(half_yaw)],
             "yaw": pose.yaw,
-            "confidence": 1.0,
+            "confidence": pose.置信度,
         }
 
     def _获取活动任务类型(self) -> str | None:
@@ -1019,6 +1055,7 @@ class 运行时控制服务:
     async def 同步桥接状态(self) -> None:
         """轮询同步导航桥状态。"""
         await self._同步机器狗遥测状态()
+        await self._同步ROS定位位姿()
         self._更新激光雷达状态()
 
         if self._巡逻上下文 is not None and self._巡逻上下文.等待截止时间 is not None and not self._巡逻上下文.已暂停:

@@ -63,6 +63,10 @@ class ROS导航桥客户端:
         """获取最近一帧建图预览。"""
         return await self._调用("mapping.get_preview", {}, timeout_sec=timeout_sec)
 
+    async def 获取定位位姿(self, timeout_sec: float | None = None) -> dict[str, Any]:
+        """获取最近一帧 ROS 定位位姿。"""
+        return await self._调用("localization.get_pose", {}, timeout_sec=timeout_sec)
+
     async def 设置初始位姿(self, pose: dict[str, Any], timeout_sec: float | None = None) -> dict[str, Any]:
         """发布初始位姿到定位模块。"""
         return await self._调用("localization.set_initial_pose", pose, timeout_sec=timeout_sec)
