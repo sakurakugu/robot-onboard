@@ -48,3 +48,5 @@ python tools/scripts/robot/import_lslidar_driver.py
 - `docs/3. 2D激光雷达与导航重构蓝图.md`
 - `docs/4. ROS2联调与WSL验证步骤.md`
 - `docs/5. WSL Ubuntu 22.04 rosdep update 失败排查.md`
+
+> 一些文档在父仓库的 other/ 目录下，路径为 `robot-system/other/`

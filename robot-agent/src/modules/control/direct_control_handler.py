@@ -29,6 +29,8 @@ class 直连控制处理器:
         command = data.get("command", "")
         if command in ("joystick", "joystick_stop", "estop"):
             asyncio.create_task(self._优先转发控制命令(data))
+        elif command == "action":
+            asyncio.create_task(self._优先转发动作命令(data))
         elif command == "mic_control":
             enabled = bool(data.get("enabled", True))
             self.audio_capture.audio_streaming_enabled = enabled
@@ -100,3 +102,6 @@ class 直连控制处理器:
 
     async def _优先转发控制命令(self, data: dict[str, Any]) -> None:
         await self.runtime_client.执行控制命令(data, source="direct-control")
+
+    async def _优先转发动作命令(self, data: dict[str, Any]) -> None:
+        await self.runtime_client.执行动作命令(data, source="direct-control")

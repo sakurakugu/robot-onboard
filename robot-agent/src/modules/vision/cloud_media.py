@@ -294,7 +294,10 @@ class 云端媒体推流管理器:
         if not normalized_server_url:
             return ""
 
-        parsed_server_url = urlsplit(normalized_server_url)
+        # 注意：urlsplit("192.168.5.8:9000") 会把 "192.168.5.8" 误判成 scheme，
+        # 因此需要先判断是否显式带协议，再决定是否补 ws://。
+        has_scheme = "://" in normalized_server_url
+        parsed_server_url = urlsplit(normalized_server_url if has_scheme else f"ws://{normalized_server_url}")
         if not parsed_server_url.scheme:
             parsed_server_url = urlsplit(f"ws://{normalized_server_url}")
 
