@@ -69,7 +69,7 @@ class 本地运行时客户端:
         client = self.创建客户端()
         command = self._归一化控制命令(self._提取命令(data, 默认命令="joystick"))
         if command == "estop":
-            return await client.执行动作("estop", source=source)
+            return await client.立即急停(source=source)
 
         if command in {"joystick_stop", "stop"}:
             session_id = self._读取可选字符串(data, "session_id", "sessionId")

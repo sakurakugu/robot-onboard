@@ -22,7 +22,7 @@ from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Bool, String
+from std_msgs.msg import String
 
 
 @dataclass
@@ -147,7 +147,6 @@ class 运行时桥接节点(Node):
         self._latest_control_state: dict[str, Any] = self._构建初始控制状态()
         self._latest_action_state: dict[str, Any] = self._构建初始动作状态()
         self._cmd_vel_publisher = self.create_publisher(Twist, self._读取字符串参数("cmd_vel_topic", "/cmd_vel"), 10)
-        self._emergency_stop_publisher = self.create_publisher(Bool, "/sparkrobot/emergency_stop", 10)
         self._action_command_publisher = self.create_publisher(
             String,
             self._读取字符串参数("action_command_topic", "/sparkrobot/action_command"),
@@ -257,6 +256,10 @@ class 运行时桥接节点(Node):
 
         if command.方法 == "control.stop":
             self._执行停止控制(command)
+            return
+
+        if command.方法 == "control.estop":
+            self._执行立即急停(command)
             return
 
         if command.方法 == "control.execute_action":
@@ -438,6 +441,46 @@ class 运行时桥接节点(Node):
             **self._latest_control_state,
             "active": False,
             "velocity": {"vx": 0.0, "vy": 0.0, "wz": 0.0},
+            "updated_at": int(time.time() * 1000),
+        }
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))
+
+    def _执行立即急停(self, command: 桥接命令) -> None:
+        action_id = self._可选字符串(command.参数.get("action_id")) or str(uuid.uuid4())
+        source = self._可选字符串(command.参数.get("source")) or "runtime"
+
+        twist = Twist()
+        self._cmd_vel_publisher.publish(twist)
+        payload = {
+            "type": "execute",
+            "action_id": action_id,
+            "action_name": "estop",
+            "source": source,
+            "parameters": {},
+        }
+        message = String()
+        message.data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        self._action_command_publisher.publish(message)
+
+        self._latest_control_state = {
+            **self._latest_control_state,
+            "active": False,
+            "source": source,
+            "session_id": None,
+            "emergency_stop": False,
+            "velocity": {"vx": 0.0, "vy": 0.0, "wz": 0.0},
+            "updated_at": int(time.time() * 1000),
+        }
+        self._latest_action_state = {
+            "available": True,
+            "active": True,
+            "status": "pending",
+            "action_id": action_id,
+            "action_name": "estop",
+            "source": source,
+            "parameters": {},
+            "error_code": None,
+            "message": "急停命令已抢占发送",
             "updated_at": int(time.time() * 1000),
         }
         self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))

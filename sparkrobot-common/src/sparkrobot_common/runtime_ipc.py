@@ -271,6 +271,15 @@ class 运行时IPC客户端:
         params = {"session_id": session_id} if session_id else {}
         return await self.调用("manual.stop", params)
 
+    async def 立即急停(self, source: str = "runtime") -> dict[str, Any]:
+        """立即触发机器狗急停，不经过普通动作排队。"""
+        return await self.调用(
+            "manual.estop",
+            {
+                "source": source,
+            },
+        )
+
     async def 执行动作(
         self,
         action_name: str,

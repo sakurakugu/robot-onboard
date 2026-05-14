@@ -733,6 +733,81 @@ class 运行时控制服务:
             {"session_id": stopped_session.会话ID, "control_output": control_output},
         )
 
+    async def 立即急停(self, 来源: str = "runtime") -> 命令执行结果:
+        """立即触发机器狗急停，不经过普通动作排队。"""
+        if self._巡逻上下文 is not None or self._导航上下文 is not None:
+            terminate_result = await self.终止当前任务()
+            if not terminate_result.成功:
+                return terminate_result
+
+        if self._手动控制会话 is not None:
+            self._手动控制会话 = None
+            self._更新手动控制状态(
+                手动控制状态(
+                    会话ID=None,
+                    模式="move",
+                    来源=来源,
+                    激活=False,
+                    速度={"vx": 0.0, "vy": 0.0, "wz": 0.0},
+                    更新时间戳毫秒=self._当前时间戳毫秒(),
+                )
+            )
+
+        request = 动作执行请求(
+            动作名称="estop",
+            来源=来源,
+            参数={},
+            动作ID=str(uuid.uuid4()),
+        )
+        self._当前动作请求 = request
+        self._更新动作控制状态(
+            动作控制状态(
+                动作名称=request.动作名称,
+                状态="running",
+                来源=request.来源,
+                参数=request.参数,
+                动作ID=request.动作ID,
+                更新时间戳毫秒=self._当前时间戳毫秒(),
+            )
+        )
+        self._更新控制域状态(
+            当前控制源="action",
+            当前控制模式="action",
+            急停=False,
+            允许运动=False,
+            仲裁原因="estop_requested",
+        )
+        try:
+            bridge_output = await self.ros导航桥客户端.立即急停(
+                {
+                    "source": 来源,
+                    "action_id": request.动作ID,
+                },
+                timeout_sec=1.0,
+            )
+        except ROS导航桥错误 as exc:
+            self._当前动作请求 = None
+            self._更新动作控制状态(
+                动作控制状态(
+                    动作名称="estop",
+                    状态="error",
+                    来源=来源,
+                    参数={},
+                    动作ID=request.动作ID,
+                    更新时间戳毫秒=self._当前时间戳毫秒(),
+                )
+            )
+            self._刷新控制域仲裁()
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+
+        return 命令执行结果.成功结果(
+            "急停已触发",
+            {
+                "action": request.导出字典(),
+                "bridge": bridge_output,
+            },
+        )
+
     async def 执行动作(
         self,
         action_name: str,

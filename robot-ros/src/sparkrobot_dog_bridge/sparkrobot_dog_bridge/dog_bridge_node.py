@@ -330,6 +330,9 @@ class 机器狗桥接节点(Node):
                 激活=False,
             )
             return
+        if action_name == "estop":
+            self._立即执行急停动作(action_id, source, parameters)
+            return
         with self._动作状态锁:
             if self._动作执行线程 is not None and self._动作执行线程.is_alive():
                 self._更新动作状态(
@@ -362,6 +365,57 @@ class 机器狗桥接节点(Node):
                 激活=True,
             )
             self._动作执行线程.start()
+
+    def _立即执行急停动作(self, action_id: str, source: str, parameters: dict[str, Any]) -> None:
+        """急停必须抢占执行，不能被普通动作忙状态拦住。"""
+        if self._SDK实例 is None:
+            self._更新动作状态(
+                状态="error",
+                动作ID=action_id,
+                动作名称="estop",
+                来源=source,
+                参数=parameters,
+                错误码="sdk_unavailable",
+                消息="机器狗 SDK 未就绪，无法执行急停",
+                激活=False,
+            )
+            return
+        self._取消当前动作("estop_preempt")
+        self._最近速度命令 = 速度命令()
+        self._更新动作状态(
+            状态="running",
+            动作ID=action_id,
+            动作名称="estop",
+            来源=source,
+            参数=parameters,
+            消息="急停执行中",
+            激活=True,
+        )
+        try:
+            self.get_logger().warning("执行急停: 直接 passive()")
+            self._SDK实例.passive()
+            time.sleep(0.1)
+            self._更新动作状态(
+                状态="succeeded",
+                动作ID=action_id,
+                动作名称="estop",
+                来源=source,
+                参数=parameters,
+                消息="急停执行成功",
+                激活=False,
+            )
+        except Exception as exc:
+            self.get_logger().warning(f"执行急停失败: {exc}")
+            self._更新动作状态(
+                状态="error",
+                动作ID=action_id,
+                动作名称="estop",
+                来源=source,
+                参数=parameters,
+                错误码="action_exception",
+                消息=str(exc),
+                激活=False,
+            )
 
     def _接收取消动作命令(self, payload: dict[str, Any]) -> None:
         reason = str(payload.get("reason") or "cancelled").strip() or "cancelled"
