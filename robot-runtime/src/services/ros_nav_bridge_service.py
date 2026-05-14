@@ -71,6 +71,10 @@ class ROS导航桥客户端:
         """通过 ROS 控制桥执行直连专用控制命令。"""
         return await self._调用("control.execute_direct", payload, timeout_sec=timeout_sec)
 
+    async def 切换SDK模式(self, enabled: bool, timeout_sec: float | None = None) -> dict[str, Any]:
+        """通过 ROS 控制桥切换 SDK/遥控模式。"""
+        return await self._调用("control.set_sdk_mode", {"enabled": enabled}, timeout_sec=timeout_sec)
+
     async def 立即急停(self, payload: dict[str, Any] | None = None, timeout_sec: float | None = None) -> dict[str, Any]:
         """通过 ROS 控制桥立即触发急停。"""
         return await self._调用("control.estop", payload or {}, timeout_sec=timeout_sec)

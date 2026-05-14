@@ -177,6 +177,15 @@ class 运行时IPC服务器:
                     ),
                 )
 
+            if method == "sdk_mode.set":
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.切换SDK模式(
+                        enabled=self._可选布尔值(params, "enabled"),
+                        来源=self._可选字符串(params, "source") or "runtime",
+                    ),
+                )
+
             if method == "manual.estop":
                 return self._转换控制结果(
                     request_id,
@@ -354,6 +363,14 @@ class 运行时IPC服务器:
         value = params.get(key)
         if value is None:
             return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text in {"true", "1", "yes", "on"}:
+                return True
+            if text in {"false", "0", "no", "off"}:
+                return False
         return bool(value)
 
     def _可选字典(self, params: dict[str, Any], key: str) -> dict[str, Any] | None:

@@ -121,7 +121,7 @@ class RobotClient:
         self.sdk_mode_manager = SDK模式管理器(
             获取SDK模式启用状态=lambda: self.sdk_mode_enabled,
             设置SDK模式启用状态=self._设置SDK模式启用状态,
-            执行关闭前动作=self._按配置执行SDK关闭动作,
+            执行SDK模式切换=self._执行SDK模式切换,
         )
         self.业务消息处理器 = 业务消息处理器(
             message_sender=self.message_sender,
@@ -304,9 +304,10 @@ class RobotClient:
             },
         }
 
-    async def _按配置执行SDK关闭动作(self, 日志前缀: str = "") -> None:
+    async def _执行SDK模式切换(self, enabled: bool, 日志前缀: str = "") -> dict[str, Any]:
         log_prefix = f"{日志前缀} " if 日志前缀 else ""
-        logger.info(f"{log_prefix}当前版本动作已由 robot-runtime 统一管理，跳过本地 SDK 退出动作")
+        logger.info(f"{log_prefix}请求切换 SDK 模式: enabled={enabled}")
+        return await self.runtime_client.切换SDK模式(enabled, source="robot-agent")
 
     async def 运行(self) -> None:
         """运行机器狗客户端。"""

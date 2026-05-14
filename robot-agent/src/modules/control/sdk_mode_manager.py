@@ -1,4 +1,4 @@
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from sparkrobot_common import get_logger
 
@@ -12,11 +12,11 @@ class SDK模式管理器:
         self,
         获取SDK模式启用状态: Callable[[], bool],
         设置SDK模式启用状态: Callable[[bool], None],
-        执行关闭前动作: Callable[[str], Awaitable[None]],
+        执行SDK模式切换: Callable[[bool, str], Awaitable[dict[str, Any]]],
     ) -> None:
         self._获取SDK模式启用状态 = 获取SDK模式启用状态
         self._设置SDK模式启用状态 = 设置SDK模式启用状态
-        self._执行关闭前动作 = 执行关闭前动作
+        self._执行SDK模式切换 = 执行SDK模式切换
 
     def 当前是否启用(self) -> bool:
         """返回当前是否启用 SDK 模式。"""
@@ -29,19 +29,13 @@ class SDK模式管理器:
             return (True, 当前模式, None)
 
         try:
-            if enabled:
-                前缀 = f"{日志前缀} " if 日志前缀 else ""
-                logger.info(f"{前缀}当前版本已改为由 robot-runtime + dog_bridge 统一执行动作，跳过本地 SDK 子进程启动")
-                self._设置SDK模式启用状态(True)
-                return (True, True, None)
+            result = await self._执行SDK模式切换(enabled, 日志前缀)
+            payload = result.get("data", {})
+            if not isinstance(payload, dict):
+                payload = {}
 
-            try:
-                await self._执行关闭前动作(日志前缀)
-            except Exception as e:
-                前缀 = f"{日志前缀} " if 日志前缀 else ""
-                logger.warning(f"{前缀}关闭 SDK 前执行退出动作失败: {e}")
-
-            self._设置SDK模式启用状态(False)
-            return (True, False, None)
+            当前模式 = bool(payload.get("sdk_mode", enabled))
+            self._设置SDK模式启用状态(当前模式)
+            return (True, 当前模式, None)
         except Exception as e:
             return (False, self._获取SDK模式启用状态(), str(e))

@@ -312,13 +312,18 @@ class 机器狗桥接节点(Node):
         if not isinstance(payload, dict):
             self.get_logger().warning("直连控制命令格式无效，必须为 JSON 对象")
             return
-        if self._SDK实例 is None:
-            self.get_logger().warning("机器狗 SDK 未就绪，忽略直连控制命令")
-            return
 
         control_type = str(payload.get("type") or "").strip()
         if not control_type:
             self.get_logger().warning("直连控制命令缺少 type")
+            return
+
+        if control_type == "sdk_mode":
+            self._处理SDK模式切换(payload)
+            return
+
+        if self._SDK实例 is None:
+            self.get_logger().warning("机器狗 SDK 未就绪，忽略直连控制命令")
             return
 
         if control_type == "estop":
@@ -357,6 +362,46 @@ class 机器狗桥接节点(Node):
             return
 
         self.get_logger().warning(f"未知直连控制类型: {control_type}")
+
+    def _处理SDK模式切换(self, payload: dict[str, Any]) -> None:
+        enabled_raw = payload.get("enabled")
+        if enabled_raw is None:
+            self.get_logger().warning("SDK 模式切换缺少 enabled")
+            return
+
+        enabled = bool(enabled_raw)
+        if enabled == self._enable_motion_control:
+            self.get_logger().info(f"SDK 模式切换请求已是目标状态: enabled={enabled}")
+            return
+
+        if not enabled:
+            self._取消当前动作("sdk_mode_disabled")
+            self._最近速度命令 = 速度命令()
+            self._当前输出速度 = (0.0, 0.0, 0.0)
+            try:
+                if self._SDK实例 is not None:
+                    self._SDK实例.move(0.0, 0.0, 0.0)
+            except Exception:
+                pass
+            try:
+                if self._SDK实例 is not None:
+                    self._SDK实例.cancelTwoLegStand()
+            except Exception:
+                pass
+            try:
+                if self._SDK实例 is not None:
+                    self._SDK实例.passive()
+            except Exception:
+                pass
+            self._SDK实例 = None
+            self._enable_motion_control = False
+            self.get_logger().warning("已切换到遥控模式，停止机器狗端 SDK 运动控制输出")
+            return
+
+        self._enable_motion_control = True
+        if self._SDK实例 is None:
+            self._初始化SDK()
+        self.get_logger().info("已切换到 SDK 模式，恢复机器狗端 SDK 运动控制输出")
 
     def _接收执行动作命令(self, payload: dict[str, Any]) -> None:
         action_name = str(payload.get("action_name") or "").strip()

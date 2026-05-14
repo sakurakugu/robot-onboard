@@ -770,6 +770,56 @@ class 运行时控制服务:
             },
         )
 
+    async def 切换SDK模式(self, enabled: bool | None, 来源: str = "runtime") -> 命令执行结果:
+        """切换 SDK/遥控模式。"""
+        if enabled is None:
+            return 命令执行结果.失败结果("invalid_sdk_mode", "enabled 参数不能为空")
+
+        if self._手动控制会话 is not None:
+            stop_result = await self.停止手动控制(self._手动控制会话.会话ID)
+            if not stop_result.成功:
+                return stop_result
+
+        if enabled:
+            self._更新控制域状态(
+                当前控制源="idle",
+                当前控制模式="idle",
+                急停=False,
+                允许运动=False,
+                仲裁原因="sdk_mode_switching",
+            )
+        else:
+            self._更新控制域状态(
+                当前控制源="idle",
+                当前控制模式="idle",
+                急停=False,
+                允许运动=False,
+                仲裁原因="remote_mode_switching",
+            )
+
+        try:
+            bridge_output = await self.ros导航桥客户端.切换SDK模式(enabled, timeout_sec=2.0)
+        except ROS导航桥错误 as exc:
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+
+        snapshot = self._获取快照()
+        health = snapshot.健康
+        health.SDK模式 = enabled
+        self.状态存储.更新健康状态(health)
+
+        dog_bridge = snapshot.运控桥
+        dog_bridge.运动控制启用 = enabled
+        self.状态存储.更新运控桥状态(dog_bridge)
+        self._刷新控制域仲裁()
+        return 命令执行结果.成功结果(
+            "SDK 模式切换成功" if enabled else "已切换为遥控模式",
+            {
+                "sdk_mode": enabled,
+                "source": 来源,
+                "bridge": bridge_output,
+            },
+        )
+
     async def 立即急停(self, 来源: str = "runtime") -> 命令执行结果:
         """立即触发机器狗急停，不经过普通动作排队。"""
         if self._巡逻上下文 is not None or self._导航上下文 is not None:

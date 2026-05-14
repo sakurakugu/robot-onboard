@@ -281,6 +281,16 @@ class 运行时IPC客户端:
             },
         )
 
+    async def 切换SDK模式(self, enabled: bool, source: str = "runtime") -> dict[str, Any]:
+        """切换 SDK/遥控模式。"""
+        return await self.调用(
+            "sdk_mode.set",
+            {
+                "enabled": enabled,
+                "source": source,
+            },
+        )
+
     async def 立即急停(self, source: str = "runtime") -> dict[str, Any]:
         """立即触发机器狗急停，不经过普通动作排队。"""
         return await self.调用(

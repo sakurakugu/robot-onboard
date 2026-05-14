@@ -268,6 +268,10 @@ class 运行时桥接节点(Node):
             self._执行直连控制(command)
             return
 
+        if command.方法 == "control.set_sdk_mode":
+            self._执行SDK模式切换(command)
+            return
+
         if command.方法 == "control.estop":
             self._执行立即急停(command)
             return
@@ -492,6 +496,42 @@ class 运行时桥接节点(Node):
             "updated_at": int(time.time() * 1000),
         }
         self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))
+
+    def _执行SDK模式切换(self, command: 桥接命令) -> None:
+        enabled_raw = command.参数.get("enabled")
+        if enabled_raw is None:
+            self._设置响应结果(
+                command,
+                self.构建错误响应(command.请求ID, "invalid_sdk_mode", "enabled 参数不能为空"),
+            )
+            return
+
+        enabled = bool(enabled_raw)
+        payload = {
+            "type": "sdk_mode",
+            "enabled": enabled,
+        }
+        message = String()
+        message.data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        self._direct_control_publisher.publish(message)
+        self._latest_control_state = {
+            **self._latest_control_state,
+            "active": False,
+            "mode": "move",
+            "source": "sdk_mode_switch",
+            "velocity": {"vx": 0.0, "vy": 0.0, "wz": 0.0},
+            "updated_at": int(time.time() * 1000),
+        }
+        self._设置响应结果(
+            command,
+            self.构建成功响应(
+                command.请求ID,
+                {
+                    **self._构建控制状态响应(),
+                    "sdk_mode": enabled,
+                },
+            ),
+        )
 
     def _执行立即急停(self, command: 桥接命令) -> None:
         action_id = self._可选字符串(command.参数.get("action_id")) or str(uuid.uuid4())

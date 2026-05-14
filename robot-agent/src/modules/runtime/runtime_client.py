@@ -70,6 +70,10 @@ class 本地运行时客户端:
         payload = self._构建直连控制载荷(data)
         return await client.执行直连控制(payload, source=source)
 
+    async def 切换SDK模式(self, enabled: bool, source: str = "robot-agent") -> dict[str, Any]:
+        """切换 SDK/遥控模式。"""
+        return await self.创建客户端().切换SDK模式(enabled, source=source)
+
     async def 执行控制命令(self, data: dict[str, Any], source: str = "robot-agent") -> dict[str, Any]:
         """执行统一手动控制命令。"""
         client = self.创建客户端()
