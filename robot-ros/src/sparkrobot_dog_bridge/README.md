@@ -17,6 +17,12 @@
   - `/sparkrobot/navigation_state`
   - `/sparkrobot/bridge_status`
 
+当前仓库内的机器狗 SDK 二进制已随 `sparkrobot_dog_bridge` 包一起维护，默认从：
+
+- `sparkrobot_dog_bridge/vendor/lib/zsl-1/<arch>/`
+
+按当前机器架构加载 `mc_sdk_zsl_1_py`，不再依赖 `robot-agent` 目录。
+
 常用参数：
 
 - `command_timeout_sec`：超过该时间未收到新 `cmd_vel` 时自动停车，默认 `0.5`

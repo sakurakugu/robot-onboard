@@ -82,7 +82,6 @@ class 机器狗桥接节点(Node):
         self.declare_parameter("sdk_local_ip", "127.0.0.1")
         self.declare_parameter("sdk_local_port", 43988)
         self.declare_parameter("sdk_dog_ip", "127.0.0.1")
-        self.declare_parameter("robot_onboard_dir", "")
 
         self._base_frame = self._读取字符串参数("base_frame", "base_link")
         self._odom_frame = self._读取字符串参数("odom_frame", "odom")
@@ -213,10 +212,8 @@ class 机器狗桥接节点(Node):
             self.get_logger().warning(f"初始化桥接状态回灌 UDP 套接字失败: {exc}")
 
     def _加载SDK模块(self) -> Any:
-        robot_onboard_dir = self._解析robot_onboard目录()
-        agent_dog_dir = robot_onboard_dir / "robot-agent" / "src" / "core" / "dog"
         arch = "aarch64" if ("aarch64" in platform.machine().lower() or "arm64" in platform.machine().lower()) else "x86_64"
-        lib_dir = agent_dog_dir / "lib" / "zsl-1" / arch
+        lib_dir = Path(__file__).resolve().parent / "vendor" / "lib" / "zsl-1" / arch
         if not lib_dir.exists():
             raise FileNotFoundError(f"未找到 SDK 动态库目录: {lib_dir}")
 
@@ -224,17 +221,6 @@ class 机器狗桥接节点(Node):
         if lib_dir_text not in sys.path:
             sys.path.insert(0, lib_dir_text)
         return importlib.import_module("mc_sdk_zsl_1_py")
-
-    def _解析robot_onboard目录(self) -> Path:
-        configured = self._读取字符串参数("robot_onboard_dir", "")
-        if configured:
-            return Path(configured).expanduser()
-
-        current = Path(__file__).resolve()
-        for parent in current.parents:
-            if (parent / "robot-agent").exists() and (parent / "robot-server").exists():
-                return parent
-        raise FileNotFoundError("无法自动推断 robot-onboard 根目录，请设置 robot_onboard_dir 参数")
 
     def _尝试自动站立(self) -> None:
         if self._SDK实例 is None:

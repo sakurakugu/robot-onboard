@@ -460,7 +460,10 @@ class 运行时桥接节点(Node):
         action_id = self._可选字符串(command.参数.get("action_id")) or str(uuid.uuid4())
         source = self._可选字符串(command.参数.get("source")) or "runtime"
         current_status = str(self._latest_action_state.get("status") or "idle")
-        if bool(self._latest_action_state.get("active")) or current_status in {"pending", "running"}:
+        if action_name != "estop" and (
+            bool(self._latest_action_state.get("active"))
+            or current_status in {"pending", "running"}
+        ):
             self._设置响应结果(
                 command,
                 self.构建错误响应(command.请求ID, "action_active", "当前已有动作正在执行", dict(self._latest_action_state)),
