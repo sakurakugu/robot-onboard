@@ -101,7 +101,7 @@ class 直连控制处理器:
         logger.debug(f"[直连控制] 未知异步指令: {command}")
 
     async def _优先转发控制命令(self, data: dict[str, Any]) -> None:
-        await self.runtime_client.执行控制命令(data, source="direct-control")
+        await self.runtime_client.执行直连控制命令(data, source="direct-control")
 
     async def _优先转发动作命令(self, data: dict[str, Any]) -> None:
         await self.runtime_client.执行动作命令(data, source="direct-control")

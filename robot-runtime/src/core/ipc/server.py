@@ -168,6 +168,15 @@ class 运行时IPC服务器:
                     await self.控制服务.停止手动控制(self._可选字符串(params, "session_id")),
                 )
 
+            if method == "direct_control.execute":
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.执行直连控制(
+                        payload=self._可选字典(params, "payload") or {},
+                        来源=self._可选字符串(params, "source") or "runtime",
+                    ),
+                )
+
             if method == "manual.estop":
                 return self._转换控制结果(
                     request_id,

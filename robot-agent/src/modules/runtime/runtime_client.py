@@ -64,6 +64,12 @@ class 本地运行时客户端:
         action_id = self._读取可选字符串(payload, "action_id", "actionId", "requestId")
         return await client.取消动作(action_id)
 
+    async def 执行直连控制命令(self, data: dict[str, Any], source: str = "robot-agent") -> dict[str, Any]:
+        """执行手机直连专用控制命令，保留旧版 SDK 控制语义。"""
+        client = self.创建客户端()
+        payload = self._构建直连控制载荷(data)
+        return await client.执行直连控制(payload, source=source)
+
     async def 执行控制命令(self, data: dict[str, Any], source: str = "robot-agent") -> dict[str, Any]:
         """执行统一手动控制命令。"""
         client = self.创建客户端()
@@ -281,6 +287,203 @@ class 本地运行时客户端:
             "vy": axis1 * 1.0 * speed_ratio,
             "wz": axis2 * 3.0 * speed_ratio,
         }
+
+    def _构建直连控制载荷(self, data: dict[str, Any]) -> dict[str, Any]:
+        """按旧版 joystick.py 语义构建直连控制载荷。"""
+        command = self._归一化控制命令(self._提取命令(data, 默认命令="joystick"))
+        mode = (self._读取可选字符串(data, "mode") or "move").strip().lower()
+        channel = (self._读取可选字符串(data, "channel") or "").strip().lower()
+        speed = self._读取可选浮点(data, "speed") or 5.0
+        speed_ratio = max(0.0, min(1.0, speed / 10.0))
+        joystick_axes = self._提取直连摇杆四轴(data)
+
+        if command == "estop":
+            return {"type": "estop", "mode": mode}
+
+        if command in {"joystick_stop", "stop"}:
+            return self._构建直连停止载荷(mode, channel)
+
+        if command != "joystick":
+            raise ValueError(f"不支持的直连控制命令: {command}")
+
+        if any(key in data for key in ("vx", "vy", "wz")) and mode == "move" and not channel:
+            return {
+                "type": "move",
+                "mode": mode,
+                "vx": self._读取可选浮点(data, "vx") or 0.0,
+                "vy": self._读取可选浮点(data, "vy") or 0.0,
+                "yaw_rate": self._读取可选浮点(data, "wz") or 0.0,
+            }
+
+        if joystick_axes is not None:
+            return self._构建四轴直连控制载荷(joystick_axes, mode, channel, speed_ratio)
+
+        x, y = self._提取直连摇杆坐标(data, mode, channel)
+
+        if mode == "two_leg" or channel == "two_leg":
+            vx = x * 0.5 * speed_ratio
+            yaw_rate = y * 1.0 * speed_ratio
+            if abs(vx) < 0.2:
+                vx = 0.0
+            if abs(yaw_rate) < 0.2:
+                yaw_rate = 0.0
+            return {
+                "type": "two_leg",
+                "mode": "two_leg",
+                "vx": vx,
+                "yaw_rate": yaw_rate,
+            }
+
+        if mode == "pose" or channel == "pose":
+            return {
+                "type": "attitude",
+                "mode": "pose",
+                "roll_rate": y * 0.5 * speed_ratio,
+                "pitch_rate": -x * 0.5 * speed_ratio,
+                "yaw_rate": 0.0,
+                "height_vel": 0.0,
+            }
+
+        if channel == "look":
+            yaw_rate = y * 0.6 * speed_ratio
+            if abs(yaw_rate) < 0.02:
+                yaw_rate = 0.0
+            return {
+                "type": "move",
+                "mode": mode,
+                "vx": 0.0,
+                "vy": 0.0,
+                "yaw_rate": yaw_rate,
+            }
+
+        vx = x * 0.6 * speed_ratio
+        vy = y * 0.4 * speed_ratio
+        if abs(vx) < 0.05:
+            vx = 0.0
+        if abs(vy) < 0.1:
+            vy = 0.0
+        return {
+            "type": "move",
+            "mode": mode,
+            "vx": vx,
+            "vy": vy,
+            "yaw_rate": 0.0,
+        }
+
+    def _构建直连停止载荷(self, mode: str, channel: str) -> dict[str, Any]:
+        if mode == "two_leg" or channel == "two_leg":
+            return {
+                "type": "two_leg",
+                "mode": "two_leg",
+                "vx": 0.0,
+                "yaw_rate": 0.0,
+            }
+        if mode == "pose" or channel == "pose":
+            return {
+                "type": "attitude",
+                "mode": "pose",
+                "roll_rate": 0.0,
+                "pitch_rate": 0.0,
+                "yaw_rate": 0.0,
+                "height_vel": 0.0,
+            }
+        return {
+            "type": "move",
+            "mode": mode or "move",
+            "vx": 0.0,
+            "vy": 0.0,
+            "yaw_rate": 0.0,
+        }
+
+    def _构建四轴直连控制载荷(
+        self,
+        joystick_axes: tuple[float, float, float, float],
+        mode: str,
+        channel: str,
+        speed_ratio: float,
+    ) -> dict[str, Any]:
+        axis0, axis1, axis2, axis3 = joystick_axes
+        if mode == "two_leg" or channel == "two_leg":
+            vx = axis0 * 0.5 * speed_ratio
+            yaw_rate = axis1 * 1.0 * speed_ratio
+            if abs(vx) < 0.2:
+                vx = 0.0
+            if abs(yaw_rate) < 0.2:
+                yaw_rate = 0.0
+            return {
+                "type": "two_leg",
+                "mode": "two_leg",
+                "vx": vx,
+                "yaw_rate": yaw_rate,
+            }
+
+        if mode == "pose" or channel == "pose":
+            return {
+                "type": "attitude",
+                "mode": "pose",
+                "roll_rate": axis3 * 0.5 * speed_ratio,
+                "pitch_rate": -axis2 * 0.5 * speed_ratio,
+                "yaw_rate": 0.0,
+                "height_vel": 0.0,
+            }
+
+        if channel == "look":
+            yaw_rate = axis2 * 0.6 * speed_ratio
+            if abs(yaw_rate) < 0.02:
+                yaw_rate = 0.0
+            return {
+                "type": "move",
+                "mode": mode,
+                "vx": 0.0,
+                "vy": 0.0,
+                "yaw_rate": yaw_rate,
+            }
+
+        vx = axis0 * 0.6 * speed_ratio
+        vy = axis1 * 0.4 * speed_ratio
+        yaw_rate = axis2 * 0.6 * speed_ratio
+        if abs(vx) < 0.05:
+            vx = 0.0
+        if abs(vy) < 0.1:
+            vy = 0.0
+        if abs(yaw_rate) < 0.02:
+            yaw_rate = 0.0
+        return {
+            "type": "move",
+            "mode": mode,
+            "vx": vx,
+            "vy": vy,
+            "yaw_rate": yaw_rate,
+        }
+
+    def _提取直连摇杆四轴(self, data: dict[str, Any]) -> tuple[float, float, float, float] | None:
+        joystick_raw = data.get("joystick")
+        if not isinstance(joystick_raw, list) or len(joystick_raw) < 4:
+            return None
+        return (
+            float(joystick_raw[0] or 0.0),
+            float(joystick_raw[1] or 0.0),
+            float(joystick_raw[2] or 0.0),
+            float(joystick_raw[3] or 0.0),
+        )
+
+    def _提取直连摇杆坐标(self, data: dict[str, Any], mode: str, channel: str) -> tuple[float, float]:
+        joystick_axes = self._提取直连摇杆四轴(data)
+        if joystick_axes is not None:
+            axis0, axis1, axis2, axis3 = joystick_axes
+            if mode == "pose" or channel == "pose":
+                return axis2, axis3
+            if mode == "two_leg" or channel == "two_leg":
+                return axis0, axis1
+            if channel == "look":
+                return 0.0, axis2
+            return axis0, axis1
+
+        x = self._读取可选浮点(data, "x") or 0.0
+        y = self._读取可选浮点(data, "y") or 0.0
+        if channel == "look":
+            return 0.0, y
+        return x, y
 
     def _读取可选浮点(self, data: dict[str, Any], key: str) -> float | None:
         value = data.get(key)

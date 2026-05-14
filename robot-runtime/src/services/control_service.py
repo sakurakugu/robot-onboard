@@ -733,6 +733,43 @@ class 运行时控制服务:
             {"session_id": stopped_session.会话ID, "control_output": control_output},
         )
 
+    async def 执行直连控制(self, payload: dict[str, Any], 来源: str = "runtime") -> 命令执行结果:
+        """执行手机直连专用控制命令。"""
+        if self._巡逻上下文 is not None or self._导航上下文 is not None:
+            terminate_result = await self.终止当前任务()
+            if not terminate_result.成功:
+                return terminate_result
+
+        control_type = self._解析可选字符串值(payload.get("type")) or "move"
+        mode = self._解析可选字符串值(payload.get("mode")) or "move"
+        try:
+            bridge_output = await self.ros导航桥客户端.执行直连控制(
+                {
+                    **payload,
+                    "type": control_type,
+                    "mode": mode,
+                    "source": 来源,
+                },
+                timeout_sec=1.0,
+            )
+        except ROS导航桥错误 as exc:
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+
+        self._更新控制域状态(
+            当前控制源="manual",
+            当前控制模式=mode,
+            急停=False,
+            仲裁原因="direct_control",
+        )
+        return 命令执行结果.成功结果(
+            "直连控制已下发",
+            {
+                "type": control_type,
+                "mode": mode,
+                "bridge": bridge_output,
+            },
+        )
+
     async def 立即急停(self, 来源: str = "runtime") -> 命令执行结果:
         """立即触发机器狗急停，不经过普通动作排队。"""
         if self._巡逻上下文 is not None or self._导航上下文 is not None:

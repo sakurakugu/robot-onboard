@@ -120,6 +120,7 @@ class 运行时桥接节点(Node):
         self.declare_parameter("action_server_wait_sec", 10.0)
         self.declare_parameter("action_command_topic", "/sparkrobot/action_command")
         self.declare_parameter("action_state_topic", "/sparkrobot/action_state")
+        self.declare_parameter("direct_control_topic", "/sparkrobot/direct_control")
 
         self._command_queue: queue.Queue[桥接命令] = queue.Queue()
         self._socket_server: 导航桥Socket服务器 | None = None
@@ -150,6 +151,11 @@ class 运行时桥接节点(Node):
         self._action_command_publisher = self.create_publisher(
             String,
             self._读取字符串参数("action_command_topic", "/sparkrobot/action_command"),
+            10,
+        )
+        self._direct_control_publisher = self.create_publisher(
+            String,
+            self._读取字符串参数("direct_control_topic", "/sparkrobot/direct_control"),
             10,
         )
         self._initial_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, "/initialpose", 10)
@@ -256,6 +262,10 @@ class 运行时桥接节点(Node):
 
         if command.方法 == "control.stop":
             self._执行停止控制(command)
+            return
+
+        if command.方法 == "control.execute_direct":
+            self._执行直连控制(command)
             return
 
         if command.方法 == "control.estop":
@@ -441,6 +451,44 @@ class 运行时桥接节点(Node):
             **self._latest_control_state,
             "active": False,
             "velocity": {"vx": 0.0, "vy": 0.0, "wz": 0.0},
+            "updated_at": int(time.time() * 1000),
+        }
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))
+
+    def _执行直连控制(self, command: 桥接命令) -> None:
+        control_type = self._可选字符串(command.参数.get("type")) or "move"
+        mode = self._可选字符串(command.参数.get("mode")) or "move"
+        source = self._可选字符串(command.参数.get("source")) or "runtime"
+        payload = dict(command.参数)
+        payload["type"] = control_type
+        payload["mode"] = mode
+        payload["source"] = source
+
+        velocity = {"vx": 0.0, "vy": 0.0, "wz": 0.0}
+        if control_type == "move":
+            velocity = {
+                "vx": float(command.参数.get("vx", 0.0)),
+                "vy": float(command.参数.get("vy", 0.0)),
+                "wz": float(command.参数.get("yaw_rate", 0.0)),
+            }
+        elif control_type == "two_leg":
+            velocity = {
+                "vx": float(command.参数.get("vx", 0.0)),
+                "vy": 0.0,
+                "wz": float(command.参数.get("yaw_rate", 0.0)),
+            }
+
+        message = String()
+        message.data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        self._direct_control_publisher.publish(message)
+        self._latest_control_state = {
+            "available": True,
+            "active": any(abs(value) > 1e-6 for value in velocity.values()),
+            "mode": mode,
+            "source": source,
+            "session_id": None,
+            "emergency_stop": False,
+            "velocity": velocity,
             "updated_at": int(time.time() * 1000),
         }
         self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))

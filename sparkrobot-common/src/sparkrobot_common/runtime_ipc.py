@@ -271,6 +271,16 @@ class 运行时IPC客户端:
         params = {"session_id": session_id} if session_id else {}
         return await self.调用("manual.stop", params)
 
+    async def 执行直连控制(self, payload: dict[str, Any], source: str = "runtime") -> dict[str, Any]:
+        """执行手机直连专用控制命令，保留旧版 SDK 控制语义。"""
+        return await self.调用(
+            "direct_control.execute",
+            {
+                "payload": payload,
+                "source": source,
+            },
+        )
+
     async def 立即急停(self, source: str = "runtime") -> dict[str, Any]:
         """立即触发机器狗急停，不经过普通动作排队。"""
         return await self.调用(

@@ -70,6 +70,7 @@ class 机器狗桥接节点(Node):
         self.declare_parameter("emergency_stop_topic", "/sparkrobot/emergency_stop")
         self.declare_parameter("action_command_topic", "/sparkrobot/action_command")
         self.declare_parameter("action_state_topic", "/sparkrobot/action_state")
+        self.declare_parameter("direct_control_topic", "/sparkrobot/direct_control")
         self.declare_parameter("max_linear_x", 0.6)
         self.declare_parameter("max_linear_y", 0.4)
         self.declare_parameter("max_angular_z", 1.2)
@@ -139,6 +140,12 @@ class 机器狗桥接节点(Node):
             String,
             self._读取字符串参数("action_command_topic", "/sparkrobot/action_command"),
             self._处理动作命令,
+            10,
+        )
+        self.create_subscription(
+            String,
+            self._读取字符串参数("direct_control_topic", "/sparkrobot/direct_control"),
+            self._处理直连控制命令,
             10,
         )
 
@@ -294,6 +301,62 @@ class 机器狗桥接节点(Node):
             return
 
         self.get_logger().warning(f"未知动作命令类型: {command_type}")
+
+    def _处理直连控制命令(self, msg: String) -> None:
+        try:
+            payload = json.loads(msg.data)
+        except json.JSONDecodeError as exc:
+            self.get_logger().warning(f"解析直连控制命令失败: {exc}")
+            return
+
+        if not isinstance(payload, dict):
+            self.get_logger().warning("直连控制命令格式无效，必须为 JSON 对象")
+            return
+        if self._SDK实例 is None:
+            self.get_logger().warning("机器狗 SDK 未就绪，忽略直连控制命令")
+            return
+
+        control_type = str(payload.get("type") or "").strip()
+        if not control_type:
+            self.get_logger().warning("直连控制命令缺少 type")
+            return
+
+        if control_type == "estop":
+            action_id = str(payload.get("action_id") or f"direct-estop-{int(time.time() * 1000)}")
+            source = str(payload.get("source") or "runtime").strip() or "runtime"
+            self._立即执行急停动作(action_id, source, {})
+            return
+
+        self._取消当前动作("direct_control_preempt")
+        self._最近速度命令 = 速度命令()
+        self._当前输出速度 = (0.0, 0.0, 0.0)
+        try:
+            if control_type == "move":
+                self._SDK实例.move(
+                    float(payload.get("vx", 0.0) or 0.0),
+                    float(payload.get("vy", 0.0) or 0.0),
+                    float(payload.get("yaw_rate", 0.0) or 0.0),
+                )
+                return
+            if control_type == "two_leg":
+                self._SDK实例.twoLegStand(
+                    float(payload.get("vx", 0.0) or 0.0),
+                    float(payload.get("yaw_rate", 0.0) or 0.0),
+                )
+                return
+            if control_type == "attitude":
+                self._SDK实例.attitudeControl(
+                    float(payload.get("roll_rate", 0.0) or 0.0),
+                    float(payload.get("pitch_rate", 0.0) or 0.0),
+                    float(payload.get("yaw_rate", 0.0) or 0.0),
+                    float(payload.get("height_vel", 0.0) or 0.0),
+                )
+                return
+        except Exception as exc:
+            self.get_logger().warning(f"执行直连控制失败: type={control_type}, error={exc}")
+            return
+
+        self.get_logger().warning(f"未知直连控制类型: {control_type}")
 
     def _接收执行动作命令(self, payload: dict[str, Any]) -> None:
         action_name = str(payload.get("action_name") or "").strip()
