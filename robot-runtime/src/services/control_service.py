@@ -13,7 +13,7 @@ from sparkrobot_common import WORKSPACE_DIR, get_logger
 
 from src.core.state import 任务状态, 动作控制状态, 导航状态, 手动控制状态, 机器人状态存储
 
-from .agent_ipc_service import 机器人代理IPC客户端, 机器人代理IPC错误
+from .agent_ipc_service import 机器人代理IPC客户端
 from .patrol_route_service import 巡逻路线, 巡逻路线加载错误, 巡逻路线服务
 from .robot_telemetry_service import 机器狗遥测服务, 机器狗遥测错误
 from .ros_nav_bridge_service import ROS导航桥客户端, ROS导航桥错误
@@ -195,6 +195,7 @@ class 运行时控制服务:
         self._导航上下文: 导航任务上下文 | None = None
         self._巡逻上下文: 巡逻上下文 | None = None
         self._上次机器狗遥测错误时间 = 0.0
+        self._上次bringup自启动时间 = 0.0
         self._手动控制会话: 手动控制指令 | None = None
         self._当前动作请求: 动作执行请求 | None = None
 
@@ -327,6 +328,16 @@ class 运行时控制服务:
 
     def _当前时间戳毫秒(self) -> int:
         return int(datetime.now().timestamp() * 1000)
+
+    def _对齐急停状态(self, bridge_estop: bool) -> None:
+        """使用底层桥接急停状态修正运行时控制域，避免残留假急停。"""
+        snapshot = self._获取快照()
+        control = snapshot.控制域
+        if control.急停 == bridge_estop:
+            return
+        control.急停 = bridge_estop
+        self.状态存储.更新控制域状态(control)
+        self._刷新控制域仲裁()
 
     def _刷新控制域仲裁(self) -> None:
         snapshot = self._获取快照()
@@ -515,6 +526,7 @@ class 运行时控制服务:
         if output_velocity is not None:
             dog_bridge.输出速度 = output_velocity
         self.状态存储.更新运控桥状态(dog_bridge)
+        self._对齐急停状态(dog_bridge.急停)
 
     def _应用IMU状态(self, snapshot: Any, payload: dict[str, Any]) -> None:
         imu_info = payload.get("imu_info", {})
@@ -576,6 +588,25 @@ class 运行时控制服务:
             return
         self._上次机器狗遥测错误时间 = current_time
         logger.warning("同步机器狗遥测失败: %s", message)
+
+    async def _确保基础桥接运行(self) -> bool:
+        """确保 bringup 常驻，保障运控桥和导航桥 Socket 可用。"""
+        if self.ros进程服务.是否运行("bringup"):
+            return True
+
+        current_time = asyncio.get_running_loop().time()
+        if current_time - self._上次bringup自启动时间 < 5.0:
+            return False
+        self._上次bringup自启动时间 = current_time
+
+        try:
+            bringup_info = await self.ros进程服务.启动("bringup")
+        except ROS进程服务错误 as exc:
+            logger.warning("自动启动 ROS bringup 失败: %s", exc.message)
+            return False
+
+        logger.info("已自动启动 ROS bringup: %s", bringup_info)
+        return True
 
     async def 开始手动控制(
         self,
@@ -756,12 +787,16 @@ class 运行时控制服务:
         )
         self._刷新控制域仲裁()
         try:
-            action_output = await self.机器人代理客户端.执行动作(
-                request.动作名称,
-                request.参数,
+            action_output = await self.ros导航桥客户端.执行动作(
+                {
+                    "action_id": request.动作ID,
+                    "action_name": request.动作名称,
+                    "source": request.来源,
+                    "parameters": request.参数,
+                },
                 timeout_sec=1.5,
             )
-        except 机器人代理IPC错误 as exc:
+        except ROS导航桥错误 as exc:
             self._当前动作请求 = None
             self._更新动作控制状态(
                 动作控制状态(
@@ -812,12 +847,15 @@ class 运行时控制服务:
         )
         self._刷新控制域仲裁()
         try:
-            agent_output = await self.机器人代理客户端.取消动作(timeout_sec=1.0)
-        except 机器人代理IPC错误 as exc:
+            bridge_output = await self.ros导航桥客户端.取消动作(
+                {"action_id": current_request.动作ID},
+                timeout_sec=1.0,
+            )
+        except ROS导航桥错误 as exc:
             return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
         return 命令执行结果.成功结果(
             "动作请求已取消",
-            {"action_id": current_request.动作ID, "agent": agent_output},
+            {"action_id": current_request.动作ID, "bridge": bridge_output},
         )
 
     async def 设置急停(self, enabled: bool, 来源: str = "runtime") -> 命令执行结果:
@@ -825,6 +863,12 @@ class 运行时控制服务:
         snapshot = self._获取快照()
         control = snapshot.控制域
         dog_bridge = snapshot.运控桥
+        原控制域急停 = control.急停
+        原运控桥急停 = dog_bridge.急停
+        原手动控制会话 = self._手动控制会话
+        原当前动作请求 = self._当前动作请求
+        原手动控制状态 = replace(snapshot.控制域.手动控制)
+        原动作控制状态 = replace(snapshot.控制域.动作控制)
         control.急停 = bool(enabled)
         if enabled:
             self._手动控制会话 = None
@@ -858,6 +902,17 @@ class 运行时控制服务:
             if enabled:
                 await self.ros导航桥客户端.停止控制(timeout_sec=1.0)
         except ROS导航桥错误 as exc:
+            control = self._获取快照().控制域
+            dog_bridge = self._获取快照().运控桥
+            control.急停 = 原控制域急停
+            dog_bridge.急停 = 原运控桥急停
+            self.状态存储.更新控制域状态(control)
+            self.状态存储.更新运控桥状态(dog_bridge)
+            self._手动控制会话 = 原手动控制会话
+            self._当前动作请求 = 原当前动作请求
+            self._更新手动控制状态(原手动控制状态)
+            self._更新动作控制状态(原动作控制状态)
+            self._刷新控制域仲裁()
             return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
         return 命令执行结果.成功结果(
             "急停状态已更新",
@@ -1488,7 +1543,7 @@ class 运行时控制服务:
             await self._推进巡逻路线()
             return
 
-        if not self.ros进程服务.是否运行("bringup"):
+        if not await self._确保基础桥接运行():
             if self._导航上下文 is not None:
                 self._标记导航失败("ROS bringup 未运行")
             if self._巡逻上下文 is not None:
@@ -1508,6 +1563,49 @@ class 运行时控制服务:
             await self._同步巡逻桥接状态(bridge_status)
             return
         self._应用导航桥状态(bridge_status)
+        await self._同步动作桥接状态()
+
+    async def _同步动作桥接状态(self) -> None:
+        try:
+            control_state = await self.ros导航桥客户端.获取控制状态(timeout_sec=1.0)
+        except ROS导航桥错误:
+            return
+
+        action_payload = control_state.get("action")
+        if not isinstance(action_payload, dict):
+            return
+        action_name = self._解析可选字符串值(action_payload.get("action_name"))
+        status = self._解析可选字符串值(action_payload.get("status")) or "idle"
+        source = self._解析可选字符串值(action_payload.get("source"))
+        action_id = self._解析可选字符串值(action_payload.get("action_id"))
+        parameters = action_payload.get("parameters", {})
+        if not isinstance(parameters, dict):
+            parameters = {}
+        updated_at = self._解析可选整数(action_payload.get("updated_at")) or self._当前时间戳毫秒()
+        self._更新动作控制状态(
+            动作控制状态(
+                动作名称=action_name,
+                状态=status,
+                来源=source,
+                参数=parameters,
+                动作ID=action_id,
+                更新时间戳毫秒=updated_at,
+            )
+        )
+        if status in {"pending", "running"}:
+            if self._当前动作请求 is None and action_name and action_id:
+                self._当前动作请求 = 动作执行请求(
+                    动作名称=action_name,
+                    来源=source or "runtime",
+                    参数=parameters,
+                    动作ID=action_id,
+                )
+            self._刷新控制域仲裁()
+            return
+
+        if self._当前动作请求 is not None and (action_id is None or self._当前动作请求.动作ID == action_id):
+            self._当前动作请求 = None
+        self._刷新控制域仲裁()
 
     async def 处理ROS进程退出(self, name: str, exit_code: int, expected: bool) -> None:
         """处理 ROS 进程退出事件。"""

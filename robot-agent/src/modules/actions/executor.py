@@ -293,9 +293,10 @@ def main():
         app = sdk.HighLevel()  # type: ignore[attr-defined]
         sdk_cfg = config.get("sdk", {})
         robot_ip = sdk_cfg.get("robot_ip", "127.0.0.1")
-        local_port = int(sdk_cfg.get("local_port", 43988) or 43988)
+        控制桥端口 = int(sdk_cfg.get("local_port", 43988) or 43988)
+        local_port = int(sdk_cfg.get("action_local_port", 控制桥端口 + 1) or (控制桥端口 + 1))
         app.initRobot(robot_ip, local_port, "127.0.0.1")
-        logger.info("机器人连接初始化成功。")
+        logger.info(f"机器人连接初始化成功。robot_ip={robot_ip}, action_local_port={local_port}")
 
         robot_uuid = config.get("robot", {}).get("uuid", "unknown")
         ipc_path = 获取IPC路径(ORG_NAME, APP_NAME)

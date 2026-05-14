@@ -113,6 +113,7 @@ DEFAULT_CONFIG_FIELDS: list[配置字段] = [
     配置字段("sdk", "enable_sdk_on_startup", True, "启动时是否开启SDK模式", "bool"),
     配置字段("sdk", "robot_ip", "127.0.0.1", "机器人SDK IP地址", "string", readonly=True),
     配置字段("sdk", "local_port", 43988, "本地SDK端口", "int", readonly=True),
+    配置字段("sdk", "action_local_port", 43989, "动作执行器使用的本地SDK端口", "int"),
 
     # 激光雷达配置 [lidar]
     配置字段("lidar", "enabled", False, "是否启用 2D 激光雷达", "bool"),

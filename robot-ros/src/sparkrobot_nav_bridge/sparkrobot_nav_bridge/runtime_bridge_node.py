@@ -22,7 +22,7 @@ from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 
 
 @dataclass
@@ -118,6 +118,8 @@ class 运行时桥接节点(Node):
         self.declare_parameter("navigation_action_name", "navigate_to_pose")
         self.declare_parameter("socket_path", "/tmp/sparkrobot/ros-nav-bridge.sock")
         self.declare_parameter("action_server_wait_sec", 10.0)
+        self.declare_parameter("action_command_topic", "/sparkrobot/action_command")
+        self.declare_parameter("action_state_topic", "/sparkrobot/action_state")
 
         self._command_queue: queue.Queue[桥接命令] = queue.Queue()
         self._socket_server: 导航桥Socket服务器 | None = None
@@ -143,8 +145,14 @@ class 运行时桥接节点(Node):
         self._latest_map_preview: dict[str, Any] = self._构建空地图预览()
         self._latest_localization_pose: dict[str, Any] = self._构建空定位位姿()
         self._latest_control_state: dict[str, Any] = self._构建初始控制状态()
+        self._latest_action_state: dict[str, Any] = self._构建初始动作状态()
         self._cmd_vel_publisher = self.create_publisher(Twist, self._读取字符串参数("cmd_vel_topic", "/cmd_vel"), 10)
         self._emergency_stop_publisher = self.create_publisher(Bool, "/sparkrobot/emergency_stop", 10)
+        self._action_command_publisher = self.create_publisher(
+            String,
+            self._读取字符串参数("action_command_topic", "/sparkrobot/action_command"),
+            10,
+        )
         self._initial_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, "/initialpose", 10)
         self._scan_subscription = self.create_subscription(
             LaserScan,
@@ -162,6 +170,12 @@ class 运行时桥接节点(Node):
             PoseWithCovarianceStamped,
             self._读取字符串参数("amcl_pose_topic", "/amcl_pose"),
             self._处理定位位姿,
+            10,
+        )
+        self._action_state_subscription = self.create_subscription(
+            String,
+            self._读取字符串参数("action_state_topic", "/sparkrobot/action_state"),
+            self._处理动作状态,
             10,
         )
 
@@ -234,7 +248,7 @@ class 运行时桥接节点(Node):
             return
 
         if command.方法 == "control.get_state":
-            self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_control_state)))
+            self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))
             return
 
         if command.方法 == "control.set_velocity":
@@ -247,6 +261,14 @@ class 运行时桥接节点(Node):
 
         if command.方法 == "control.set_emergency_stop":
             self._执行设置急停(command)
+            return
+
+        if command.方法 == "control.execute_action":
+            self._执行动作(command)
+            return
+
+        if command.方法 == "control.cancel_action":
+            self._执行取消动作(command)
             return
 
         if command.方法 == "lidar.get_scan":
@@ -411,7 +433,7 @@ class 运行时桥接节点(Node):
             "velocity": {"vx": vx, "vy": vy, "wz": wz},
             "updated_at": int(time.time() * 1000),
         }
-        self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_control_state)))
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))
 
     def _执行停止控制(self, command: 桥接命令) -> None:
         twist = Twist()
@@ -422,7 +444,7 @@ class 运行时桥接节点(Node):
             "velocity": {"vx": 0.0, "vy": 0.0, "wz": 0.0},
             "updated_at": int(time.time() * 1000),
         }
-        self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_control_state)))
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))
 
     def _执行设置急停(self, command: 桥接命令) -> None:
         enabled = bool(command.参数.get("enabled", True))
@@ -434,7 +456,89 @@ class 运行时桥接节点(Node):
             "emergency_stop": enabled,
             "updated_at": int(time.time() * 1000),
         }
-        self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_control_state)))
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))
+
+    def _执行动作(self, command: 桥接命令) -> None:
+        action_name = self._可选字符串(command.参数.get("action_name"))
+        if not action_name:
+            self._设置响应结果(
+                command,
+                self.构建错误响应(command.请求ID, "invalid_action", "动作名称不能为空"),
+            )
+            return
+        parameters = command.参数.get("parameters", {})
+        if not isinstance(parameters, dict):
+            self._设置响应结果(
+                command,
+                self.构建错误响应(command.请求ID, "invalid_parameters", "parameters 必须是对象"),
+            )
+            return
+        action_id = self._可选字符串(command.参数.get("action_id")) or str(uuid.uuid4())
+        source = self._可选字符串(command.参数.get("source")) or "runtime"
+        current_status = str(self._latest_action_state.get("status") or "idle")
+        if bool(self._latest_action_state.get("active")) or current_status in {"pending", "running"}:
+            self._设置响应结果(
+                command,
+                self.构建错误响应(command.请求ID, "action_active", "当前已有动作正在执行", dict(self._latest_action_state)),
+            )
+            return
+
+        payload = {
+            "type": "execute",
+            "action_id": action_id,
+            "action_name": action_name,
+            "source": source,
+            "parameters": parameters,
+        }
+        message = String()
+        message.data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        self._action_command_publisher.publish(message)
+        self._latest_action_state = {
+            "available": True,
+            "active": True,
+            "status": "pending",
+            "action_id": action_id,
+            "action_name": action_name,
+            "source": source,
+            "parameters": dict(parameters),
+            "error_code": None,
+            "message": "动作命令已发送",
+            "updated_at": int(time.time() * 1000),
+        }
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_action_state)))
+
+    def _执行取消动作(self, command: 桥接命令) -> None:
+        action_id = self._可选字符串(command.参数.get("action_id"))
+        current_action_id = self._可选字符串(self._latest_action_state.get("action_id"))
+        if action_id and current_action_id and action_id != current_action_id:
+            self._设置响应结果(
+                command,
+                self.构建错误响应(command.请求ID, "action_id_mismatch", "动作请求 ID 不匹配"),
+            )
+            return
+        if not bool(self._latest_action_state.get("active")) and str(self._latest_action_state.get("status") or "idle") not in {"pending", "running"}:
+            self._设置响应结果(
+                command,
+                self.构建成功响应(command.请求ID, {"cancelled": False, "action": dict(self._latest_action_state)}),
+            )
+            return
+
+        payload = {
+            "type": "cancel",
+            "action_id": current_action_id,
+            "reason": self._可选字符串(command.参数.get("reason")) or "runtime_cancelled",
+        }
+        message = String()
+        message.data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        self._action_command_publisher.publish(message)
+        self._latest_action_state = {
+            **self._latest_action_state,
+            "active": False,
+            "status": "cancelled",
+            "message": "动作取消命令已发送",
+            "updated_at": int(time.time() * 1000),
+        }
+        self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_action_state)))
 
     def _导航目标响应回调(self, future: Any, command: 桥接命令, goal: dict[str, Any]) -> None:
         self._goal_request_inflight = False
@@ -591,6 +695,26 @@ class 运行时桥接节点(Node):
             "updated_at": 0,
         }
 
+    def _构建控制状态响应(self) -> dict[str, Any]:
+        return {
+            **self._latest_control_state,
+            "action": dict(self._latest_action_state),
+        }
+
+    def _构建初始动作状态(self) -> dict[str, Any]:
+        return {
+            "available": True,
+            "active": False,
+            "status": "idle",
+            "action_id": None,
+            "action_name": None,
+            "source": None,
+            "parameters": {},
+            "error_code": None,
+            "message": "",
+            "updated_at": 0,
+        }
+
     def _构建空激光扫描(self) -> dict[str, Any]:
         return {
             "available": False,
@@ -718,6 +842,18 @@ class 运行时桥接节点(Node):
             "confidence": self._计算定位置信度(covariance),
             "covariance": covariance,
             "captured_at": int(time.time() * 1000),
+        }
+
+    def _处理动作状态(self, message: String) -> None:
+        try:
+            payload = json.loads(message.data)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(payload, dict):
+            return
+        self._latest_action_state = {
+            **self._构建初始动作状态(),
+            **payload,
         }
 
     def _压缩激光扫描(self, ranges: list[float | None]) -> tuple[list[float | None], int]:

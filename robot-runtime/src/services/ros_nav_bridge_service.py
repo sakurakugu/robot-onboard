@@ -71,6 +71,14 @@ class ROS导航桥客户端:
         """切换 ROS 控制桥急停状态。"""
         return await self._调用("control.set_emergency_stop", {"enabled": enabled}, timeout_sec=timeout_sec)
 
+    async def 执行动作(self, payload: dict[str, Any], timeout_sec: float | None = None) -> dict[str, Any]:
+        """通过 ROS 控制桥请求动作执行。"""
+        return await self._调用("control.execute_action", payload, timeout_sec=timeout_sec)
+
+    async def 取消动作(self, payload: dict[str, Any] | None = None, timeout_sec: float | None = None) -> dict[str, Any]:
+        """通过 ROS 控制桥取消当前动作。"""
+        return await self._调用("control.cancel_action", payload or {}, timeout_sec=timeout_sec)
+
     async def 获取激光扫描(self, timeout_sec: float | None = None) -> dict[str, Any]:
         """获取最近一帧激光扫描。"""
         return await self._调用("lidar.get_scan", {}, timeout_sec=timeout_sec)

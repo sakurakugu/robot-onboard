@@ -5,6 +5,7 @@ import json
 import platform
 import socket
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -67,6 +68,8 @@ class 机器狗桥接节点(Node):
         self.declare_parameter("command_hz", 15.0)
         self.declare_parameter("command_timeout_sec", 0.5)
         self.declare_parameter("emergency_stop_topic", "/sparkrobot/emergency_stop")
+        self.declare_parameter("action_command_topic", "/sparkrobot/action_command")
+        self.declare_parameter("action_state_topic", "/sparkrobot/action_state")
         self.declare_parameter("max_linear_x", 0.6)
         self.declare_parameter("max_linear_y", 0.4)
         self.declare_parameter("max_angular_z", 1.2)
@@ -119,6 +122,11 @@ class 机器狗桥接节点(Node):
             self._读取字符串参数("bridge_status_topic", "/sparkrobot/bridge_status"),
             10,
         )
+        self._action_state_publisher = self.create_publisher(
+            String,
+            self._读取字符串参数("action_state_topic", "/sparkrobot/action_state"),
+            10,
+        )
         self._tf_broadcaster = TransformBroadcaster(self)
 
         self.create_subscription(Twist, self._读取字符串参数("cmd_vel_topic", "/cmd_vel"), self._处理速度指令, 10)
@@ -126,6 +134,12 @@ class 机器狗桥接节点(Node):
             Bool,
             self._读取字符串参数("emergency_stop_topic", "/sparkrobot/emergency_stop"),
             self._处理急停指令,
+            10,
+        )
+        self.create_subscription(
+            String,
+            self._读取字符串参数("action_command_topic", "/sparkrobot/action_command"),
+            self._处理动作命令,
             10,
         )
 
@@ -143,10 +157,16 @@ class 机器狗桥接节点(Node):
         self._机器狗SDK: Any | None = None
         self._SDK实例: Any | None = None
         self._遥测回灌套接字: socket.socket | None = None
+        self._动作状态锁 = threading.RLock()
+        self._动作取消事件 = threading.Event()
+        self._动作执行线程: threading.Thread | None = None
+        self._动作执行令牌 = 0
+        self._动作状态: dict[str, Any] = self._构建初始动作状态()
 
         self._初始化SDK()
         self._初始化遥测回灌()
         self._创建定时器()
+        self._发布动作状态()
         self.get_logger().info(
             "机器狗桥接节点已启动: "
             f"telemetry_url={self._telemetry_url} "
@@ -262,10 +282,338 @@ class 机器狗桥接节点(Node):
         self._当前急停 = 新状态
         if 新状态:
             self._最近速度命令 = 速度命令()
+            self._取消当前动作("emergency_stop")
             self.get_logger().warning("收到急停信号，已清空缓存速度指令")
             return
 
         self.get_logger().info("急停已解除，等待新的速度指令")
+
+    def _处理动作命令(self, msg: String) -> None:
+        try:
+            payload = json.loads(msg.data)
+        except json.JSONDecodeError as exc:
+            self.get_logger().warning(f"解析动作命令失败: {exc}")
+            return
+
+        if not isinstance(payload, dict):
+            self.get_logger().warning("动作命令格式无效，必须为 JSON 对象")
+            return
+
+        command_type = str(payload.get("type") or "").strip()
+        if command_type == "execute":
+            self._接收执行动作命令(payload)
+            return
+        if command_type == "cancel":
+            self._接收取消动作命令(payload)
+            return
+
+        self.get_logger().warning(f"未知动作命令类型: {command_type}")
+
+    def _接收执行动作命令(self, payload: dict[str, Any]) -> None:
+        action_name = str(payload.get("action_name") or "").strip()
+        action_id = str(payload.get("action_id") or "").strip()
+        parameters = payload.get("parameters", {})
+        source = str(payload.get("source") or "runtime").strip() or "runtime"
+        if not action_name or not action_id:
+            self.get_logger().warning("动作命令缺少 action_name 或 action_id")
+            return
+        if not isinstance(parameters, dict):
+            self.get_logger().warning("动作命令 parameters 必须是对象")
+            return
+        if self._当前急停:
+            self._更新动作状态(
+                状态="error",
+                动作ID=action_id,
+                动作名称=action_name,
+                来源=source,
+                参数=parameters,
+                错误码="emergency_stop_active",
+                消息="当前处于急停状态，无法执行动作",
+                激活=False,
+            )
+            return
+        if self._SDK实例 is None:
+            self._更新动作状态(
+                状态="error",
+                动作ID=action_id,
+                动作名称=action_name,
+                来源=source,
+                参数=parameters,
+                错误码="sdk_unavailable",
+                消息="机器狗 SDK 未就绪，无法执行动作",
+                激活=False,
+            )
+            return
+        with self._动作状态锁:
+            if self._动作执行线程 is not None and self._动作执行线程.is_alive():
+                self._更新动作状态(
+                    状态="error",
+                    动作ID=action_id,
+                    动作名称=action_name,
+                    来源=source,
+                    参数=parameters,
+                    错误码="action_busy",
+                    消息="当前已有动作正在执行",
+                    激活=True,
+                )
+                return
+            self._动作执行令牌 += 1
+            token = self._动作执行令牌
+            self._动作取消事件.clear()
+            self._动作执行线程 = threading.Thread(
+                target=self._执行动作线程,
+                args=(token, action_id, action_name, source, dict(parameters)),
+                daemon=True,
+                name="sparkrobot-dog-action",
+            )
+            self._更新动作状态(
+                状态="pending",
+                动作ID=action_id,
+                动作名称=action_name,
+                来源=source,
+                参数=parameters,
+                消息="动作已受理，等待执行",
+                激活=True,
+            )
+            self._动作执行线程.start()
+
+    def _接收取消动作命令(self, payload: dict[str, Any]) -> None:
+        reason = str(payload.get("reason") or "cancelled").strip() or "cancelled"
+        self._取消当前动作(reason)
+
+    def _执行动作线程(
+        self,
+        token: int,
+        action_id: str,
+        action_name: str,
+        source: str,
+        parameters: dict[str, Any],
+    ) -> None:
+        self._更新动作状态(
+            状态="running",
+            动作ID=action_id,
+            动作名称=action_name,
+            来源=source,
+            参数=parameters,
+            消息="动作执行中",
+            激活=True,
+        )
+        try:
+            success = self._执行动作(action_name, parameters, token)
+            if self._动作已取消(token):
+                self._更新动作状态(
+                    状态="cancelled",
+                    动作ID=action_id,
+                    动作名称=action_name,
+                    来源=source,
+                    参数=parameters,
+                    消息="动作已取消",
+                    激活=False,
+                )
+            elif success:
+                self._更新动作状态(
+                    状态="succeeded",
+                    动作ID=action_id,
+                    动作名称=action_name,
+                    来源=source,
+                    参数=parameters,
+                    消息="动作执行成功",
+                    激活=False,
+                )
+            else:
+                self._更新动作状态(
+                    状态="error",
+                    动作ID=action_id,
+                    动作名称=action_name,
+                    来源=source,
+                    参数=parameters,
+                    错误码="action_failed",
+                    消息="动作执行失败",
+                    激活=False,
+                )
+        except Exception as exc:
+            self.get_logger().warning(f"执行动作失败: action={action_name}, error={exc}")
+            self._更新动作状态(
+                状态="error",
+                动作ID=action_id,
+                动作名称=action_name,
+                来源=source,
+                参数=parameters,
+                错误码="action_exception",
+                消息=str(exc),
+                激活=False,
+            )
+        finally:
+            with self._动作状态锁:
+                self._动作执行线程 = None
+
+    def _执行动作(self, action_name: str, parameters: dict[str, Any], token: int) -> bool:
+        if self._SDK实例 is None:
+            return False
+        if action_name == "stand_up":
+            return self._执行站立动作(token)
+        if action_name in {"sit_down", "lie_down"}:
+            return self._执行趴下动作(token)
+        if action_name == "jump":
+            return self._执行定长动作(token, "跳跃", self._SDK实例.jump, 4.0)
+        if action_name == "front_jump":
+            return self._执行定长动作(token, "向前跳跃", self._SDK实例.frontJump, 4.0)
+        if action_name == "back_flip":
+            return self._执行定长动作(token, "后空翻", self._SDK实例.backflip, 4.0)
+        if action_name in {"shake_hand", "wave"}:
+            return self._执行定长动作(token, "握手", self._SDK实例.shakeHand, 4.0)
+        if action_name in {"two_leg_once", "two_leg_stand"}:
+            return self._执行双腿站立动作(token, action_name == "two_leg_once")
+        if action_name == "cancel_two_leg_stand":
+            return self._执行定长动作(token, "退出双腿站立", self._SDK实例.cancelTwoLegStand, 1.0)
+        if action_name == "exit_lie_down":
+            return self._执行趴下动作(token)
+        if action_name == "exit_stand_up":
+            return self._执行站立动作(token)
+        if action_name == "exit_stop":
+            return self._执行退出停止动作(token)
+        if action_name == "estop":
+            return self._执行定长动作(token, "急停趴下", self._SDK实例.passive, 1.0)
+        raise ValueError(f"暂不支持的 dog_bridge 动作: {action_name}")
+
+    def _执行站立动作(self, token: int) -> bool:
+        if self._SDK实例 is None:
+            return False
+        current_mode = self._读取当前控制模式()
+        if current_mode == 16:
+            if not self._执行趴下动作(token):
+                return False
+        self.get_logger().info("执行动作: 站立")
+        self._SDK实例.standUp()
+        return self._可中断等待(token, 3.0)
+
+    def _执行趴下动作(self, token: int) -> bool:
+        if self._SDK实例 is None:
+            return False
+        self.get_logger().info("执行动作: 趴下")
+        self._SDK实例.lieDown()
+        return self._可中断等待(token, 3.0)
+
+    def _执行双腿站立动作(self, token: int, once: bool) -> bool:
+        if self._SDK实例 is None:
+            return False
+        self.get_logger().info("执行动作: 双腿站立")
+        self._SDK实例.twoLegStand(0.0, 0.0)
+        if not once:
+            return True
+        if not self._可中断等待(token, 4.0):
+            return False
+        self._SDK实例.cancelTwoLegStand()
+        return self._可中断等待(token, 2.0)
+
+    def _执行退出停止动作(self, token: int) -> bool:
+        if self._SDK实例 is None:
+            return False
+        self.get_logger().info("执行动作: 退出停止")
+        current_mode = self._读取当前控制模式()
+        if current_mode != 16:
+            self._SDK实例.lieDown()
+            if not self._可中断等待(token, 2.0):
+                return False
+        self._SDK实例.passive()
+        return self._可中断等待(token, 1.0)
+
+    def _执行定长动作(self, token: int, label: str, callback: Any, wait_sec: float) -> bool:
+        if self._SDK实例 is None:
+            return False
+        self.get_logger().info(f"执行动作: {label}")
+        callback()
+        return self._可中断等待(token, wait_sec)
+
+    def _可中断等待(self, token: int, seconds: float) -> bool:
+        deadline = time.time() + max(0.0, seconds)
+        while time.time() < deadline:
+            if self._动作已取消(token):
+                self._停止当前动作()
+                return False
+            time.sleep(0.1)
+        return not self._动作已取消(token)
+
+    def _动作已取消(self, token: int) -> bool:
+        return self._动作取消事件.is_set() or token != self._动作执行令牌
+
+    def _取消当前动作(self, reason: str) -> None:
+        with self._动作状态锁:
+            self._动作执行令牌 += 1
+            self._动作取消事件.set()
+        self._停止当前动作()
+        state = dict(self._动作状态)
+        if not state.get("active"):
+            return
+        state_parameters = state.get("parameters")
+        if not isinstance(state_parameters, dict):
+            state_parameters = {}
+        self._更新动作状态(
+            状态="cancelled",
+            动作ID=str(state.get("action_id") or ""),
+            动作名称=str(state.get("action_name") or ""),
+            来源=str(state.get("source") or "runtime"),
+            参数=state_parameters,
+            消息=f"动作已取消: {reason}",
+            激活=False,
+        )
+
+    def _停止当前动作(self) -> None:
+        if self._SDK实例 is None:
+            return
+        try:
+            self._SDK实例.move(0.0, 0.0, 0.0)
+        except Exception:
+            pass
+        try:
+            self._SDK实例.cancelTwoLegStand()
+        except Exception:
+            pass
+
+    def _构建初始动作状态(self) -> dict[str, Any]:
+        return {
+            "available": True,
+            "active": False,
+            "status": "idle",
+            "action_id": None,
+            "action_name": None,
+            "source": None,
+            "parameters": {},
+            "error_code": None,
+            "message": "",
+            "updated_at": 0,
+        }
+
+    def _更新动作状态(
+        self,
+        状态: str,
+        动作ID: str,
+        动作名称: str,
+        来源: str,
+        参数: dict[str, Any],
+        消息: str = "",
+        错误码: str | None = None,
+        激活: bool = False,
+    ) -> None:
+        with self._动作状态锁:
+            self._动作状态 = {
+                "available": True,
+                "active": 激活,
+                "status": 状态,
+                "action_id": 动作ID or None,
+                "action_name": 动作名称 or None,
+                "source": 来源 or None,
+                "parameters": dict(参数),
+                "error_code": 错误码,
+                "message": 消息,
+                "updated_at": int(time.time() * 1000),
+            }
+        self._发布动作状态()
+
+    def _发布动作状态(self) -> None:
+        message = String()
+        message.data = json.dumps(self._动作状态, ensure_ascii=False, separators=(",", ":"))
+        self._action_state_publisher.publish(message)
 
     def _发送速度命令(self) -> None:
         current_time = time.time()
@@ -682,6 +1030,7 @@ class 机器狗桥接节点(Node):
 
     def destroy_node(self) -> bool:
         """退出前确保速度归零。"""
+        self._取消当前动作("node_shutdown")
         if self._SDK实例 is not None:
             try:
                 self._SDK实例.move(0.0, 0.0, 0.0)
