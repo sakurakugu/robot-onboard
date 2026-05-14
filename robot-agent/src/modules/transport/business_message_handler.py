@@ -70,7 +70,6 @@ class 业务消息处理器:
         robot_server_client: Any,
         workspace: Path,
         获取配置: Callable[[], dict[str, Any]],
-        获取动作执行器: Callable[[], Any],
         提交动作: Callable[[str, dict[str, Any] | None], bool],
         audio_capture: Any,
         sdk_mode_manager: Any,
@@ -81,7 +80,6 @@ class 业务消息处理器:
         self.robot_server_client = robot_server_client
         self.workspace = workspace
         self._获取配置 = 获取配置
-        self._获取动作执行器 = 获取动作执行器
         self._提交动作 = 提交动作
         self.audio_capture = audio_capture
         self.sdk_mode_manager = sdk_mode_manager
@@ -459,7 +457,7 @@ class 业务消息处理器:
 
     async def 处理文本响应(self, data: dict[str, Any], upstream: str) -> None:
         """处理文本响应消息。"""
-        await 处理文本响应(data, self._提交动作, self._获取动作执行器())
+        await 处理文本响应(data, self._提交动作)
 
     async def 处理音频控制(self, data: dict[str, Any], upstream: str) -> None:
         """处理音频控制消息。"""

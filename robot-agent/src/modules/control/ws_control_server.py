@@ -7,6 +7,8 @@
 连接地址: ws://<机器狗IP>:8082
 
 支持的消息格式：
+  旧协议:
+    {"type": "control_command", "data": {"command": "joystick", ...}}
   新协议:
     {"type": "manual_command", "data": {"command": "update_velocity", ...}}
     {"type": "action_command", "data": {"action_name": "stand_up", ...}}
@@ -80,8 +82,11 @@ class WsControlServer:
                 except Exception:
                     continue
 
-                # 接收统一运动协议与设备控制协议
-                if msg.get("type") == "manual_command":
+                # 接收旧直连协议、统一运动协议与设备控制协议
+                if msg.get("type") == "control_command":
+                    payload = msg.get("data", {})
+                    data = payload if isinstance(payload, dict) else {}
+                elif msg.get("type") == "manual_command":
                     data = self._归一化手动控制数据(msg.get("data", {}))
                 elif msg.get("type") == "action_command":
                     data = self._归一化动作数据(msg.get("data", {}))

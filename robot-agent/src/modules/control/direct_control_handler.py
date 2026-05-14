@@ -27,7 +27,7 @@ class 直连控制处理器:
     def 处理控制指令(self, data: dict[str, Any]) -> None:
         """处理来自手机直连 WebSocket 的同步控制指令。"""
         command = data.get("command", "")
-        if command in ("joystick", "joystick_stop", "estop"):
+        if command in ("joystick", "joystick_stop", "estop", "update_velocity", "stop", "emergency_stop"):
             asyncio.create_task(self._优先转发控制命令(data))
         elif command == "action":
             asyncio.create_task(self._优先转发动作命令(data))

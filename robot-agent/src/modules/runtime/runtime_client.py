@@ -233,19 +233,16 @@ class 本地运行时客户端:
         axis0 = 0.0
         axis1 = 0.0
         axis2 = 0.0
-        axis3 = 0.0
         if isinstance(joystick_raw, list) and len(joystick_raw) >= 4:
             axis0 = float(joystick_raw[0] or 0)
             axis1 = float(joystick_raw[1] or 0)
             axis2 = float(joystick_raw[2] or 0)
-            axis3 = float(joystick_raw[3] or 0)
         else:
             x = self._读取可选浮点(data, "x") or 0.0
             y = self._读取可选浮点(data, "y") or 0.0
             channel = (self._读取可选字符串(data, "channel") or "").strip().lower()
             if mode == "pose" or channel == "pose":
                 axis2 = x
-                axis3 = y
             elif mode == "two_leg" or channel == "two_leg":
                 axis0 = x
                 axis1 = y

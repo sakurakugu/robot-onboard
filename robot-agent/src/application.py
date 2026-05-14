@@ -15,20 +15,17 @@
 
 import asyncio
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 from sparkrobot_common import WORKSPACE_DIR, configure_logger, get_logger, 检测机器人运控版本
 
 from src.core.config import Config
 from src.core.robot_server_client import RobotServerClient
-from src.modules.actions.runtime import 动作执行器, 动作调度器
 from src.modules.audio.capture import AudioCapture
 from src.modules.audio.playback import 停止当前音频播放
 from src.modules.control.direct_control_handler import 直连控制处理器
 from src.modules.control.ipc import IpcServer
-from src.modules.control.process import ProcessController
 from src.modules.control.sdk_mode_manager import SDK模式管理器
 from src.modules.control.ws_control_server import WsControlServer
 from src.modules.runtime import 客户端运行时协调器, 本地运行时客户端
@@ -77,13 +74,12 @@ class RobotClient:
         self.ws_manager = WebSocketManager(self.config)
         self.message_sender = 消息发送器(self.ws_manager, self._获取当前配置, self._获取注册版本信息)
         self.robot_server_client = RobotServerClient()
-        self.交互式子进程控制器 = ProcessController()
-        self._action_executor = ThreadPoolExecutor(max_workers=4)
         self.audio_task: Optional[asyncio.Task] = None
         self._ipc_status_task: Optional[asyncio.Task] = None
         self._media_stream_task: Optional[asyncio.Task] = None
         self._ipc_status_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
         self._云端媒体推流租约到期时间 = 0.0
+        self._后台任务: set[asyncio.Task[Any]] = set()
 
         """ 初始化音频捕获 """
         self.audio_capture = AudioCapture(
@@ -100,11 +96,6 @@ class RobotClient:
         self.ipc_server = IpcServer(self.project_name, self._处理IPC状态, self._处理IPC请求)
         self.media_streamer = 云端媒体推流管理器(self.config)
         self.runtime_client = 本地运行时客户端()
-
-        """ 初始化动作执行函数 """
-        self.动作执行器: Optional[Callable[[str, dict[str, Any]], bool]] = None
-        self.动作控制器: Optional[动作执行器] = None
-        self.动作调度器 = 动作调度器(self)
 
         """ 初始化SDK模式状态 """
         self.sdk_mode_enabled = True  # 默认开启SDK模式
@@ -128,13 +119,8 @@ class RobotClient:
         self.sdk_mode_enabled = bool(self.config.get("sdk", {}).get("enable_sdk_on_startup", True))
 
         self.sdk_mode_manager = SDK模式管理器(
-            交互式子进程控制器=self.交互式子进程控制器,
-            动作调度器=self.动作调度器,
             获取SDK模式启用状态=lambda: self.sdk_mode_enabled,
             设置SDK模式启用状态=self._设置SDK模式启用状态,
-            创建动作控制器=self._创建动作控制器,
-            设置动作控制器=self.设置动作控制器,
-            获取执行器脚本路径=self._获取动作执行器脚本路径,
             执行关闭前动作=self._按配置执行SDK关闭动作,
         )
         self.业务消息处理器 = 业务消息处理器(
@@ -142,7 +128,6 @@ class RobotClient:
             robot_server_client=self.robot_server_client,
             workspace=self.config_store.workspace,
             获取配置=self._获取当前配置,
-            获取动作执行器=self._确保动作执行器,
             提交动作=self.提交动作,
             audio_capture=self.audio_capture,
             sdk_mode_manager=self.sdk_mode_manager,
@@ -203,15 +188,6 @@ class RobotClient:
         """更新当前 SDK 模式状态。"""
         self.sdk_mode_enabled = enabled
 
-    def _获取动作执行器脚本路径(self) -> Path:
-        """获取动作执行器脚本路径。"""
-        script_dir = Path(__file__).parent
-        return script_dir / "modules" / "actions" / "executor.py"
-
-    def _创建动作控制器(self) -> 动作执行器:
-        """创建新的动作控制器实例。"""
-        return 动作执行器(self)
-
     def _设置云端媒体推流租约到期时间(self, expires_at: float) -> None:
         """更新云端媒体推流租约到期时间。"""
         self._云端媒体推流租约到期时间 = expires_at
@@ -261,9 +237,6 @@ class RobotClient:
         await self.ws_manager.断开连接()
         if shutdown_resources:
             await self.media_streamer.停止()
-            self.交互式子进程控制器.关闭()
-            if self._action_executor:
-                self._action_executor.shutdown(wait=False)
 
     async def _处理IPC状态(self, status_msg: Dict[str, Any]) -> None:
         await self.runtime_coordinator.处理IPC状态(status_msg)
@@ -283,26 +256,33 @@ class RobotClient:
                 parameters = params.get("parameters", {})
                 if not isinstance(parameters, dict):
                     return self._构建IPC错误响应(request_id, "invalid_parameters", "parameters 必须是对象")
-                accepted = self.提交动作(action_name, parameters)
-                if not accepted:
-                    return self._构建IPC错误响应(request_id, "action_rejected", "动作请求未被接受")
+                result = await self.runtime_client.执行动作命令(
+                    {
+                        "action_name": action_name,
+                        "parameters": parameters,
+                        "action_id": params.get("action_id"),
+                    },
+                    source="robot-agent:ipc",
+                )
                 return self._构建IPC成功响应(
                     request_id,
                     {
                         "accepted": True,
                         "action_name": action_name,
                         "parameters": parameters,
+                        "runtime": result,
                     },
                 )
 
             if method == "action.cancel":
-                self.动作调度器.清空并中断()
-                return self._构建IPC成功响应(request_id, {"cancelled": True})
+                result = await self.runtime_client.取消动作命令(params)
+                return self._构建IPC成功响应(request_id, {"cancelled": True, "runtime": result})
 
             return self._构建IPC错误响应(request_id, "method_not_found", f"未支持的方法: {method}")
         except Exception as exc:
             logger.error(f"处理本地 IPC 请求失败: method={method}, error={exc}", exc_info=True)
-            return self._构建IPC错误响应(request_id, "internal_error", str(exc))
+            error = self.runtime_client.格式化异常(exc)
+            return self._构建IPC错误响应(request_id, error["code"], error["message"])
 
     def _构建IPC成功响应(self, request_id: str, result: Dict[str, Any]) -> Dict[str, Any]:
         return {
@@ -325,35 +305,17 @@ class RobotClient:
         }
 
     async def _按配置执行SDK关闭动作(self, 日志前缀: str = "") -> None:
-        process = self.交互式子进程控制器.process
-        if not process or process.poll() is not None:
-            return
-        behavior = self.config.get("actions", {}).get("exit_behavior", "lie_down")
-        if behavior == "stand_up":
-            exit_command = "exit_stand_up"
-        elif behavior == "stop":
-            exit_command = "exit_stop"
-        else:
-            exit_command = "exit_lie_down"
         log_prefix = f"{日志前缀} " if 日志前缀 else ""
-        logger.info(f"{log_prefix}关闭子程序前执行退出动作: {exit_command}")
-        if not self.交互式子进程控制器.发送命令(exit_command):
-            logger.warning(f"{log_prefix}关闭子程序前发送退出动作失败: {exit_command}")
-            return
-        await asyncio.sleep(3)
+        logger.info(f"{log_prefix}当前版本动作已由 robot-runtime 统一管理，跳过本地 SDK 退出动作")
 
     async def 运行(self) -> None:
         """运行机器狗客户端。"""
         await self.runtime_coordinator.运行()
 
-    def _确保动作执行器(self) -> ThreadPoolExecutor:
-        if not self._action_executor or getattr(self._action_executor, "_shutdown", False):
-            self._action_executor = ThreadPoolExecutor(max_workers=1)
-        return self._action_executor
-
     async def 取消初始化(self) -> None:
         """ 取消初始化客户端 """
-        self.动作调度器.关闭()
+        for task in list(self._后台任务):
+            task.cancel()
         try:
             停止当前音频播放()
         except Exception:
@@ -365,30 +327,34 @@ class RobotClient:
         except Exception:
             pass
 
-    def 设置动作控制器(self, action_controller: Optional[动作执行器]) -> None:
-        self.动作控制器 = action_controller
-        self.动作执行器 = action_controller.执行动作 if action_controller else None
-
     def 提交动作(self, action: str, parameters: Optional[dict] = None) -> bool:
-        return self.动作调度器.提交(action, parameters or {})
+        payload = {
+            "action_name": action,
+            "parameters": parameters or {},
+        }
+        task = asyncio.create_task(self.runtime_client.执行动作命令(payload, source="robot-agent:text-action"))
+        self._登记后台任务(task, f"action={action}")
+        return True
+
+    def _登记后台任务(self, task: asyncio.Task[Any], 描述: str) -> None:
+        """登记后台任务，避免 fire-and-forget 任务异常被静默吞掉。"""
+        self._后台任务.add(task)
+
+        def _完成回调(done_task: asyncio.Task[Any]) -> None:
+            self._后台任务.discard(done_task)
+            try:
+                result = done_task.result()
+                logger.info(f"后台任务完成: {描述}, result={result}")
+            except asyncio.CancelledError:
+                logger.info(f"后台任务已取消: {描述}")
+            except Exception as exc:
+                logger.error(f"后台任务失败: {描述}, error={exc}", exc_info=True)
+
+        task.add_done_callback(_完成回调)
 
 async def main():
     """主函数"""
     client = RobotClient()
-
-    # get modules/actions/executor.py 的路径
-    interactive_script = client._获取动作执行器脚本路径()
-
-    if not interactive_script.exists():
-        logger.error(f"找不到交互式脚本: {interactive_script}")
-        return
-
-    # 如果启用了SDK模式，启动交互式脚本
-    if client.sdk_mode_enabled:
-        if not client.交互式子进程控制器.启动(str(interactive_script)):
-            logger.error("无法启动交互式子进程")
-            return
-        client.设置动作控制器(client._创建动作控制器())
 
     # 运行客户端
     try:

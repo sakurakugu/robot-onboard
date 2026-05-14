@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from sparkrobot_common import get_logger
 
@@ -41,13 +41,15 @@ def 解析动作格式(text: str) -> Optional[Dict[str, Any]]:
     return {"action": action, "parameters": parameters}
 
 
-async def 处理文本响应(data: Dict[str, Any], action_executor, executor) -> None:
+async def 处理文本响应(
+    data: Dict[str, object],
+    提交动作: Callable[[str, dict[str, object] | None], bool],
+) -> None:
     """
     处理文本响应，解析动作格式并执行动作。
 
     :param data: 包含文本响应的字典，必须包含 "text" 键。
-    :param action_executor: 动作执行器函数，用于执行具体的动作。
-    :param executor: 线程池执行器，用于在独立线程中执行动作执行器。
+    :param 提交动作: 动作提交函数，用于转发统一动作命令。
     """
     text = data.get("text", "")
     logger.info(f"收到文本响应: {text}")
@@ -60,36 +62,35 @@ async def 处理文本响应(data: Dict[str, Any], action_executor, executor) ->
     parameters = action_data["parameters"]
     logger.info(f"检测到动作格式: 动作={action}, 参数={parameters}")
 
-    if action_executor:
-        try:
-            result = action_executor(action, parameters)
-            if result:
-                logger.info(f"动作 {action} 执行成功")
-            else:
-                logger.warning(f"动作 {action} 执行失败或不支持")
-        except Exception as e:
-            logger.error(f"执行动作 {action} 时出错: {e}")
-    else:
-        logger.warning("未设置动作执行器，无法执行动作")
+    try:
+        accepted = 提交动作(action, parameters)
+        if accepted:
+            logger.info(f"动作 {action} 已提交到运行时")
+        else:
+            logger.warning(f"动作 {action} 提交失败")
+    except Exception as e:
+        logger.error(f"提交动作 {action} 时出错: {e}")
 
 
-async def 处理动作指令(data: Dict[str, Any], action_executor, executor) -> None:
+async def 处理动作指令(data: Dict[str, object], 提交动作: Callable[[str, dict[str, object] | None], bool]) -> None:
     """
-    处理动作指令，将指令发送给动作执行器执行。
+    处理动作指令，将指令转发到运行时统一执行。
 
     :param data: 包含动作指令的字典，必须包含 "action" 和 "parameters" 键。
-    :param action_executor: 动作执行器函数，用于执行具体的动作。
-    :param executor: 线程池执行器，用于在独立线程中执行动作执行器。
+    :param 提交动作: 动作提交函数。
     """
     action = data.get("action", "")
     parameters = data.get("parameters", {})
     logger.info(f"收到动作指令: action={action}, parameters={parameters}")
 
-    if action_executor:
-        try:
-            result = action_executor(action, parameters)
-            logger.info(f"动作执行结果: {result}")
-        except Exception as e:
-            logger.error(f"执行动作失败: {e}")
-    else:
-        logger.warning("未设置动作执行器，跳过动作执行")
+    if not isinstance(action, str) or not action.strip():
+        logger.warning("动作名称为空，跳过动作执行")
+        return
+    if not isinstance(parameters, dict):
+        logger.warning("动作参数必须是对象，跳过动作执行")
+        return
+    try:
+        accepted = 提交动作(action, parameters)
+        logger.info(f"动作提交结果: {accepted}")
+    except Exception as e:
+        logger.error(f"提交动作失败: {e}")
