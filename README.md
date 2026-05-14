@@ -1,53 +1,120 @@
 # robot-onboard
 
-机器狗本体相关代码仓库，包含：
+机器狗本体端仓库，负责本地配置、遥测、运行时、ROS 和远程安装打包。
 
-- `robot-agent`：运行在机器狗上的代理程序
-- `robot-ros`：ROS2 工作空间，负责雷达驱动、建图、定位与导航启动
-- `robot-runtime`：本体运行时内核，负责统一状态、导航任务与本地桥接
-- `robot-server`：运行在机器狗上的本地配置服务
-- `sparkrobot-common`：两者共享的公共库
-- `tools`：打包、安装、联机测试脚本
+## 目录结构
 
-- 一些参考文档在根目录 `robot-system` 的 `other/` 目录下
+```text
+robot-onboard/
+├── robot-agent/             # 对外通信代理
+├── robot-server/            # 本地 FastAPI 配置与遥测服务
+├── robot-runtime/           # 本体运行时内核
+├── robot-ros/               # ROS2 工作空间
+├── sparkrobot-common/       # 公共库
+├── tools/                   # 打包、安装、联调脚本
+├── docs/                    # 本体专项文档
+├── examples/                # 示例与实验代码
+└── README.md
+```
 
-## 常用目录
+## 当前职责
 
-- `robot-agent/`
-- `robot-ros/`
-- `robot-runtime/`
-- `robot-server/`
-- `sparkrobot-common/`
-- `tools/`
-- `docs/`
-- `examples/`
+- `robot-server`：提供 `8080` 本地 HTTP 配置、日志、WiFi、音量、SDK、遥测接口
+- `robot-agent`：连接云端、工作站、手机，承接 WebSocket、音视频和控制消息
+- `robot-runtime`：聚合控制、任务、状态、地图流程
+- `robot-ros`：承接激光雷达、建图、定位、导航
+- `sparkrobot-common`：沉淀配置、常量、公共工具
 
-## 打包产物
+## 环境要求
 
-机器人安装包默认输出到 `dist/packages/`。
+- Python `3.10+`
+- Ubuntu 22.04 或 WSL Ubuntu 22.04
+- ROS2 Humble
+
+建议：
+
+- `sparkrobot-common`、`robot-server`、`robot-agent`、`robot-runtime` 使用虚拟环境开发
+- `robot-ros` 尽量沿用系统 Python + ROS 环境
 
 ## 环境注意事项
 
-- `robot-ros/` 基于 ROS Humble，构建时不要在系统 Python 上随意执行 `pip install --user --upgrade setuptools` 这类命令
-- 如果系统 Python 的用户目录里装了过新的 `setuptools`，可能导致 `colcon build --symlink-install` 失败，报 `error: option --editable not recognized`
-- 本地开发 `sparkrobot-common`、`robot-server`、`robot-agent` 时，优先使用虚拟环境；ROS 工作空间仍建议使用系统 Python + ROS 自带环境
-- 如果怀疑用户目录 Python 包干扰了 ROS，可先临时执行 `export PYTHONNOUSERSITE=1`
+- 不要在系统 Python 上随意升级 `setuptools`
+- 如果系统用户目录包污染了 ROS，可先临时设置 `PYTHONNOUSERSITE=1`
+- 如果 `colcon build --symlink-install` 出现 `option --editable not recognized`，优先排查用户目录 Python 包干扰
 
-## 2D 激光雷达相关
-
-N10P 的 ROS2 驱动工作空间位于 `robot-ros/`。
-
-如果需要把本地资料包中的厂商驱动导入到工作空间，可运行：
+## 常用脚本入口
 
 ```bash
-python tools/scripts/robot/import_lslidar_driver.py
+python tools/1.常用命令.py
 ```
 
-建议先读的文档：
+这个脚本主要负责：
 
+- 本地打包
+- 远程安装
+- 安装目标管理
+- 常用联调入口
+
+## 常用命令
+
+### 本地打包
+
+```bash
+python tools/1.常用命令.py --package common
+python tools/1.常用命令.py --package server
+python tools/1.常用命令.py --package agent
+python tools/1.常用命令.py --package runtime
+python tools/1.常用命令.py --package ros
+python tools/1.常用命令.py --package full
+```
+
+### 远程安装
+
+```bash
+python tools/1.常用命令.py --install common --robot-ip 192.168.5.111
+python tools/1.常用命令.py --install server --robot-ip 192.168.5.111
+python tools/1.常用命令.py --install full --robot-ip 192.168.5.111
+```
+
+可选参数：
+
+- `--robot-port`：目标机器狗 SSH 端口，默认 `43988`
+- `--save-target`：把当前目标保存成默认安装目标
+- `--format`：打包格式，支持 `tar.gz`、`zip`、`tar`、`tar.bz2`、`tar.xz`
+
+## 现场默认远程信息
+
+- 地址：`192.168.5.111`
+- 用户名：`firefly`
+- 密码：`firefly`
+
+## 常用接口
+
+- `robot-server`：`http://<robotIp>:8080`
+- 直控 WebSocket：`ws://<robotIp>:8082`
+- 本地视频 WHEP：`http://<robotIp>:8889/test/whep`
+
+## 校验
+
+Python 子项目修改后，至少执行对应目录的：
+
+```bash
+ruff check
+mypy
+```
+
+如果改动了 `robot-ros`，还需要在 ROS 环境下补充构建验证。
+
+## 建议优先阅读的文档
+
+- `docs/1. 连接机器狗.md`
 - `docs/3. 2D激光雷达与导航重构蓝图.md`
-- `docs/8. 本体控制架构收敛建议.md`
 - `docs/4. ROS2联调与WSL验证步骤.md`
 - `docs/5. WSL Ubuntu 22.04 rosdep update 失败排查.md`
+- `docs/6. 本体一键打包与安装说明.md`
+- `docs/7. N10P网口版现场联调记录.md`
 
-> 一些文档在父仓库的 other/ 目录下，路径为 `robot-system/other/`
+父仓库补充资料位于：
+
+- `robot-system/docs/`
+- `robot-system/other/`
