@@ -185,16 +185,6 @@ class 运行时IPC服务器:
                     await self.控制服务.取消动作(self._可选字符串(params, "action_id")),
                 )
 
-            if method == "safety.emergency_stop":
-                enabled = self._可选布尔值(params, "enabled")
-                return self._转换控制结果(
-                    request_id,
-                    await self.控制服务.设置急停(
-                        enabled=True if enabled is None else enabled,
-                        来源=self._可选字符串(params, "source") or "runtime",
-                    ),
-                )
-
             if method == "mapping.start":
                 return self._转换控制结果(request_id, await self.控制服务.开始建图(self._可选字符串(params, "map_name")))
 

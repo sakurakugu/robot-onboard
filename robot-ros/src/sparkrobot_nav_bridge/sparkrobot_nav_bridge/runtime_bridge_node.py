@@ -259,10 +259,6 @@ class 运行时桥接节点(Node):
             self._执行停止控制(command)
             return
 
-        if command.方法 == "control.set_emergency_stop":
-            self._执行设置急停(command)
-            return
-
         if command.方法 == "control.execute_action":
             self._执行动作(command)
             return
@@ -442,18 +438,6 @@ class 运行时桥接节点(Node):
             **self._latest_control_state,
             "active": False,
             "velocity": {"vx": 0.0, "vy": 0.0, "wz": 0.0},
-            "updated_at": int(time.time() * 1000),
-        }
-        self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))
-
-    def _执行设置急停(self, command: 桥接命令) -> None:
-        enabled = bool(command.参数.get("enabled", True))
-        message = Bool()
-        message.data = enabled
-        self._emergency_stop_publisher.publish(message)
-        self._latest_control_state = {
-            **self._latest_control_state,
-            "emergency_stop": enabled,
             "updated_at": int(time.time() * 1000),
         }
         self._设置响应结果(command, self.构建成功响应(command.请求ID, self._构建控制状态响应()))

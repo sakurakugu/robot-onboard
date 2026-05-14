@@ -320,7 +320,7 @@ class 机器狗桥接节点(Node):
         if not isinstance(parameters, dict):
             self.get_logger().warning("动作命令 parameters 必须是对象")
             return
-        if self._当前急停:
+        if self._当前急停 and action_name != "estop":
             self._更新动作状态(
                 状态="error",
                 动作ID=action_id,

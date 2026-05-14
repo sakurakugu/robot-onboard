@@ -329,27 +329,9 @@ class 运行时控制服务:
     def _当前时间戳毫秒(self) -> int:
         return int(datetime.now().timestamp() * 1000)
 
-    def _对齐急停状态(self, bridge_estop: bool) -> None:
-        """使用底层桥接急停状态修正运行时控制域，避免残留假急停。"""
-        snapshot = self._获取快照()
-        control = snapshot.控制域
-        if control.急停 == bridge_estop:
-            return
-        control.急停 = bridge_estop
-        self.状态存储.更新控制域状态(control)
-        self._刷新控制域仲裁()
-
     def _刷新控制域仲裁(self) -> None:
         snapshot = self._获取快照()
         dog_bridge_ready = snapshot.运控桥.在线 and snapshot.运控桥.运动控制启用 and snapshot.运控桥.SDK就绪
-        if snapshot.控制域.急停:
-            self._更新控制域状态(
-                当前控制源="system",
-                当前控制模式="emergency_stop",
-                允许运动=False,
-                仲裁原因="emergency_stop",
-            )
-            return
         if self._手动控制会话 is not None:
             self._更新控制域状态(
                 当前控制源="manual",
@@ -526,7 +508,6 @@ class 运行时控制服务:
         if output_velocity is not None:
             dog_bridge.输出速度 = output_velocity
         self.状态存储.更新运控桥状态(dog_bridge)
-        self._对齐急停状态(dog_bridge.急停)
 
     def _应用IMU状态(self, snapshot: Any, payload: dict[str, Any]) -> None:
         imu_info = payload.get("imu_info", {})
@@ -856,67 +837,6 @@ class 运行时控制服务:
         return 命令执行结果.成功结果(
             "动作请求已取消",
             {"action_id": current_request.动作ID, "bridge": bridge_output},
-        )
-
-    async def 设置急停(self, enabled: bool, 来源: str = "runtime") -> 命令执行结果:
-        """设置统一急停状态。"""
-        snapshot = self._获取快照()
-        control = snapshot.控制域
-        dog_bridge = snapshot.运控桥
-        原控制域急停 = control.急停
-        原运控桥急停 = dog_bridge.急停
-        原手动控制会话 = self._手动控制会话
-        原当前动作请求 = self._当前动作请求
-        原手动控制状态 = replace(snapshot.控制域.手动控制)
-        原动作控制状态 = replace(snapshot.控制域.动作控制)
-        control.急停 = bool(enabled)
-        if enabled:
-            self._手动控制会话 = None
-            self._当前动作请求 = None
-            self._更新手动控制状态(
-                手动控制状态(
-                    会话ID=None,
-                    模式="move",
-                    来源=来源,
-                    激活=False,
-                    速度={"vx": 0.0, "vy": 0.0, "wz": 0.0},
-                    更新时间戳毫秒=self._当前时间戳毫秒(),
-                )
-            )
-            self._更新动作控制状态(
-                动作控制状态(
-                    动作名称=None,
-                    状态="cancelled",
-                    来源=来源,
-                    参数={},
-                    动作ID=None,
-                    更新时间戳毫秒=self._当前时间戳毫秒(),
-                )
-            )
-        self.状态存储.更新控制域状态(control)
-        dog_bridge.急停 = bool(enabled)
-        self.状态存储.更新运控桥状态(dog_bridge)
-        self._刷新控制域仲裁()
-        try:
-            bridge_result = await self.ros导航桥客户端.设置急停(bool(enabled), timeout_sec=1.0)
-            if enabled:
-                await self.ros导航桥客户端.停止控制(timeout_sec=1.0)
-        except ROS导航桥错误 as exc:
-            control = self._获取快照().控制域
-            dog_bridge = self._获取快照().运控桥
-            control.急停 = 原控制域急停
-            dog_bridge.急停 = 原运控桥急停
-            self.状态存储.更新控制域状态(control)
-            self.状态存储.更新运控桥状态(dog_bridge)
-            self._手动控制会话 = 原手动控制会话
-            self._当前动作请求 = 原当前动作请求
-            self._更新手动控制状态(原手动控制状态)
-            self._更新动作控制状态(原动作控制状态)
-            self._刷新控制域仲裁()
-            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
-        return 命令执行结果.成功结果(
-            "急停状态已更新",
-            {"enabled": bool(enabled), "bridge": bridge_result},
         )
 
     def _标准化手动控制模式(self, mode: str) -> str:

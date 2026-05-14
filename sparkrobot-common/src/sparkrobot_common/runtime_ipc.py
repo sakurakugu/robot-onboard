@@ -293,10 +293,6 @@ class 运行时IPC客户端:
         params = {"action_id": action_id} if action_id else {}
         return await self.调用("action.cancel", params)
 
-    async def 设置急停(self, enabled: bool = True, source: str = "runtime") -> dict[str, Any]:
-        """设置急停状态。"""
-        return await self.调用("safety.emergency_stop", {"enabled": enabled, "source": source})
-
     async def 开始建图(self, map_name: str | None = None) -> dict[str, Any]:
         """开始建图。"""
         params = {"map_name": map_name} if map_name else {}

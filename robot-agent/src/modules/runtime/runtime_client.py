@@ -67,9 +67,9 @@ class 本地运行时客户端:
     async def 执行控制命令(self, data: dict[str, Any], source: str = "robot-agent") -> dict[str, Any]:
         """执行统一手动控制命令。"""
         client = self.创建客户端()
-        command = self._提取命令(data, 默认命令="joystick")
+        command = self._归一化控制命令(self._提取命令(data, 默认命令="joystick"))
         if command == "estop":
-            return await client.设置急停(True, source=source)
+            return await client.执行动作("estop", source=source)
 
         if command in {"joystick_stop", "stop"}:
             session_id = self._读取可选字符串(data, "session_id", "sessionId")
@@ -183,6 +183,16 @@ class 本地运行时客户端:
     def _提取命令(self, data: dict[str, Any], 默认命令: str) -> str:
         command = self._读取可选字符串(data, "command", "action", "operation", "op")
         return (command or 默认命令).strip().lower()
+
+    def _归一化控制命令(self, command: str) -> str:
+        """兼容统一控制协议与直连控制协议的命令名。"""
+        if command in {"emergency_stop", "estop"}:
+            return "estop"
+        if command in {"update_velocity", "start_session", "joystick"}:
+            return "joystick"
+        if command in {"joystick_stop", "stop"}:
+            return "stop"
+        return command
 
     def _提取目标(self, data: dict[str, Any]) -> dict[str, Any]:
         goal = data.get("goal")
