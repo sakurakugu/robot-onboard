@@ -345,6 +345,11 @@ class 运行时IPC客户端:
         """停止定位。"""
         return await self.调用("localization.stop")
 
+    async def 全局重定位(self, map_name: str | None = None) -> dict[str, Any]:
+        """触发一次全局重定位。"""
+        params = {"map_name": map_name} if map_name else {}
+        return await self.调用("localization.global_relocalize", params)
+
     async def 设置初始位姿(
         self,
         x: float,

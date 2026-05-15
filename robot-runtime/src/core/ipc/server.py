@@ -227,6 +227,12 @@ class 运行时IPC服务器:
             if method == "localization.stop":
                 return self._转换控制结果(request_id, await self.控制服务.停止定位())
 
+            if method == "localization.global_relocalize":
+                return self._转换控制结果(
+                    request_id,
+                    await self.控制服务.全局重定位(self._可选字符串(params, "map_name")),
+                )
+
             if method == "localization.set_initial_pose":
                 return self._转换控制结果(
                     request_id,

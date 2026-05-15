@@ -99,6 +99,10 @@ class ROS导航桥客户端:
         """获取最近一帧 ROS 定位位姿。"""
         return await self._调用("localization.get_pose", {}, timeout_sec=timeout_sec)
 
+    async def 全局重定位(self, timeout_sec: float | None = None) -> dict[str, Any]:
+        """触发一次 AMCL 全局重定位。"""
+        return await self._调用("localization.global_relocalize", {}, timeout_sec=timeout_sec)
+
     async def 设置初始位姿(self, pose: dict[str, Any], timeout_sec: float | None = None) -> dict[str, Any]:
         """发布初始位姿到定位模块。"""
         return await self._调用("localization.set_initial_pose", pose, timeout_sec=timeout_sec)

@@ -1297,6 +1297,33 @@ class 运行时控制服务:
             },
         )
 
+    async def 全局重定位(self, 地图名称: str | None = None) -> 命令执行结果:
+        """触发一次 AMCL 全局重定位。"""
+        if not self._读取布尔值("localization", "enabled", False):
+            return 命令执行结果.失败结果("localization_disabled", "当前配置未启用定位能力")
+
+        if not self.ros进程服务.是否运行("localization"):
+            return 命令执行结果.失败结果("localization_not_running", "请先启动定位后再执行自动重定位")
+
+        try:
+            resolved_map_name, _ = self._解析定位地图(地图名称)
+        except (ValueError, FileNotFoundError) as exc:
+            return 命令执行结果.失败结果("map_not_found", str(exc))
+
+        try:
+            bridge = await self.ros导航桥客户端.全局重定位()
+        except ROS导航桥错误 as exc:
+            return 命令执行结果.失败结果(exc.code, exc.message, {"details": exc.details})
+
+        self._更新定位状态("running", 地图名称=resolved_map_name, 置信度=0.0)
+        return 命令执行结果.成功结果(
+            "已触发自动重定位",
+            {
+                "map_name": resolved_map_name,
+                "bridge": bridge,
+            },
+        )
+
     async def 导航到目标(self, goal: 导航目标) -> 命令执行结果:
         """执行单点导航。"""
         if not self._读取布尔值("navigation", "enabled", False):

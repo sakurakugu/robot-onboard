@@ -155,6 +155,9 @@ class 本地运行时客户端:
         if command in {"stop_localization", "localization.stop"}:
             return await client.停止定位()
 
+        if command in {"global_relocalize", "localization.global_relocalize"}:
+            return await client.全局重定位(self._读取可选字符串(data, "map_name", "mapName", "name"))
+
         if command in {"set_initial_pose", "localization.set_initial_pose"}:
             pose = self._提取目标(data)
             return await client.设置初始位姿(

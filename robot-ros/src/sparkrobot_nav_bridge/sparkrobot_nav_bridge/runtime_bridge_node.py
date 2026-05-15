@@ -23,6 +23,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
+from std_srvs.srv import Empty
 
 
 @dataclass
@@ -131,6 +132,7 @@ class 运行时桥接节点(Node):
             NavigateToPose,
             self._读取字符串参数("navigation_action_name", "navigate_to_pose"),
         )
+        self._global_localization_client = self.create_client(Empty, "/reinitialize_global_localization")
 
         self._goal_request_inflight = False
         self._goal_handle: Any | None = None
@@ -296,6 +298,10 @@ class 运行时桥接节点(Node):
             self._设置响应结果(command, self.构建成功响应(command.请求ID, dict(self._latest_localization_pose)))
             return
 
+        if command.方法 == "localization.global_relocalize":
+            self._执行全局重定位(command)
+            return
+
         if command.方法 == "localization.set_initial_pose":
             self._执行设置初始位姿(command)
             return
@@ -392,6 +398,46 @@ class 运行时桥接节点(Node):
                 {
                     "accepted": True,
                     "pose": pose,
+                },
+            ),
+        )
+
+    def _执行全局重定位(self, command: 桥接命令) -> None:
+        if not self._global_localization_client.wait_for_service(timeout_sec=3.0):
+            self._设置响应结果(
+                command,
+                self.构建错误响应(
+                    command.请求ID,
+                    "global_localization_unavailable",
+                    "AMCL 全局重定位服务未就绪",
+                ),
+            )
+            return
+
+        future = self._global_localization_client.call_async(Empty.Request())
+        future.add_done_callback(lambda result, command=command: self._全局重定位响应回调(result, command))
+
+    def _全局重定位响应回调(self, future: Future[Any], command: 桥接命令) -> None:
+        try:
+            future.result()
+        except Exception as exc:
+            self._设置响应结果(
+                command,
+                self.构建错误响应(
+                    command.请求ID,
+                    "global_localization_failed",
+                    f"AMCL 全局重定位调用失败: {exc}",
+                ),
+            )
+            return
+
+        self._设置响应结果(
+            command,
+            self.构建成功响应(
+                command.请求ID,
+                {
+                    "accepted": True,
+                    "mode": "global_relocalize",
                 },
             ),
         )
